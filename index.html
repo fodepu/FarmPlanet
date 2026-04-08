@@ -1,0 +1,1442 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>매장 시간표 관리</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans KR', sans-serif;
+            background: #f0f2f7; color: #2d3748; min-height: 100vh;
+        }
+
+        /* ── Header ── */
+        .header {
+            background: linear-gradient(135deg,#667eea 0%,#764ba2 100%);
+            color: white; padding: 16px 28px;
+            display: flex; align-items: center; gap: 12px;
+            box-shadow: 0 2px 12px rgba(102,126,234,.4);
+        }
+        .header h1  { font-size: 20px; font-weight: 700; letter-spacing: -.3px; }
+        .header-sub { font-size: 12px; opacity: .75; margin-top: 2px; }
+
+        /* ── Tabs ── */
+        .nav-tabs {
+            background: white; display: flex; padding: 0 24px;
+            border-bottom: 1px solid #e2e8f0;
+            box-shadow: 0 1px 3px rgba(0,0,0,.05); overflow-x: auto;
+        }
+        .tab-btn {
+            padding: 14px 20px; border: none; background: none;
+            color: #718096; font-size: 14px; font-weight: 500;
+            cursor: pointer; border-bottom: 2px solid transparent;
+            margin-bottom: -1px; transition: all .2s; white-space: nowrap;
+        }
+        .tab-btn:hover  { color: #667eea; }
+        .tab-btn.active { color: #667eea; border-bottom-color: #667eea; }
+
+        .main { padding: 24px; max-width: 1300px; margin: 0 auto; }
+
+        /* ── Card ── */
+        .card {
+            background: white; border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.04);
+            overflow: hidden;
+        }
+        .card-header {
+            padding: 16px 20px; border-bottom: 1px solid #f0f0f0;
+            display: flex; justify-content: space-between; align-items: center;
+            flex-wrap: wrap; gap: 8px;
+        }
+        .card-title { font-size: 16px; font-weight: 600; color: #1a202c; }
+        .card-body  { padding: 20px; }
+
+        /* ── Buttons ── */
+        .btn {
+            padding: 8px 16px; border-radius: 8px; border: none;
+            font-size: 13px; font-weight: 500; cursor: pointer;
+            transition: all .2s; display: inline-flex; align-items: center; gap: 6px;
+        }
+        .btn-primary   { background: #667eea; color: white; }
+        .btn-primary:hover   { background: #5a67d8; box-shadow: 0 2px 8px rgba(102,126,234,.4); }
+        .btn-success   { background: #48bb78; color: white; }
+        .btn-success:hover   { background: #38a169; box-shadow: 0 2px 8px rgba(72,187,120,.4); }
+        .btn-danger    { background: #fc8181; color: white; padding: 5px 10px; font-size: 12px; }
+        .btn-danger:hover    { background: #f56565; }
+        .btn-secondary { background: #edf2f7; color: #4a5568; }
+        .btn-secondary:hover { background: #e2e8f0; }
+        .btn-outline   { background: transparent; border: 1px solid #667eea; color: #667eea; padding: 5px 10px; font-size: 12px; }
+        .btn-outline:hover   { background: #ebf4ff; }
+
+        /* ── Table ── */
+        table { width: 100%; border-collapse: collapse; }
+        th {
+            text-align: left; padding: 10px 16px;
+            font-size: 12px; font-weight: 600; color: #718096;
+            text-transform: uppercase; letter-spacing: .5px;
+            background: #f8fafc; border-bottom: 1px solid #e2e8f0;
+        }
+        td { padding: 12px 16px; border-bottom: 1px solid #f0f4f8; font-size: 14px; }
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background: #f8fafc; }
+
+        /* ── Badges ── */
+        .badge {
+            display: inline-flex; align-items: center;
+            padding: 2px 8px; border-radius: 12px;
+            font-size: 11px; font-weight: 600; margin: 2px;
+        }
+        .badge-open   { background: #dbeafe; color: #1e40af; }
+        .badge-middle { background: #d1fae5; color: #065f46; }
+        .badge-close  { background: #ffedd5; color: #9a3412; }
+        .badge-paid   { background: #faf5ff; color: #6b46c1; }
+        .badge-unpaid { background: #fefce8; color: #92400e; }
+        .day-badge {
+            display: inline-flex; align-items: center;
+            padding: 2px 6px; border-radius: 6px;
+            font-size: 11px; font-weight: 500; margin: 1px;
+            background: #edf2f7; color: #4a5568;
+        }
+        .day-badge.sat { background: #ebf8ff; color: #2b6cb0; }
+        .day-badge.sun { background: #fff5f5; color: #c53030; }
+
+        /* ── Modal ── */
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,.5);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 1000; animation: fadeIn .15s ease;
+        }
+        .modal {
+            background: white; border-radius: 16px; padding: 24px;
+            width: 500px; max-width: calc(100vw - 32px);
+            max-height: calc(100vh - 40px); overflow-y: auto;
+            animation: slideUp .2s ease;
+            box-shadow: 0 20px 60px rgba(0,0,0,.15);
+        }
+        @keyframes fadeIn  { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .modal-title   { font-size: 18px; font-weight: 700; color: #1a202c; margin-bottom: 20px; }
+        .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 24px; }
+
+        /* ── Form ── */
+        .form-group { margin-bottom: 18px; }
+        .form-label { display: block; font-size: 13px; font-weight: 600; color: #4a5568; margin-bottom: 8px; }
+        .form-input {
+            width: 100%; padding: 9px 12px;
+            border: 1.5px solid #e2e8f0; border-radius: 8px;
+            font-size: 14px; color: #2d3748; outline: none; transition: border-color .2s;
+        }
+        .form-input:focus { border-color: #667eea; box-shadow: 0 0 0 3px rgba(102,126,234,.1); }
+        .checkbox-group { display: flex; flex-wrap: wrap; gap: 8px; }
+        .checkbox-item  { position: relative; }
+        .checkbox-item input { position: absolute; opacity: 0; width: 0; height: 0; }
+        .checkbox-item label {
+            display: inline-flex; align-items: center;
+            padding: 7px 14px; border: 1.5px solid #e2e8f0; border-radius: 8px;
+            font-size: 13px; font-weight: 500; cursor: pointer;
+            transition: all .15s; color: #4a5568; user-select: none;
+        }
+        .checkbox-item input:checked + label { background: #667eea; border-color: #667eea; color: white; }
+        .radio-group { display: flex; gap: 10px; }
+        .radio-item  { position: relative; flex: 1; }
+        .radio-item input { position: absolute; opacity: 0; width: 0; height: 0; }
+        .radio-item label {
+            display: flex; align-items: center; justify-content: center;
+            padding: 8px 12px; border: 1.5px solid #e2e8f0; border-radius: 8px;
+            font-size: 13px; font-weight: 500; cursor: pointer;
+            transition: all .15s; color: #4a5568; user-select: none;
+        }
+        .radio-item input:checked + label { background: #667eea; border-color: #667eea; color: white; }
+
+        /* ── Schedule header ── */
+        .schedule-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 16px; flex-wrap: wrap; gap: 12px;
+        }
+        .week-nav { display: flex; align-items: center; gap: 10px; }
+        .week-label { font-size: 15px; font-weight: 600; color: #2d3748; min-width: 200px; text-align: center; }
+        .nav-btn {
+            width: 34px; height: 34px; border-radius: 8px;
+            border: 1.5px solid #e2e8f0; background: white;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            font-size: 14px; color: #4a5568; transition: all .15s;
+        }
+        .nav-btn:hover { background: #f0f4ff; border-color: #667eea; color: #667eea; }
+
+        /* ── Gantt ── */
+        .gantt-scroll { overflow-x: auto; }
+        .gantt-inner  { min-width: 900px; }
+
+        .gantt-header-row {
+            display: flex; border-bottom: 2px solid #e2e8f0;
+            background: #f8fafc; position: sticky; top: 0; z-index: 5;
+        }
+        .gantt-label-col { width: 76px; min-width: 76px; border-right: 2px solid #e2e8f0; flex-shrink: 0; }
+        .gantt-time-header { flex: 1; position: relative; height: 36px; }
+
+        .time-marker {
+            position: absolute; top: 50%; transform: translate(-50%,-50%);
+            font-size: 10px; color: #a0aec0; white-space: nowrap;
+            user-select: none; pointer-events: none;
+        }
+        .time-marker.hour { font-size: 11px; font-weight: 700; color: #4a5568; }
+
+        .gantt-day-row {
+            display: flex; border-bottom: 1px solid #e8edf5;
+        }
+        .gantt-day-row.today-row { background: #f8f9ff; }
+
+        .gantt-day-label {
+            width: 76px; min-width: 76px;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 8px 4px; gap: 2px;
+            border-right: 2px solid #e2e8f0; flex-shrink: 0;
+        }
+        .day-name  { font-size: 14px; font-weight: 700; color: #2d3748; }
+        .day-date  { font-size: 11px; color: #a0aec0; }
+        .today-dot { width: 6px; height: 6px; border-radius: 50%; background: #667eea; margin-top: 1px; }
+
+        .gantt-timeline { flex: 1; position: relative; min-height: 158px; }
+
+        /* Grid lines */
+        .g-line      { position: absolute; top: 0; bottom: 0; width: 1px; background: #f1f5f9; pointer-events: none; }
+        .g-line.hour { background: #e2e8f0; }
+
+        /* ── Shift bars ── */
+        .shift-bar {
+            position: absolute; height: 42px; border-radius: 7px;
+            display: flex; align-items: stretch; overflow: hidden;
+            border: 1.5px solid transparent;
+            transition: box-shadow .15s;
+            user-select: none;
+        }
+        .shift-bar:hover { box-shadow: 0 2px 8px rgba(0,0,0,.15); z-index: 3; }
+        .shift-bar.empty {
+            background: transparent !important;
+            border-style: dashed !important;
+            border-color: #cbd5e0 !important;
+            opacity: .55;
+        }
+        .shift-bar.empty:hover { opacity: .8; }
+
+        /* Drag handles */
+        .bar-handle {
+            width: 9px; flex-shrink: 0;
+            cursor: ew-resize;
+            display: flex; align-items: center; justify-content: center;
+            opacity: 0; transition: opacity .15s;
+            background: rgba(0,0,0,.06);
+        }
+        .bar-handle::before {
+            content: '';
+            display: block; width: 2px; height: 55%;
+            border-left: 1.5px solid currentColor;
+            border-right: 1.5px solid currentColor;
+            opacity: .45;
+        }
+        .bar-handle-left  { border-radius: 4px 0 0 4px; }
+        .bar-handle-right { border-radius: 0 4px 4px 0; }
+        .shift-bar:hover .bar-handle { opacity: 1; }
+
+        /* Bar body (click area) */
+        .bar-body {
+            flex: 1; min-width: 0;
+            display: flex; align-items: center;
+            padding: 0 5px; cursor: pointer;
+            overflow: hidden; white-space: nowrap;
+        }
+        .bar-label {
+            font-size: 11px; font-weight: 600;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .bar-time {
+            font-size: 10px; font-weight: 400; opacity: .8;
+            margin-left: 4px; flex-shrink: 0;
+        }
+
+        /* 3-lane vertical positions */
+        .bar-lane-0 { top:   6px; }
+        .bar-lane-1 { top:  56px; }
+        .bar-lane-2 { top: 106px; }
+
+        /* Current-time indicator */
+        .now-line {
+            position: absolute; top: 0; bottom: 0;
+            width: 2px; background: #f56565; opacity: .6;
+            pointer-events: none; z-index: 4;
+        }
+        .now-dot {
+            position: absolute; top: -4px;
+            width: 8px; height: 8px; border-radius: 50%;
+            background: #f56565; margin-left: -3px;
+            pointer-events: none; z-index: 5;
+        }
+
+        /* ── Priority ── */
+        .priority-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(290px,1fr)); gap: 16px; }
+        .priority-card { border: 1.5px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
+        .priority-card-header {
+            padding: 12px 16px; font-size: 14px; font-weight: 700;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .p-open   { background: #dbeafe; color: #1e40af; }
+        .p-middle { background: #d1fae5; color: #065f46; }
+        .p-close  { background: #ffedd5; color: #9a3412; }
+        .priority-rows { padding: 8px; }
+        .priority-row {
+            display: flex; align-items: center;
+            padding: 6px 8px; border-radius: 6px; gap: 10px;
+        }
+        .priority-row:hover { background: #f8fafc; }
+        .priority-day { font-size: 12px; font-weight: 700; color: #718096; width: 22px; }
+        .priority-select {
+            flex: 1; padding: 5px 8px; border: 1.5px solid #e2e8f0;
+            border-radius: 6px; font-size: 12px; color: #4a5568;
+            outline: none; background: white; cursor: pointer;
+        }
+        .priority-select:focus { border-color: #667eea; }
+
+        /* ── Assign Modal ── */
+        .assign-list { display: flex; flex-direction: column; gap: 6px; max-height: 320px; overflow-y: auto; }
+        .assign-item {
+            display: flex; align-items: center;
+            padding: 10px 14px; border: 1.5px solid #e2e8f0; border-radius: 8px;
+            cursor: pointer; transition: all .15s; gap: 10px;
+        }
+        .assign-item:hover:not(.unavailable) { border-color: #667eea; background: #f5f7ff; }
+        .assign-item.selected   { border-color: #667eea; background: #ebf4ff; }
+        .assign-item.unavailable { opacity: .38; cursor: not-allowed; }
+        .assign-item-name  { font-size: 13px; font-weight: 500; color: #2d3748; flex: 1; }
+        .assign-item-check { color: #667eea; font-size: 18px; font-weight: 700; }
+        .emp-color-swatch {
+            width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0;
+        }
+
+        /* ── Stats ── */
+        .stats-bar  { display: flex; gap: 8px; flex-wrap: wrap; }
+        .stat-chip  {
+            display: flex; align-items: center; gap: 6px;
+            padding: 6px 12px; background: white; border-radius: 20px;
+            font-size: 12px; font-weight: 500; color: #4a5568;
+            box-shadow: 0 1px 3px rgba(0,0,0,.08);
+        }
+
+        /* ── Employee legend ── */
+        .emp-legend { display: flex; flex-wrap: wrap; gap: 6px; }
+        .emp-chip   {
+            display: inline-flex; align-items: center; gap: 5px;
+            padding: 4px 10px; border-radius: 20px;
+            font-size: 11px; font-weight: 600;
+            border: 1.5px solid transparent;
+        }
+        .emp-chip-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+        /* ── Drag tooltip ── */
+        .drag-tooltip {
+            position: fixed; display: none;
+            background: rgba(15,15,15,.82); color: white;
+            padding: 5px 10px; border-radius: 6px;
+            font-size: 13px; font-weight: 700;
+            pointer-events: none; z-index: 9999;
+            box-shadow: 0 2px 8px rgba(0,0,0,.3);
+        }
+
+        /* ── Empty state ── */
+        .empty-state { text-align: center; padding: 48px 24px; color: #a0aec0; }
+        .empty-state .icon { font-size: 44px; margin-bottom: 12px; }
+        .empty-state p { font-size: 14px; line-height: 1.6; }
+
+        /* ── Time Management ── */
+        .time-cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 16px;
+        }
+        .time-card {
+            background: white; border-radius: 12px; overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.04);
+        }
+        .time-card-header {
+            padding: 14px 18px;
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .time-card-body { padding: 16px; }
+        .time-stats-row {
+            display: flex; gap: 0;
+            border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden;
+        }
+        .time-stat {
+            flex: 1; text-align: center; padding: 14px 8px;
+            border-right: 1px solid #e2e8f0;
+        }
+        .time-stat:last-child { border-right: none; }
+        .time-stat-value { font-size: 18px; font-weight: 700; color: #1a202c; }
+        .time-stat-label { font-size: 10px; color: #a0aec0; margin-top: 4px; }
+        .time-week-table { width: 100%; border-collapse: collapse; margin-top: 14px; }
+        .time-week-table th {
+            padding: 7px 10px; font-size: 11px; font-weight: 600;
+            color: #718096; background: #f8fafc; border-bottom: 1px solid #e2e8f0;
+            text-transform: uppercase; letter-spacing: .4px;
+        }
+        .time-week-table th:not(:first-child) { text-align: center; }
+        .time-week-table td {
+            padding: 7px 10px; font-size: 12px; border-bottom: 1px solid #f0f4f8;
+        }
+        .time-week-table td:not(:first-child) { text-align: center; }
+        .time-week-table tr:last-child td { border-bottom: none; }
+        .time-week-table tr:hover td { background: #f8fafc; }
+        .time-summary-bar {
+            display: flex; gap: 12px; flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+        .time-summary-chip {
+            flex: 1; min-width: 140px;
+            background: white; border-radius: 12px; padding: 16px 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,.08);
+            display: flex; flex-direction: column; gap: 4px;
+        }
+        .time-summary-chip-value { font-size: 22px; font-weight: 700; color: #1a202c; }
+        .time-summary-chip-label { font-size: 11px; color: #a0aec0; }
+
+        /* ── Tab Content ── */
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb { background: #c5ccd8; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #a0aec0; }
+
+        @media (max-width: 640px) {
+            .main { padding: 12px; }
+            .header { padding: 12px 16px; }
+            .tab-btn { padding: 12px 14px; font-size: 13px; }
+        }
+    </style>
+</head>
+<body>
+
+<header class="header">
+    <span style="font-size:26px">🏪</span>
+    <div>
+        <h1>매장 시간표 관리</h1>
+        <div class="header-sub">직원 관리 · 우선 배정 · 자동/수동 시간표</div>
+    </div>
+</header>
+
+<nav class="nav-tabs">
+    <button class="tab-btn active" onclick="switchTab('employees')" id="tab-employees">👥 직원 관리</button>
+    <button class="tab-btn" onclick="switchTab('priority')"  id="tab-priority">⭐ 우선 배정</button>
+    <button class="tab-btn" onclick="switchTab('schedule')"  id="tab-schedule">📅 시간표</button>
+    <button class="tab-btn" onclick="switchTab('timemgmt')"  id="tab-timemgmt">⏱ 시간관리</button>
+</nav>
+
+<main class="main">
+
+    <!-- 직원 관리 -->
+    <div id="content-employees" class="tab-content active">
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">직원 목록</span>
+                <button class="btn btn-primary" onclick="openEmpModal()">+ 직원 추가</button>
+            </div>
+            <div id="employee-list"></div>
+        </div>
+    </div>
+
+    <!-- 우선 배정 -->
+    <div id="content-priority" class="tab-content">
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">시프트별 우선 배정</span>
+                <span style="font-size:12px;color:#a0aec0;">요일마다 우선 배정할 직원을 지정하세요</span>
+            </div>
+            <div class="card-body"><div id="priority-content"></div></div>
+        </div>
+    </div>
+
+    <!-- 시간관리 -->
+    <div id="content-timemgmt" class="tab-content">
+        <div id="timemgmt-container"></div>
+    </div>
+
+    <!-- 시간표 -->
+    <div id="content-schedule" class="tab-content">
+        <div class="schedule-header">
+            <div class="week-nav">
+                <button class="nav-btn" onclick="changeWeek(-1)">◀</button>
+                <span class="week-label" id="week-label"></span>
+                <button class="nav-btn" onclick="changeWeek(1)">▶</button>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                <div class="emp-legend" id="emp-legend"></div>
+                <button class="btn btn-success" onclick="autoAssign()">⚡ 자동 배정</button>
+            </div>
+        </div>
+        <div class="card" style="overflow:hidden;">
+            <div id="schedule-container"></div>
+        </div>
+        <div id="shift-summary" style="margin-top:16px;"></div>
+    </div>
+
+</main>
+
+<!-- 직원 모달 -->
+<div id="emp-modal" class="modal-overlay" style="display:none;" onclick="overlayClose(event,'emp-modal')">
+    <div class="modal">
+        <h2 class="modal-title" id="emp-modal-title">직원 추가</h2>
+        <div class="form-group">
+            <label class="form-label">이름</label>
+            <input type="text" class="form-input" id="emp-name" placeholder="직원 이름">
+        </div>
+        <div class="form-group">
+            <label class="form-label">소화 가능 역량</label>
+            <div class="checkbox-group">
+                <div class="checkbox-item">
+                    <input type="checkbox" id="cap-open">
+                    <label for="cap-open">🌅 오픈<small style="opacity:.7;margin-left:4px;">08:00~12:30</small></label>
+                </div>
+                <div class="checkbox-item">
+                    <input type="checkbox" id="cap-middle">
+                    <label for="cap-middle">☀️ 미들<small style="opacity:.7;margin-left:4px;">11:00~16:30</small></label>
+                </div>
+                <div class="checkbox-item">
+                    <input type="checkbox" id="cap-close">
+                    <label for="cap-close">🌙 마감<small style="opacity:.7;margin-left:4px;">16:00~19:00</small></label>
+                </div>
+            </div>
+            <p style="font-size:11px;color:#a0aec0;margin-top:6px;">* 미들 선택 시 미들①②③ 중 자동 배정됩니다</p>
+        </div>
+        <div class="form-group">
+            <label class="form-label">근무 가능 요일</label>
+            <div class="checkbox-group">
+                <div class="checkbox-item"><input type="checkbox" id="day-0"><label for="day-0">월</label></div>
+                <div class="checkbox-item"><input type="checkbox" id="day-1"><label for="day-1">화</label></div>
+                <div class="checkbox-item"><input type="checkbox" id="day-2"><label for="day-2">수</label></div>
+                <div class="checkbox-item"><input type="checkbox" id="day-3"><label for="day-3">목</label></div>
+                <div class="checkbox-item"><input type="checkbox" id="day-4"><label for="day-4">금</label></div>
+                <div class="checkbox-item"><input type="checkbox" id="day-5"><label for="day-5" style="color:#2b6cb0">토</label></div>
+                <div class="checkbox-item"><input type="checkbox" id="day-6"><label for="day-6" style="color:#c53030">일</label></div>
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="form-label">급여 유형</label>
+            <div class="radio-group">
+                <div class="radio-item"><input type="radio" id="pay-paid"   name="payType" value="paid" checked><label for="pay-paid">💰 급여</label></div>
+                <div class="radio-item"><input type="radio" id="pay-unpaid" name="payType" value="unpaid"><label for="pay-unpaid">🤝 비급여</label></div>
+            </div>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="closeModal('emp-modal')">취소</button>
+            <button class="btn btn-primary"   onclick="saveEmployee()">저장</button>
+        </div>
+    </div>
+</div>
+
+<!-- 배정 모달 -->
+<div id="assign-modal" class="modal-overlay" style="display:none;" onclick="overlayClose(event,'assign-modal')">
+    <div class="modal">
+        <h2 class="modal-title" id="assign-title">배정 수정</h2>
+        <div id="assign-info" style="margin-bottom:12px;"></div>
+        <div class="assign-list" id="assign-list"></div>
+        <p style="font-size:11px;color:#a0aec0;margin-top:10px;">* 역량이 없거나 근무 불가 요일인 직원도 강제 배정 가능합니다</p>
+        <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="closeModal('assign-modal')">취소</button>
+            <button class="btn btn-primary"   onclick="saveAssignment()">저장</button>
+        </div>
+    </div>
+</div>
+
+<!-- Drag tooltip -->
+<div id="drag-tooltip" class="drag-tooltip"></div>
+
+<script>
+// ══════════════════════════════════════════════
+// 상수
+// ══════════════════════════════════════════════
+const DAY_START = 480;   // 08:00
+const DAY_END   = 1140;  // 19:00
+const DAY_SPAN  = 660;
+
+const SHIFT_DEF = {
+    open:    { label:'오픈',  emoji:'🌅', time:'08:00~12:30', start:480,  end:750,  capKey:'open'   },
+    middle1: { label:'미들①', emoji:'☀️', time:'11:00~13:00', start:660,  end:780,  capKey:'middle' },
+    middle2: { label:'미들②', emoji:'☀️', time:'12:30~15:00', start:750,  end:900,  capKey:'middle' },
+    middle3: { label:'미들③', emoji:'☀️', time:'14:00~16:30', start:840,  end:990,  capKey:'middle' },
+    close:   { label:'마감',  emoji:'🌙', time:'16:00~19:00', start:960,  end:1140, capKey:'close'  }
+};
+const DISPLAY_SHIFTS = ['open','middle1','middle2','middle3','close'];
+const CAP_LABEL = { open:'오픈', middle:'미들', close:'마감' };
+const DAYS = ['월','화','수','목','금','토','일'];
+
+// 직원별 고유 색상 팔레트 (최대 12명 구분)
+const PALETTE = [
+    ['#dbeafe','#3b82f6','#1e40af'], // 파랑
+    ['#fce7f3','#ec4899','#9d174d'], // 핑크
+    ['#dcfce7','#22c55e','#166534'], // 초록
+    ['#ffedd5','#f97316','#7c2d12'], // 주황
+    ['#ede9fe','#8b5cf6','#4c1d95'], // 보라
+    ['#fef9c3','#ca8a04','#713f12'], // 노랑
+    ['#ccfbf1','#0d9488','#0f766e'], // 청록
+    ['#fee2e2','#ef4444','#7f1d1d'], // 빨강
+    ['#e0e7ff','#6366f1','#3730a3'], // 인디고
+    ['#fdf4ff','#d946ef','#701a75'], // 보라-분홍
+    ['#fff7ed','#ea580c','#7c2d12'], // 호박
+    ['#ecfdf5','#059669','#064e3b'], // 에메랄드
+];
+
+function empColor(empId) {
+    if (!empId) return null;
+    const idx = S.employees.findIndex(e => e.id === empId);
+    if (idx < 0) return null;
+    const [bg, border, text] = PALETTE[idx % PALETTE.length];
+    return { bg, border, text };
+}
+
+// ══════════════════════════════════════════════
+// 상태
+// ══════════════════════════════════════════════
+let S = {
+    employees : [],
+    priorities: {},
+    schedules : {},
+    curWeek   : mondayKey(new Date())
+};
+
+let editEmpId  = null;
+let assignCell = null;
+let tempSel    = [];
+
+// ══════════════════════════════════════════════
+// 데이터 모델 헬퍼
+// schedules[wk][key] = { ids:[], start:number, end:number }
+// ══════════════════════════════════════════════
+function normalizeEntry(raw, shift) {
+    const def = SHIFT_DEF[shift];
+    if (!raw) return { ids:[], start:def.start, end:def.end };
+    if (Array.isArray(raw)) return { ids:raw, start:def.start, end:def.end };
+    return { ids:raw.ids||[], start:raw.start||def.start, end:raw.end||def.end };
+}
+function getEntry(di, shift) {
+    const raw = (S.schedules[S.curWeek]||{})[`${di}-${shift}`];
+    return normalizeEntry(raw, shift);
+}
+function setEntry(di, shift, ids, start, end) {
+    if (!S.schedules[S.curWeek]) S.schedules[S.curWeek] = {};
+    const def = SHIFT_DEF[shift];
+    S.schedules[S.curWeek][`${di}-${shift}`] = {
+        ids,
+        start: start ?? def.start,
+        end:   end   ?? def.end
+    };
+}
+
+// ══════════════════════════════════════════════
+// 시간 포맷 (12시간제 스타일)
+// 8:00 → 8:00, 13:00 → 1:00, 16:30 → 4:30
+// ══════════════════════════════════════════════
+function fmtMin(m) {
+    const h   = Math.floor(m / 60);
+    const min = m % 60;
+    const h12 = h > 12 ? h - 12 : h;
+    return `${h12}:${min.toString().padStart(2,'0')}`;
+}
+
+// ══════════════════════════════════════════════
+// 주(Week) 유틸
+// ══════════════════════════════════════════════
+function mondayKey(date) {
+    const d = new Date(date);
+    d.setHours(0,0,0,0);
+    const dow = d.getDay();
+    d.setDate(d.getDate() + (dow === 0 ? -6 : 1 - dow));
+    return d.toISOString().slice(0,10);
+}
+function weekDates(key) {
+    const mon = new Date(key + 'T00:00:00');
+    return Array.from({length:7}, (_,i) => {
+        const d = new Date(mon); d.setDate(mon.getDate() + i); return d;
+    });
+}
+function weekLabel(key) {
+    const ds = weekDates(key);
+    const s = ds[0], e = ds[6];
+    return `${s.getFullYear()}년 ${s.getMonth()+1}월 ${s.getDate()}일 ~ ${e.getMonth()+1}월 ${e.getDate()}일`;
+}
+function isToday(d) {
+    const t = new Date();
+    return d.getFullYear()===t.getFullYear() && d.getMonth()===t.getMonth() && d.getDate()===t.getDate();
+}
+function changeWeek(delta) {
+    const mon = new Date(S.curWeek + 'T00:00:00');
+    mon.setDate(mon.getDate() + delta * 7);
+    S.curWeek = mondayKey(mon);
+    persist(); renderSchedule();
+}
+
+// ══════════════════════════════════════════════
+// 저장 / 로드
+// ══════════════════════════════════════════════
+function persist() { localStorage.setItem('schedApp_v4', JSON.stringify(S)); }
+function hydrate() {
+    const raw = localStorage.getItem('schedApp_v4');
+    if (raw) { try { S = { ...S, ...JSON.parse(raw) }; } catch(e) {} }
+    // 이전 버전 데이터 마이그레이션
+    const old = localStorage.getItem('schedApp_v3');
+    if (!raw && old) {
+        try { const p = JSON.parse(old); S.employees = p.employees||[]; S.priorities = p.priorities||{}; } catch(e) {}
+    }
+}
+
+// ══════════════════════════════════════════════
+// 탭 전환
+// ══════════════════════════════════════════════
+function switchTab(tab) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    document.getElementById('tab-' + tab).classList.add('active');
+    document.getElementById('content-' + tab).classList.add('active');
+    if (tab === 'employees') renderEmployees();
+    if (tab === 'priority')  renderPriority();
+    if (tab === 'schedule')  renderSchedule();
+    if (tab === 'timemgmt')  renderTimeMgmt();
+}
+
+// ══════════════════════════════════════════════
+// 직원 관리
+// ══════════════════════════════════════════════
+function renderEmployees() {
+    const el = document.getElementById('employee-list');
+    if (!S.employees.length) {
+        el.innerHTML = `<div class="empty-state"><div class="icon">👤</div><p>등록된 직원이 없습니다.<br>직원 추가 버튼을 눌러 시작하세요.</p></div>`;
+        return;
+    }
+    const rows = S.employees.map((emp, idx) => {
+        const [bg, border, text] = PALETTE[idx % PALETTE.length];
+        const caps = emp.capabilities.map(c =>
+            `<span class="badge badge-${c}">${CAP_LABEL[c]||c}</span>`).join('');
+        const days = emp.availableDays.map(d => {
+            const cls = d===5?'sat':d===6?'sun':'';
+            return `<span class="day-badge ${cls}">${DAYS[d]}</span>`;
+        }).join('');
+        const pay = emp.isPaid
+            ? `<span class="badge badge-paid">💰 급여</span>`
+            : `<span class="badge badge-unpaid">🤝 비급여</span>`;
+        return `<tr>
+            <td>
+                <span style="display:inline-flex;align-items:center;gap:7px;">
+                    <span style="width:10px;height:10px;border-radius:50%;background:${border};flex-shrink:0;"></span>
+                    <strong>${esc(emp.name)}</strong>
+                </span>
+            </td>
+            <td>${caps}</td><td>${days}</td><td>${pay}</td>
+            <td>
+                <button class="btn btn-outline" onclick="openEmpModal('${emp.id}')">수정</button>
+                <button class="btn btn-danger"  onclick="deleteEmp('${emp.id}')" style="margin-left:4px;">삭제</button>
+            </td>
+        </tr>`;
+    }).join('');
+    el.innerHTML = `<table><thead><tr>
+        <th>이름</th><th>소화 가능 역량</th><th>근무 가능 요일</th><th>급여 유형</th><th>관리</th>
+    </tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function openEmpModal(id = null) {
+    editEmpId = id;
+    document.getElementById('emp-modal-title').textContent = id ? '직원 수정' : '직원 추가';
+    document.getElementById('emp-name').value = '';
+    ['open','middle','close'].forEach(c => document.getElementById('cap-'+c).checked = false);
+    [0,1,2,3,4,5,6].forEach(d => document.getElementById('day-'+d).checked = false);
+    document.getElementById('pay-paid').checked = true;
+    if (id) {
+        const emp = S.employees.find(e => e.id === id);
+        if (emp) {
+            document.getElementById('emp-name').value = emp.name;
+            emp.capabilities.forEach(c => { const el = document.getElementById('cap-'+c); if (el) el.checked = true; });
+            emp.availableDays.forEach(d => document.getElementById('day-'+d).checked = true);
+            document.getElementById(emp.isPaid ? 'pay-paid' : 'pay-unpaid').checked = true;
+        }
+    }
+    document.getElementById('emp-modal').style.display = 'flex';
+    setTimeout(() => document.getElementById('emp-name').focus(), 80);
+}
+
+function saveEmployee() {
+    const name = document.getElementById('emp-name').value.trim();
+    if (!name) { alert('직원 이름을 입력해 주세요.'); return; }
+    const capabilities = ['open','middle','close'].filter(c => document.getElementById('cap-'+c).checked);
+    if (!capabilities.length) { alert('최소 하나의 역량을 선택해 주세요.'); return; }
+    const availableDays = [0,1,2,3,4,5,6].filter(d => document.getElementById('day-'+d).checked);
+    if (!availableDays.length) { alert('최소 하나의 근무 가능 요일을 선택해 주세요.'); return; }
+    const isPaid = document.getElementById('pay-paid').checked;
+
+    if (editEmpId) {
+        const i = S.employees.findIndex(e => e.id === editEmpId);
+        if (i >= 0) S.employees[i] = { ...S.employees[i], name, capabilities, availableDays, isPaid };
+    } else {
+        S.employees.push({ id:'e'+Date.now(), name, capabilities, availableDays, isPaid });
+    }
+    persist(); closeModal('emp-modal'); renderEmployees();
+}
+
+function deleteEmp(id) {
+    const emp = S.employees.find(e => e.id === id);
+    if (!emp || !confirm(`"${emp.name}" 직원을 삭제하시겠습니까?`)) return;
+    S.employees = S.employees.filter(e => e.id !== id);
+    Object.keys(S.priorities).forEach(k => { if (S.priorities[k]===id) delete S.priorities[k]; });
+    Object.values(S.schedules).forEach(wk => {
+        Object.keys(wk).forEach(k => {
+            const entry = wk[k];
+            if (Array.isArray(entry)) { wk[k] = entry.filter(eid => eid !== id); }
+            else if (entry?.ids) { wk[k] = { ...entry, ids: entry.ids.filter(eid => eid !== id) }; }
+        });
+    });
+    persist(); renderEmployees();
+}
+
+// ══════════════════════════════════════════════
+// 우선 배정
+// ══════════════════════════════════════════════
+function renderPriority() {
+    const el = document.getElementById('priority-content');
+    if (!S.employees.length) {
+        el.innerHTML = `<div class="empty-state"><div class="icon">⭐</div><p>먼저 직원을 등록해 주세요.</p></div>`;
+        return;
+    }
+    const defs = [
+        { key:'open',   label:'오픈',  emoji:'🌅', note:'',                    cls:'p-open'   },
+        { key:'middle', label:'미들',  emoji:'☀️', note:'(미들①②③ 우선 배정)', cls:'p-middle' },
+        { key:'close',  label:'마감',  emoji:'🌙', note:'',                    cls:'p-close'  }
+    ];
+    const cards = defs.map(def => {
+        const rows = DAYS.map((day, di) => {
+            const key = `${def.key}-${di}`;
+            const sel = S.priorities[key] || '';
+            const opts = S.employees
+                .filter(e => e.capabilities.includes(def.key))
+                .map(e => `<option value="${e.id}" ${sel===e.id?'selected':''}>${esc(e.name)}</option>`)
+                .join('');
+            const dayCls = di===5?'color:#2b6cb0':di===6?'color:#c53030':'';
+            return `<div class="priority-row">
+                <span class="priority-day" style="${dayCls}">${day}</span>
+                <select class="priority-select" onchange="setPriority('${def.key}',${di},this.value)">
+                    <option value="">-- 미지정 --</option>${opts}
+                </select>
+            </div>`;
+        }).join('');
+        return `<div class="priority-card">
+            <div class="priority-card-header ${def.cls}">${def.emoji} ${def.label} <span style="font-size:11px;opacity:.7;">${def.note}</span></div>
+            <div class="priority-rows">${rows}</div>
+        </div>`;
+    }).join('');
+    el.innerHTML = `<div class="priority-grid">${cards}</div>`;
+}
+
+function setPriority(cap, day, empId) {
+    const key = `${cap}-${day}`;
+    if (empId) S.priorities[key] = empId; else delete S.priorities[key];
+    persist();
+}
+
+// ══════════════════════════════════════════════
+// 시간표 (Gantt)
+// ══════════════════════════════════════════════
+function pcOf(min) { return ((min - DAY_START) / DAY_SPAN * 100).toFixed(3) + '%'; }
+function widOf(s, e) { return ((e - s) / DAY_SPAN * 100).toFixed(3) + '%'; }
+
+// 3-레인 자동 배치: 시간 겹침 없이 shift를 lane 0/1/2에 배정
+function computeLanes(di, wkData) {
+    const items = DISPLAY_SHIFTS.map(shift => {
+        const entry = normalizeEntry(wkData[`${di}-${shift}`], shift);
+        return { shift, entry, isEmpty: entry.ids.length === 0 };
+    });
+    // 비어있지 않은 항목 먼저, 그 다음 시작 시간 순
+    items.sort((a, b) => {
+        if (a.isEmpty !== b.isEmpty) return a.isEmpty ? 1 : -1;
+        return a.entry.start - b.entry.start;
+    });
+    const laneEnds = [-Infinity, -Infinity, -Infinity];
+    const laneMap = {};
+    items.forEach(({ shift, entry }) => {
+        let lane = laneEnds.findIndex(end => end <= entry.start);
+        if (lane < 0) lane = 0;
+        laneEnds[lane] = entry.end;
+        laneMap[shift] = lane;
+    });
+    return laneMap;
+}
+
+function renderSchedule() {
+    document.getElementById('week-label').textContent = weekLabel(S.curWeek);
+    renderEmpLegend();
+
+    const dates  = weekDates(S.curWeek);
+    const wkData = S.schedules[S.curWeek] || {};
+
+    // 시간 눈금 헤더
+    const ticks = [];
+    for (let m = DAY_START; m <= DAY_END; m += 30) {
+        const isHour = (m % 60 === 0);
+        const h = Math.floor(m / 60), min = m % 60;
+        ticks.push({ m, label: `${h}:${min===0?'00':'30'}`, isHour });
+    }
+    const timeHeaderHTML = ticks.map(t =>
+        `<div class="time-marker ${t.isHour?'hour':''}" style="left:${pcOf(t.m)}">${t.label}</div>`
+    ).join('');
+    const gridLinesHTML = ticks.map(t =>
+        `<div class="g-line ${t.isHour?'hour':''}" style="left:${pcOf(t.m)}"></div>`
+    ).join('');
+
+    // 요일 행
+    const dayRowsHTML = dates.map((date, di) => {
+        const isT = isToday(date);
+        const dayCls = di===5?'color:#2b6cb0':di===6?'color:#c53030':'';
+
+        const laneMap = computeLanes(di, wkData);
+
+        const barsHTML = DISPLAY_SHIFTS.map(shift => {
+            const def   = SHIFT_DEF[shift];
+            const entry = normalizeEntry(wkData[`${di}-${shift}`], shift);
+            const { ids, start, end } = entry;
+
+            const emps   = ids.map(id => S.employees.find(e => e.id === id)).filter(Boolean);
+            const names  = emps.map(e => e.name);
+            const color  = emps.length ? empColor(emps[0].id) : null;
+            const isEmpty = !emps.length;
+            const lane   = laneMap[shift] ?? 0;
+
+            const barStyle = isEmpty
+                ? ''
+                : `background:${color.bg}; border-color:${color.border}; color:${color.text};`;
+
+            const timeStr = `${fmtMin(start)}~${fmtMin(end)}`;
+            const nameStr = names.join('·');
+
+            return `<div class="shift-bar bar-lane-${lane} ${isEmpty?'empty':''}"
+                         style="left:${pcOf(start)};width:${widOf(start,end)};${barStyle}"
+                         data-di="${di}" data-shift="${shift}"
+                         title="${def.label}${nameStr?' — '+nameStr:''} ${timeStr}">
+                <div class="bar-handle bar-handle-left"
+                     onmousedown="startDrag(event,${di},'${shift}','left')"
+                     ontouchstart="startDrag(event,${di},'${shift}','left')"></div>
+                <div class="bar-body" onclick="openAssignModal(${di},'${shift}')">
+                    <span class="bar-label">${isEmpty ? def.emoji+' '+def.label+' 미배정' : esc(def.emoji+' '+nameStr)}</span>
+                    ${!isEmpty ? `<span class="bar-time">${timeStr}</span>` : ''}
+                </div>
+                <div class="bar-handle bar-handle-right"
+                     onmousedown="startDrag(event,${di},'${shift}','right')"
+                     ontouchstart="startDrag(event,${di},'${shift}','right')"></div>
+            </div>`;
+        }).join('');
+
+        return `<div class="gantt-day-row ${isT?'today-row':''}">
+            <div class="gantt-day-label">
+                <span class="day-name" style="${dayCls}">${DAYS[di]}</span>
+                <span class="day-date">${date.getMonth()+1}/${date.getDate()}</span>
+                ${isT?'<span class="today-dot"></span>':''}
+            </div>
+            <div class="gantt-timeline" data-di="${di}">
+                ${gridLinesHTML}${barsHTML}
+            </div>
+        </div>`;
+    }).join('');
+
+    document.getElementById('schedule-container').innerHTML = `
+        <div class="gantt-scroll"><div class="gantt-inner">
+            <div class="gantt-header-row">
+                <div class="gantt-label-col"></div>
+                <div class="gantt-time-header">${timeHeaderHTML}</div>
+            </div>
+            ${dayRowsHTML}
+        </div></div>`;
+
+    renderNowLine();
+    renderSummary();
+}
+
+function renderNowLine() {
+    const now = new Date();
+    const dates = weekDates(S.curWeek);
+    const todayIdx = dates.findIndex(d => isToday(d));
+    if (todayIdx < 0) return;
+    const nowMin = now.getHours()*60 + now.getMinutes();
+    if (nowMin < DAY_START || nowMin > DAY_END) return;
+
+    const leftPct = ((nowMin - DAY_START) / DAY_SPAN * 100).toFixed(2);
+    const tl = document.querySelector(`.gantt-timeline[data-di="${todayIdx}"]`);
+    if (!tl) return;
+
+    const line = document.createElement('div');
+    line.className = 'now-line';
+    line.style.left = leftPct + '%';
+    tl.appendChild(line);
+
+    const dot = document.createElement('div');
+    dot.className = 'now-dot';
+    dot.style.left = leftPct + '%';
+    tl.appendChild(dot);
+}
+
+function renderEmpLegend() {
+    const el = document.getElementById('emp-legend');
+    if (!S.employees.length) { el.innerHTML = ''; return; }
+    el.innerHTML = S.employees.map((emp, idx) => {
+        const [bg, border, text] = PALETTE[idx % PALETTE.length];
+        return `<span class="emp-chip" style="background:${bg};border-color:${border};color:${text};">
+            <span class="emp-chip-dot" style="background:${border};"></span>
+            ${esc(emp.name)}
+        </span>`;
+    }).join('');
+}
+
+function renderSummary() {
+    const wkData = S.schedules[S.curWeek] || {};
+
+    const chips = S.employees.map((emp, idx) => {
+        // 이번 주 각 날짜별 고유 시간 합산 (중복 방지)
+        let totalMin = 0;
+        let shiftCnt = 0;
+        for (let di = 0; di < 7; di++) {
+            const intervals = [];
+            DISPLAY_SHIFTS.forEach(sh => {
+                const entry = normalizeEntry(wkData[`${di}-${sh}`], sh);
+                if (entry.ids.includes(emp.id)) {
+                    intervals.push([entry.start, entry.end]);
+                    shiftCnt++;
+                }
+            });
+            // 겹치는 구간 병합
+            if (intervals.length) {
+                intervals.sort((a,b)=>a[0]-b[0]);
+                const merged = [intervals[0]];
+                intervals.slice(1).forEach(iv => {
+                    const last = merged[merged.length-1];
+                    if (iv[0] <= last[1]) last[1] = Math.max(last[1], iv[1]);
+                    else merged.push(iv);
+                });
+                merged.forEach(([s,e]) => totalMin += (e - s));
+            }
+        }
+        const h = Math.floor(totalMin/60), m = totalMin%60;
+        const hoursStr = totalMin > 0 ? (m > 0 ? `${h}h${m}m` : `${h}h`) : '-';
+        const [bg, border, text] = PALETTE[idx % PALETTE.length];
+        const payColor = emp.isPaid ? '#667eea' : '#ed8936';
+        return `<div class="stat-chip">
+            <span style="width:9px;height:9px;border-radius:50%;background:${border};flex-shrink:0;"></span>
+            <span>${esc(emp.name)}</span>
+            <span style="background:${payColor};color:white;padding:1px 7px;border-radius:10px;font-size:11px;">${shiftCnt}회</span>
+            <span style="font-size:11px;color:#718096;">${hoursStr}</span>
+        </div>`;
+    }).join('');
+
+    document.getElementById('shift-summary').innerHTML = chips
+        ? `<div style="font-size:12px;color:#718096;margin-bottom:8px;font-weight:600;">이번 주 배정 현황</div>
+           <div class="stats-bar">${chips}</div>`
+        : '';
+}
+
+// ══════════════════════════════════════════════
+// 드래그 (30분 단위 시간 조정)
+// ══════════════════════════════════════════════
+let drag = null;
+const tooltip = () => document.getElementById('drag-tooltip');
+
+function startDrag(e, di, shift, handle) {
+    e.preventDefault(); e.stopPropagation();
+    const entry = getEntry(di, shift);
+    const tlEl  = document.querySelector(`.gantt-timeline[data-di="${di}"]`);
+    if (!tlEl) return;
+
+    drag = {
+        di, shift, handle,
+        origStart: entry.start, origEnd: entry.end, ids: entry.ids,
+        curStart: entry.start,  curEnd: entry.end,
+        tlEl,
+        clientX0: e.clientX || (e.touches?.[0]?.clientX ?? 0)
+    };
+
+    document.body.style.cursor = 'ew-resize';
+    document.addEventListener('mousemove', onDragMove, { passive: false });
+    document.addEventListener('mouseup',   onDragEnd);
+    document.addEventListener('touchmove', onDragMove, { passive: false });
+    document.addEventListener('touchend',  onDragEnd);
+}
+
+function onDragMove(e) {
+    if (!drag) return;
+    if (e.cancelable) e.preventDefault();
+
+    const clientX = e.clientX ?? e.touches?.[0]?.clientX;
+    if (clientX === undefined) return;
+
+    const rect = drag.tlEl.getBoundingClientRect();
+    const rawMin = DAY_START + ((clientX - rect.left) / rect.width) * DAY_SPAN;
+    const snapped = Math.round(rawMin / 30) * 30;
+    const clamped = Math.max(DAY_START, Math.min(DAY_END, snapped));
+
+    let ns = drag.origStart, ne = drag.origEnd;
+    if (drag.handle === 'right') {
+        ne = Math.max(ns + 30, clamped);
+    } else {
+        ns = Math.min(ne - 30, clamped);
+    }
+    drag.curStart = ns; drag.curEnd = ne;
+
+    // 실시간 바 업데이트
+    const barEl = document.querySelector(`.shift-bar[data-di="${drag.di}"][data-shift="${drag.shift}"]`);
+    if (barEl) {
+        barEl.style.left  = ((ns - DAY_START) / DAY_SPAN * 100).toFixed(3) + '%';
+        barEl.style.width = ((ne - ns) / DAY_SPAN * 100).toFixed(3) + '%';
+        const timeEl = barEl.querySelector('.bar-time');
+        if (timeEl) timeEl.textContent = `${fmtMin(ns)}~${fmtMin(ne)}`;
+    }
+
+    // 툴팁
+    const tip = tooltip();
+    tip.style.display = 'block';
+    tip.style.left = (clientX + 14) + 'px';
+    tip.style.top  = ((e.clientY ?? 100) - 32) + 'px';
+    tip.textContent = drag.handle === 'right' ? `→ ${fmtMin(ne)}` : `← ${fmtMin(ns)}`;
+}
+
+function onDragEnd() {
+    if (!drag) return;
+    setEntry(drag.di, drag.shift, drag.ids, drag.curStart, drag.curEnd);
+    persist();
+    tooltip().style.display = 'none';
+    document.body.style.cursor = '';
+    document.removeEventListener('mousemove', onDragMove);
+    document.removeEventListener('mouseup',   onDragEnd);
+    document.removeEventListener('touchmove', onDragMove);
+    document.removeEventListener('touchend',  onDragEnd);
+    drag = null;
+    // 일관성 유지를 위해 재렌더
+    setTimeout(() => renderSchedule(), 0);
+}
+
+// ══════════════════════════════════════════════
+// 자동 배정
+// ══════════════════════════════════════════════
+function autoAssign() {
+    if (!S.employees.length) { alert('직원을 먼저 등록해 주세요.'); return; }
+    const existing = S.schedules[S.curWeek];
+    const hasData = existing && Object.values(existing).some(v => {
+        if (Array.isArray(v)) return v.length > 0;
+        return (v?.ids||[]).length > 0;
+    });
+    if (hasData && !confirm('이미 배정된 내용이 있습니다. 자동 배정으로 덮어쓰시겠습니까?')) return;
+
+    S.schedules[S.curWeek] = {};
+    const shiftCnt = {};
+    S.employees.forEach(e => shiftCnt[e.id] = 0);
+
+    for (let di = 0; di < 7; di++) {
+        const dailySet = new Set();
+        setEntry(di, 'open',  assignSingle(di,'open',  'open',  dailySet,shiftCnt), null, null);
+        const mid = assignMiddle(di, dailySet, shiftCnt);
+        setEntry(di, 'middle1', mid.m1, null, null);
+        setEntry(di, 'middle2', mid.m2, null, null);
+        setEntry(di, 'middle3', mid.m3, null, null);
+        setEntry(di, 'close', assignSingle(di,'close', 'close', dailySet,shiftCnt), null, null);
+    }
+    persist(); renderSchedule();
+}
+
+function assignSingle(di, capKey, shift, dailySet, shiftCnt) {
+    let eligible = S.employees.filter(e =>
+        e.capabilities.includes(capKey) && e.availableDays.includes(di) && !dailySet.has(e.id));
+    const prioId = S.priorities[`${capKey}-${di}`];
+    let assigned = [];
+    if (prioId) {
+        const pe = eligible.find(e => e.id === prioId);
+        if (pe) { assigned.push(prioId); eligible = eligible.filter(e => e.id !== prioId); dailySet.add(prioId); shiftCnt[prioId]++; }
+    }
+    if (!assigned.length && eligible.length) {
+        eligible.sort((a,b) => shiftCnt[a.id]-shiftCnt[b.id]);
+        const pick = eligible[0];
+        assigned.push(pick.id); dailySet.add(pick.id); shiftCnt[pick.id]++;
+    }
+    return assigned;
+}
+
+function assignMiddle(di, dailySet, shiftCnt) {
+    let pool = S.employees.filter(e =>
+        e.capabilities.includes('middle') && e.availableDays.includes(di) && !dailySet.has(e.id));
+    pool.sort((a,b) => shiftCnt[a.id]-shiftCnt[b.id]);
+    const prioId = S.priorities[`middle-${di}`];
+    if (prioId) {
+        const idx = pool.findIndex(e => e.id === prioId);
+        if (idx > 0) { const [pe] = pool.splice(idx,1); pool.unshift(pe); }
+    }
+    const res = { m1:[], m2:[], m3:[] };
+    if (!pool.length) return res;
+
+    if (pool.length >= 3) {
+        const first = pool[0];
+        const rest  = shuffle(pool.slice(1));
+        const three = [first, rest[0], rest[1]];
+        const order = shuffle([0,1,2]);
+        res.m1=[three[order[0]].id]; res.m2=[three[order[1]].id]; res.m3=[three[order[2]].id];
+        three.forEach(e => { dailySet.add(e.id); shiftCnt[e.id]++; });
+    } else if (pool.length === 2) {
+        const [a,b] = pool;
+        if (Math.random() < .5) { res.m1=[a.id]; res.m2=[a.id]; res.m3=[b.id]; }
+        else                    { res.m1=[a.id]; res.m2=[b.id]; res.m3=[b.id]; }
+        [a,b].forEach(e => { dailySet.add(e.id); shiftCnt[e.id]++; });
+    } else {
+        const a = pool[0];
+        res.m1=[a.id]; res.m2=[a.id]; res.m3=[a.id];
+        dailySet.add(a.id); shiftCnt[a.id]++;
+    }
+    return res;
+}
+
+function shuffle(arr) {
+    const a = [...arr];
+    for (let i = a.length-1; i > 0; i--) {
+        const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]];
+    }
+    return a;
+}
+
+// ══════════════════════════════════════════════
+// 수동 배정 모달
+// ══════════════════════════════════════════════
+function openAssignModal(di, shift) {
+    assignCell = { day: di, shift };
+    const entry = getEntry(di, shift);
+    tempSel = [...entry.ids];
+    const def = SHIFT_DEF[shift];
+
+    document.getElementById('assign-title').textContent = `${DAYS[di]}요일 ${def.label} 배정 수정`;
+    document.getElementById('assign-info').innerHTML =
+        `<span style="font-size:12px;background:#f0f4ff;padding:5px 10px;border-radius:6px;color:#4a5568;">
+            ${def.emoji} ${def.label} &nbsp;<strong>${def.time}</strong>
+            &nbsp;(현재: ${fmtMin(entry.start)}~${fmtMin(entry.end)})
+        </span>`;
+
+    document.getElementById('assign-list').innerHTML = S.employees.map((emp, idx) => {
+        const canCap = emp.capabilities.includes(def.capKey);
+        const canDay = emp.availableDays.includes(di);
+        const unavail = !canCap || !canDay;
+        const selected = tempSel.includes(emp.id);
+        const reason = !canCap ? '역량 없음' : !canDay ? '근무 불가 요일' : '';
+        const [bg, border, text] = PALETTE[idx % PALETTE.length];
+
+        const capBadges = emp.capabilities.map(c =>
+            `<span style="font-size:10px;padding:1px 5px;border-radius:4px;background:#edf2f7;color:#4a5568;">${CAP_LABEL[c]||c}</span>`
+        ).join(' ');
+
+        return `<div class="assign-item ${selected?'selected':''} ${unavail?'unavailable':''}"
+                     onclick="toggleAssign('${emp.id}')" id="aitem-${emp.id}">
+            <span class="emp-color-swatch" style="background:${border};"></span>
+            <span class="assign-item-name">
+                ${esc(emp.name)}&nbsp;${capBadges}
+                ${reason?`<span style="font-size:10px;color:#fc8181;margin-left:4px;">(${reason})</span>`:''}
+            </span>
+            ${selected?'<span class="assign-item-check">✓</span>':''}
+        </div>`;
+    }).join('');
+
+    document.getElementById('assign-modal').style.display = 'flex';
+}
+
+function toggleAssign(empId) {
+    const idx = tempSel.indexOf(empId);
+    if (idx >= 0) tempSel.splice(idx,1); else tempSel.push(empId);
+    const item = document.getElementById('aitem-'+empId);
+    if (!item) return;
+    const sel = tempSel.includes(empId);
+    item.classList.toggle('selected', sel);
+    const chk = item.querySelector('.assign-item-check');
+    if (sel && !chk) item.insertAdjacentHTML('beforeend','<span class="assign-item-check">✓</span>');
+    else if (!sel && chk) chk.remove();
+}
+
+function saveAssignment() {
+    if (!assignCell) return;
+    const { day, shift } = assignCell;
+    const entry = getEntry(day, shift); // 기존 시간 유지
+    setEntry(day, shift, tempSel, entry.start, entry.end);
+    persist(); closeModal('assign-modal'); renderSchedule();
+}
+
+// ══════════════════════════════════════════════
+// 모달 유틸
+// ══════════════════════════════════════════════
+function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+function overlayClose(e, id) { if (e.target === document.getElementById(id)) closeModal(id); }
+function esc(str) {
+    return String(str)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// ══════════════════════════════════════════════
+// 시간관리 탭
+// ══════════════════════════════════════════════
+function renderTimeMgmt() {
+    const el = document.getElementById('timemgmt-container');
+    if (!S.employees.length) {
+        el.innerHTML = `<div class="card"><div class="card-body">
+            <div class="empty-state"><div class="icon">⏱</div>
+            <p>직원을 먼저 등록해 주세요.</p></div></div></div>`;
+        return;
+    }
+
+    const weekKeys = Object.keys(S.schedules).sort();
+
+    // ── 전체 요약 통계 ──
+    let totalAllShifts = 0, totalAllMin = 0;
+    const weekSet = new Set(weekKeys.filter(wk =>
+        Object.values(S.schedules[wk]||{}).some(v => (Array.isArray(v)?v:v?.ids||[]).length > 0)
+    ));
+
+    // ── 직원별 통계 ──
+    const empStats = S.employees.map((emp, idx) => {
+        let totalMin = 0, totalShifts = 0;
+        const typeCnt = { open: 0, middle: 0, close: 0 };
+        const weeklyRows = [];
+
+        weekKeys.forEach(wk => {
+            const wkData = S.schedules[wk] || {};
+            let wkMin = 0, wkShifts = 0;
+            for (let di = 0; di < 7; di++) {
+                const intervals = [];
+                DISPLAY_SHIFTS.forEach(sh => {
+                    const entry = normalizeEntry(wkData[`${di}-${sh}`], sh);
+                    if (entry.ids.includes(emp.id)) {
+                        intervals.push([entry.start, entry.end]);
+                        wkShifts++;
+                        const capKey = SHIFT_DEF[sh].capKey;
+                        if (typeCnt[capKey] !== undefined) typeCnt[capKey]++;
+                        else typeCnt.middle++;
+                    }
+                });
+                if (intervals.length) {
+                    intervals.sort((a,b)=>a[0]-b[0]);
+                    const merged = [intervals[0]];
+                    intervals.slice(1).forEach(iv => {
+                        const last = merged[merged.length-1];
+                        if (iv[0] <= last[1]) last[1] = Math.max(last[1], iv[1]);
+                        else merged.push(iv);
+                    });
+                    merged.forEach(([s,e]) => wkMin += (e - s));
+                }
+            }
+            totalMin   += wkMin;
+            totalShifts += wkShifts;
+            if (wkMin > 0 || wkShifts > 0) {
+                weeklyRows.push({ wk, min: wkMin, shifts: wkShifts });
+            }
+        });
+
+        totalAllShifts += totalShifts;
+        totalAllMin    += totalMin;
+
+        return { emp, idx, totalMin, totalShifts, typeCnt, weeklyRows };
+    });
+
+    const fmtH = min => {
+        if (!min) return '0시간';
+        const h = Math.floor(min/60), m = min%60;
+        return m ? `${h}시간 ${m}분` : `${h}시간`;
+    };
+    const fmtHShort = min => {
+        if (!min) return '-';
+        const h = Math.floor(min/60), m = min%60;
+        return m ? `${h}h ${m}m` : `${h}h`;
+    };
+
+    // ── 요약 바 ──
+    const allH = Math.floor(totalAllMin/60), allM = totalAllMin%60;
+    const summaryHTML = `
+        <div class="time-summary-bar">
+            <div class="time-summary-chip">
+                <div class="time-summary-chip-value">${S.employees.length}명</div>
+                <div class="time-summary-chip-label">등록 직원 수</div>
+            </div>
+            <div class="time-summary-chip">
+                <div class="time-summary-chip-value">${weekSet.size}주</div>
+                <div class="time-summary-chip-label">기록된 주 수</div>
+            </div>
+            <div class="time-summary-chip">
+                <div class="time-summary-chip-value">${totalAllShifts}회</div>
+                <div class="time-summary-chip-label">총 배정 횟수</div>
+            </div>
+            <div class="time-summary-chip">
+                <div class="time-summary-chip-value">${allM ? allH+'h '+allM+'m' : allH+'h'}</div>
+                <div class="time-summary-chip-label">총 누적 근무 시간</div>
+            </div>
+        </div>`;
+
+    // ── 직원 카드 ──
+    const cards = empStats.map(({ emp, idx, totalMin, totalShifts, typeCnt, weeklyRows }) => {
+        const [bg, border, text] = PALETTE[idx % PALETTE.length];
+        const payColor  = emp.isPaid ? '#667eea' : '#ed8936';
+        const payLabel  = emp.isPaid ? '💰 급여' : '🤝 비급여';
+        const weekTable = weeklyRows.length
+            ? `<table class="time-week-table">
+                <thead><tr>
+                    <th>주(월요일 기준)</th>
+                    <th>근무 횟수</th>
+                    <th>근무 시간</th>
+                </tr></thead>
+                <tbody>${weeklyRows.map(r => `<tr>
+                    <td>${r.wk}</td>
+                    <td>${r.shifts}회</td>
+                    <td>${fmtHShort(r.min)}</td>
+                </tr>`).join('')}</tbody>
+               </table>`
+            : `<p style="font-size:12px;color:#a0aec0;margin-top:14px;text-align:center;">아직 배정된 근무가 없습니다.</p>`;
+
+        return `<div class="time-card" style="border-top:4px solid ${border};">
+            <div class="time-card-header" style="background:${bg};color:${text};">
+                <span style="font-weight:700;font-size:15px;">${esc(emp.name)}</span>
+                <span style="background:${payColor};color:white;padding:2px 9px;border-radius:10px;font-size:11px;font-weight:600;">${payLabel}</span>
+            </div>
+            <div class="time-card-body">
+                <div class="time-stats-row">
+                    <div class="time-stat">
+                        <div class="time-stat-value">${fmtH(totalMin)}</div>
+                        <div class="time-stat-label">총 근무 시간</div>
+                    </div>
+                    <div class="time-stat">
+                        <div class="time-stat-value">${totalShifts}회</div>
+                        <div class="time-stat-label">총 배정 횟수</div>
+                    </div>
+                    <div class="time-stat">
+                        <div class="time-stat-value" style="font-size:13px;">${typeCnt.open}·${typeCnt.middle}·${typeCnt.close}</div>
+                        <div class="time-stat-label">오픈·미들·마감</div>
+                    </div>
+                </div>
+                ${weekTable}
+            </div>
+        </div>`;
+    }).join('');
+
+    el.innerHTML = summaryHTML + `<div class="time-cards-grid">${cards}</div>`;
+}
+
+// ══════════════════════════════════════════════
+// 초기화
+// ══════════════════════════════════════════════
+function init() {
+    hydrate();
+    renderEmployees();
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') {
+            document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none');
+        }
+        if (e.key === 'Enter' && document.getElementById('emp-modal').style.display === 'flex') {
+            saveEmployee();
+        }
+    });
+}
+
+init();
+</script>
+</body>
+</html>
