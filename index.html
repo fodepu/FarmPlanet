@@ -343,6 +343,21 @@
             box-shadow: 0 2px 8px rgba(0,0,0,.3);
         }
 
+        /* ── Cleaning time ── */
+        .cleaning-line {
+            position: absolute; top: 0; bottom: 0;
+            width: 2px; background: #38b2ac; opacity: .75;
+            pointer-events: none; z-index: 4;
+        }
+        .cleaning-label {
+            position: absolute; top: 4px;
+            font-size: 9px; font-weight: 700; color: #2c7a7b;
+            white-space: nowrap; transform: translateX(-50%);
+            pointer-events: none; z-index: 5;
+            background: #e6fffa; padding: 1px 4px; border-radius: 3px;
+            border: 1px solid #81e6d9;
+        }
+
         /* ── Empty state ── */
         .empty-state { text-align: center; padding: 48px 24px; color: #a0aec0; }
         .empty-state .icon { font-size: 44px; margin-bottom: 12px; }
@@ -409,10 +424,20 @@
         ::-webkit-scrollbar-thumb { background: #c5ccd8; border-radius: 3px; }
         ::-webkit-scrollbar-thumb:hover { background: #a0aec0; }
 
+        /* ── Data IO bar ── */
+        .data-bar {
+            background: white; border-bottom: 1px solid #e2e8f0;
+            padding: 8px 24px; display: flex; align-items: center; gap: 10px;
+            flex-wrap: wrap;
+        }
+        .data-bar-label { font-size: 12px; color: #a0aec0; font-weight: 500; }
+        .data-bar-sep { width: 1px; height: 18px; background: #e2e8f0; }
+
         @media (max-width: 640px) {
             .main { padding: 12px; }
             .header { padding: 12px 16px; }
             .tab-btn { padding: 12px 14px; font-size: 13px; }
+            .data-bar { padding: 8px 12px; }
         }
     </style>
 </head>
@@ -425,6 +450,15 @@
         <div class="header-sub">직원 관리 · 우선 배정 · 자동/수동 시간표</div>
     </div>
 </header>
+
+<div class="data-bar">
+    <span class="data-bar-label">💾 데이터 관리</span>
+    <div class="data-bar-sep"></div>
+    <button class="btn btn-secondary" onclick="exportData()" style="font-size:12px;padding:5px 12px;">⬇ 파일로 저장 (.json)</button>
+    <button class="btn btn-secondary" onclick="document.getElementById('import-file').click()" style="font-size:12px;padding:5px 12px;">⬆ 파일 불러오기</button>
+    <input type="file" id="import-file" accept=".json" style="display:none;" onchange="importData(event)">
+    <span id="save-status" style="font-size:11px;color:#a0aec0;"></span>
+</div>
 
 <nav class="nav-tabs">
     <button class="tab-btn active" onclick="switchTab('employees')" id="tab-employees">👥 직원 관리</button>
@@ -559,6 +593,12 @@
 const DAY_START = 480;   // 08:00
 const DAY_END   = 1140;  // 19:00
 const DAY_SPAN  = 660;
+
+const CLEANING_TIMES = [
+    { min: 630,  label: '🧹 10:30' },  // 10:30
+    { min: 870,  label: '🧹 2:30'  },  // 14:30
+    { min: 1110, label: '🧹 6:30'  },  // 18:30
+];
 
 const SHIFT_DEF = {
     open:    { label:'오픈',  emoji:'🌅', time:'08:00~12:30', start:480,  end:750,  capKey:'open'   },
@@ -896,6 +936,14 @@ function renderSchedule() {
 
         const laneMap = computeLanes(di, wkData);
 
+        const cleaningHTML = CLEANING_TIMES
+            .filter(ct => ct.min >= DAY_START && ct.min <= DAY_END)
+            .map(ct => {
+                const lp = ((ct.min - DAY_START) / DAY_SPAN * 100).toFixed(2);
+                return `<div class="cleaning-line" style="left:${lp}%"></div>
+                        <div class="cleaning-label" style="left:${lp}%">${ct.label}</div>`;
+            }).join('');
+
         const barsHTML = DISPLAY_SHIFTS.map(shift => {
             const def   = SHIFT_DEF[shift];
             const entry = normalizeEntry(wkData[`${di}-${shift}`], shift);
@@ -938,7 +986,7 @@ function renderSchedule() {
                 ${isT?'<span class="today-dot"></span>':''}
             </div>
             <div class="gantt-timeline" data-di="${di}">
-                ${gridLinesHTML}${barsHTML}
+                ${gridLinesHTML}${cleaningHTML}${barsHTML}
             </div>
         </div>`;
     }).join('');
@@ -1418,6 +1466,56 @@ function renderTimeMgmt() {
     }).join('');
 
     el.innerHTML = summaryHTML + `<div class="time-cards-grid">${cards}</div>`;
+}
+
+// ══════════════════════════════════════════════
+// 데이터 내보내기 / 불러오기
+// ══════════════════════════════════════════════
+function exportData() {
+    const json = JSON.stringify(S, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    const now  = new Date();
+    const ts   = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
+    a.href     = url;
+    a.download = `매장시간표_${ts}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showSaveStatus('✅ 저장 완료!');
+}
+
+function importData(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+        try {
+            const parsed = JSON.parse(ev.target.result);
+            if (!parsed.employees || !parsed.schedules) throw new Error('형식 오류');
+            S = { ...S, ...parsed };
+            persist();
+            // 현재 탭 재렌더
+            const activeTab = document.querySelector('.tab-btn.active');
+            if (activeTab) {
+                const tabId = activeTab.id.replace('tab-', '');
+                switchTab(tabId);
+            } else {
+                renderEmployees();
+            }
+            showSaveStatus('✅ 불러오기 완료!');
+        } catch(err) {
+            alert('파일을 읽을 수 없습니다. 올바른 매장시간표 JSON 파일인지 확인해 주세요.');
+        }
+    };
+    reader.readAsText(file, 'utf-8');
+    e.target.value = '';
+}
+
+function showSaveStatus(msg) {
+    const el = document.getElementById('save-status');
+    el.textContent = msg;
+    setTimeout(() => el.textContent = '', 3000);
 }
 
 // ══════════════════════════════════════════════
