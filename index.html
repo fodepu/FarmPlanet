@@ -115,20 +115,15 @@ input.inp{min-height:auto}
 .wtime{width:18px;flex:none;position:relative;margin-top:34px;height:242px}
 .wtime span{position:absolute;right:2px;font-size:8px;color:var(--sub);transform:translateY(-50%)}
 .wcol{flex:1;min-width:0;display:flex;flex-direction:column}
-.wcol.wsel{flex:1.25}
 .wch{font-size:11px;font-weight:800;text-align:center;color:var(--deep);padding:4px 0;line-height:1.25;cursor:pointer;border-radius:6px}
 .wcol.wtoday .wch{background:#E2F0E7}
-.wcol.wsel .wch{background:var(--deep);color:#fff}
 .wbody{position:relative;height:242px;border-radius:6px;overflow:hidden;background:#fff;
   background-image:repeating-linear-gradient(to bottom,#edf1ea 0 1px,transparent 1px 44px);border:1px solid var(--edge)}
-.wcol.wsel .wbody{outline:2px solid var(--deep);outline-offset:-2px}
 .wpeak{position:absolute;left:0;right:0;background:var(--peak);opacity:.7}
 .wsh{position:absolute;color:#3c4a40;font-weight:700;padding:2px 1px;text-align:center;
   overflow:hidden;cursor:pointer;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center}
-.z3 .wsh{font-size:11px;line-height:1.35}
 .z7 .wsh{font-size:9px;line-height:1.25}
 .wsh .wt{display:block;font-weight:400;opacity:.85;white-space:nowrap}
-.z3 .wsh .wt{font-size:10px;letter-spacing:.02em}
 .z7 .wsh .wt{font-size:8px}
 .wcov{text-align:center;font-size:12px;padding:3px 0;cursor:pointer}
 .wcov .wcn{font-size:9px;color:var(--sub);margin-left:2px}
@@ -360,7 +355,7 @@ function resetAll(){if(!confirm('모든 데이터를 초기화할까요? (시간
 
 let role="staff", tab="home", ckMode="close";
 let onlyMine=false, noticeView='notice';
-let dayView='week', selDay=todayK();
+
 
 /* ═══════════ 공통 ═══════════ */
 const $=id=>document.getElementById(id);
@@ -443,7 +438,7 @@ function filterManual(v){renderManual(v);}
 
 /* ═══════════ 시간표 ═══════════ */
 function setWeek(off){weekOffset=off;WEEK=buildWeek(off);
- const t=WEEK.find(x=>x.today); selDay=t?t.k:WEEK[0].k; render();}
+ render();}
 function coverage(dkey){
  const list=STAFF.map(s=>({s,sh:SHIFTS[s.id+'|'+dkey]})).filter(x=>x.sh);
  const peak=list.filter(x=>t2n(x.sh.s)<=PEAK_S && t2n(x.sh.e)>=PEAK_E);
@@ -507,40 +502,30 @@ function segLayout(dkey){
  return segs;
 }
 function renderGrid(){
- const admin=role==='admin', span=CLOSE_H-OPEN_H, zoom=dayView==='zoom';
+ const admin=role==='admin', span=CLOSE_H-OPEN_H;
  const peakT=(PEAK_S-OPEN_H)/span*100, peakH=(PEAK_E-PEAK_S)/span*100;
  const times=[8,10,12,14,16,18,19].map(h=>`<span style="top:${(h-OPEN_H)/span*100}%">${h}</span>`).join('');
- let days=WEEK;
- if(zoom){
-   const si=Math.max(0,Math.min(WEEK.findIndex(x=>x.k===selDay),6));
-   const start=Math.max(0,Math.min(si-1,4));
-   days=WEEK.slice(start,start+3);
- }
- const chips=zoom?`<div class="dsel">
-   <button class="dchip" onclick="dayView='week';render()">7일</button>
-   ${WEEK.map(x=>`<button class="dchip ${x.k===selDay?'on':''}" onclick="selDay='${x.k}';render()">${x.w}${x.d}</button>`).join('')}</div>`:'';
- const cols=days.map(d=>{
+ const cols=WEEK.map(d=>{
    const segs=segLayout(d.k), c=coverage(d.k), ok=c.count>0&&c.warns.length===0;
    const cvColor=c.count===0?'#c4cdc7':(ok?'#1E6B3C':'#c2410c');
    const blocks=segs.map(g=>{
      const top=(g.t1-OPEN_H)/span*100, h=(g.t2-g.t1)/span*100;
      const nm=g.x.s.name;
-     const lbl=g.lbl?(zoom?`${nm}<span class="wt">[${g.x.sh.s}&thinsp;~&thinsp;${g.x.sh.e}]</span>`
-                          :`${nm}<span class="wt">${cT(g.x.sh.s)}&thinsp;~&thinsp;${cT(g.x.sh.e)}</span>`):'';
+     const lbl=g.lbl?`${nm}<span class="wt">${cT(g.x.sh.s)}&thinsp;~&thinsp;${cT(g.x.sh.e)}</span>`:'';
      return `<div class="wsh" style="top:${top}%;height:${h}%;left:${g.idx/g.n*100}%;width:${100/g.n}%;background:${g.x.s.c}"
        ${admin?`onclick="event.stopPropagation();editCell('${g.x.s.id}','${d.k}')"`:''}>${lbl}</div>`;
    }).join('');
-   const head=zoom?`${d.w} ${d.d}일`:`${d.w}<br><span style="font-weight:400">${d.d}</span>`;
-   return `<div class="wcol ${d.today?'wtoday':''} ${zoom&&d.k===selDay?'wsel':''}">
-     <div class="wch" onclick="${zoom?`selDay='${d.k}';render()`:`dayView='zoom';selDay='${d.k}';render()`}">${head}</div>
-     <div class="wbody" ${admin?`onclick="editShift('${d.k}')"`:`onclick="dayView='zoom';selDay='${d.k}';render()"`}>
+   const head=`${d.w}<br><span style="font-weight:400">${d.d}</span>`;
+   return `<div class="wcol ${d.today?'wtoday':''}">
+     <div class="wch">${head}</div>
+     <div class="wbody" ${admin?`onclick="editShift('${d.k}')"`:''}>
        <div class="wpeak" style="top:${peakT}%;height:${peakH}%"></div>${blocks}</div>
      <div class="wcov" title="근무 인원">
        <span style="color:${cvColor};font-weight:800">${c.count===0?'–':(ok?'✓':'!')}</span><span class="wcn">${c.count}</span></div>
    </div>`;
  }).join('');
- return `${chips}<div class="wcal ${zoom?'z3':'z7'}"><div class="wtime">${times}</div>${cols}</div>
-   <div class="muted" style="font-size:11px;margin-bottom:12px">${zoom?'7일 = 전체 보기':'요일을 누르면 3일 확대'} · ${onlyMine?'내 근무만 · ':''}${admin?'블록 = 수정 · 빈 곳 = 추가 · ':''}겹침 = 맞물려 분할 · 보라 음영 = 피크</div>`;
+ return `<div class="wcal z7"><div class="wtime">${times}</div>${cols}</div>
+   <div class="muted" style="font-size:11px;margin-bottom:12px">${onlyMine?'내 근무만 · ':''}${admin?'블록 = 수정 · 빈 곳 = 추가 · ':''}겹침 = 맞물려 분할 · 보라 음영 = 피크</div>`;
 }
 /* 빠른 입력 */
 let ecStaff=null, ecDay=null;
