@@ -199,7 +199,7 @@ const IC=(n,cls='li')=>`<svg class="${cls}"><use href="#i-${n}"/></svg>`;
 /* ═══════════ 고정 데이터 (레시피·매뉴얼·체크리스트) ═══════════ */
 const RECIPES = [
  {n:"카페라떼",c:"커피",t:["HOT","ICE"],ing:[["HOT","샷 + 중형 피처 스팀"],["ICE","얼음 / 우유 180g"]]},
- {n:"연유라떼",c:"커피",t:["ICE"],ing:[["얼음","가득"],["우유","180g"],["연유","20~30g"]]},
+ {n:"연유라떼",c:"커피",t:["ICE"],ing:[["얼음","가득"],["우유","180g"],["연유","30g"]]},
  {n:"바닐라빈 라떼",c:"커피",t:["HOT","ICE"],ing:[["HOT","샷 + 바닐라시럽 → 중형 스팀"],["ICE","얼음 / 우유 180g / 바닐라빈 1스푼"]]},
  {n:"카페모카",c:"커피",t:["HOT","ICE"],ing:[["HOT","샷 + 초코시럽 1.5펌프 + 설탕 1T → 중형 스팀"],["ICE","얼음 / 우유 180g / 모카샷 / 초코 1.5펌프"]]},
  {n:"솔티드 카라멜",c:"커피",t:["HOT","ICE"],ing:[["베이스","솔티드카라멜 베이스 + 크림 + 소금 소량"],["샷/시럽","2샷 / 카라멜시럽 1.5펌프 / 설탕 1T"]]},
@@ -212,9 +212,9 @@ const RECIPES = [
  {n:"자두 에이드",c:"에이드",t:["ICE"],ing:[["자두청","40g"],["토닉워터","1캔"],["간얼음","1스쿱"],["가니쉬","레몬 한 조각"]]},
  {n:"생레몬 에이드",c:"에이드",t:["ICE"],ing:[["레몬청","계량스푼 2 (레몬즙 2T)"],["토닉워터","1캔"],["레몬","한 조각"]]},
  {n:"바나나 밀크쉐이크",c:"스무디",t:["ICE"],ing:[["우유","180g"],["얼린 바나나","1개"],["꿀","한 바퀴 반"],["얼음","5개"],["대체","바나나1(생)/꿀2바퀴/얼음7"]]},
- {n:"단백질 쉐이크",c:"스무디",t:["ICE"],ing:[["우유","180g"],["꿀","1.5바퀴"],["프로틴","7g"],["귀리가루","1스푼"],["얼음","6개"]]},
+ {n:"단백질 쉐이크",c:"스무디",t:["ICE"],ing:[["우유","180g"],["꿀","14g"],["프로틴","7g"],["귀리가루","1스푼"],["얼음","6개"]]},
  {n:"복숭아 스무디",c:"스무디",t:["ICE"],ing:[["복숭아","70g"],["얼음","330g"],["물","100g"]]},
- {n:"자두 스무디",c:"스무디",t:["ICE"],ing:[["자두","80g"],["얼음","330g"],["물","100g"]]},
+ {n:"자두 스무디",c:"스무디",t:["ICE"],ing:[["자두","70g"],["얼음","330g"],["물","100g"]]},
  {n:"시즌 생과일주스",c:"주스",t:["ICE"],ing:[["과일","오렌지+포도+키위 200g"],["설탕","2t"],["얼음","5개"],["레몬즙","세 바퀴"]]},
  {n:"수박 주스",c:"주스",t:["ICE"],ing:[["수박","230g"],["설탕","2t"],["얼음","5개"]]},
  {n:"한라봉 주스",c:"주스",t:["ICE"],ing:[["한라봉","180g"],["설탕","3t"],["얼음","6개"]]},
@@ -239,7 +239,7 @@ const MANUAL = [
    <ul class="clean">
      <li>오픈 시 <b>'느린'</b>으로 세척 1회</li>
      <li>첫 샷은 버리기 (공기 노출로 신선도↓)</li>
-     <li>원두 <b>17g</b> (디카페인 18g) · 추출 <b>25~28초</b></li>
+     <li>원두 <b>17~19g</b> (디카페인 18g) · 추출 <b>25~28초</b></li>
    </ul>
    <div class="grp">🔧 그라인더 나사 조절</div>
    <div class="warnbox" style="background:#eef7f0;border-color:#bfe0c8;color:#245e35">
@@ -278,12 +278,16 @@ const MANUAL = [
 ];
 const OPEN_LIST = [
  {g:"출근",items:["영수증 프린터 시간 촬영 → 근태 전송","앞치마·모자 착용","손 세척"]},
- {g:"전원 ON",items:["매장 조명 ON","커피머신 전원 ON","그라인더 원두 투입·ON","템핑기 ON","TV ON","쇼케이스 조명 ON","믹서기 ON","이지포스 ON","키오스크 ON (품절 처리)","노트북 ON (스마트플랫 로그인)","전력차단기: 식기세척기·인덕션 ON"]},
- {g:"준비",items:["비품 보충 (빨대·냅킨·컵홀더·뚜껑·컵)","싱크대 거름망 씌우기","물동이 물 채우기","컵 세팅 (컵에 물 200g씩)","쇼케이스 물 비우기","테이블·의자 정리"]},
+ {g:"전원 ON",items:["매장 조명 ON","전력차단기: 식기세척기·인덕션 ON","식기세척기 켜기","오븐 켜기 (180도)","커피머신 전원 ON","그라인더 원두 투입·ON","템핑기 ON","TV ON","블루투스 노래 켜기","쇼케이스 조명 ON","믹서기 ON","이지포스 ON","키오스크 ON (품절 처리)","노트북 ON (스마트플랫 로그인)"]},
+ {g:"준비",items:["비품 보충 (빨대·냅킨·컵홀더·뚜껑·컵)","물동이 물 채우기","컵 세팅 (컵에 물 200g씩)","쇼케이스 물 비우기","테이블·의자 정리"]},
+];
+const MID_LIST = [
+ {g:"재료 준비",items:["음료 재료 충전 (연유·레몬청·티백)","생과일주스 과일 손질","크림 제조 (휘핑 400g · 스피드9 → 10초-5초-5초)","솔티드 카라멜 베이스 제조","바닐라 베이스 (우유 1팩 + 바닐라빈 계량스푼 5)"]},
 ];
 const CLOSE_LIST = [
- {g:"전원 OFF",items:["매장 조명 OFF","커피머신 전원 OFF","그라인더 원두 빼고 OFF","템핑기 OFF","TV OFF","쇼케이스 조명 OFF","믹서기 OFF","키오스크 마감 (설정→마감)","노트북 OFF","전력차단기: 식기세척기·인덕션 OFF"]},
- {g:"정리·위생",items:["식기세척기 마감","테이블·의자 정리","싱크대 거름망 비닐에 버리기","일회용 수세미 버리기","행주 빨기","쓰레기·음식물 버리기","바리케이드 치기","싱크대 락스 세척","바닥 쓸고 걸레로 닦기"]},
+ {g:"전원 OFF",items:["매장 조명 OFF","커피머신 전원 OFF","그라인더 원두 빼고 OFF","템핑기 OFF","TV OFF","쇼케이스 조명 OFF","믹서기 OFF","키오스크 마감 (설정→마감)","전력차단기: 식기세척기·인덕션 OFF"]},
+ {g:"정리·위생",items:["식기세척기 마감","테이블·의자 정리","싱크대 거름망 비닐에 버리기","싱크대 거름망 새로 씌우기","일회용 수세미 버리기","행주 빨기","쓰레기·음식물 버리기","바리케이드 치기","싱크대 락스 세척","바닥 쓸고 걸레로 닦기"]},
+ {g:"마지막",items:["노트북 OFF (패스오더 대비 — 맨 마지막)"]},
 ];
 const CLOSE_WARN = "⚠️ 머신 밑 깔개는 식기세척기 금지 — 손세척 후 건조";
 
@@ -367,7 +371,9 @@ const $=id=>document.getElementById(id);
 function toast(m){const t=$("toast");t.textContent=m;t.classList.add("show");clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove("show"),1800);}
 function go(t){tab=t;render();const sc=$("screen");if(sc.scrollTo)sc.scrollTo(0,0);}
 function curUser(){return STAFF.find(s=>s.id===CUR);}
-function ckToday(){const k=todayK();CK[k]=CK[k]||{open:{},close:{}};return CK[k];}
+function ckToday(){const k=todayK();CK[k]=CK[k]||{open:{},mid:{},close:{}};if(!CK[k].mid)CK[k].mid={};return CK[k];}
+function modeName(m){return m==='close'?'마감':m==='mid'?'미들':'오픈';}
+function ckLists(m){return m==='close'?CLOSE_LIST:m==='mid'?MID_LIST:OPEN_LIST;}
 function unread(){const r=READS[CUR]||{};
  return {n:NOTICES.filter(x=>(x.ts||0)>(r.notice||0)).length,
          o:ORDERS.filter(x=>(x.ts||0)>(r.order||0)).length};}
@@ -688,9 +694,9 @@ function viewPhoto(pk){const u=ckPhotos()[pk];if(!u)return;
  openModal(`<img src="${u}" style="width:100%;border-radius:8px"><button class="btn sec" style="margin-top:10px" onclick="closeModal()">닫기</button>`);}
 function submitCk(){
  SUBMITS.unshift({date:todayK(),mode:ckMode,who:curUser().name,time:fmtDT()});
- render();toast((ckMode==='close'?'마감':'오픈')+' 체크리스트가 제출되었습니다');}
+ render();toast(modeName(ckMode)+' 체크리스트가 제출되었습니다');}
 function screenClose(){
- const list = ckMode==="close"?CLOSE_LIST:OPEN_LIST;
+ const list = ckLists(ckMode);
  const st=ckToday()[ckMode], ph=ckPhotos();
  let all=[]; list.forEach(g=>g.items.forEach(it=>all.push(it)));
  const doneAll=all.filter(it=>st[key(it)]).length;
@@ -714,9 +720,10 @@ function screenClose(){
  });
  if(ckMode==="close") body+=`<div class="warnbox" style="margin-top:10px">${CLOSE_WARN}</div>`;
  const canSubmit=doneAll===all.length;
- const label=ckMode==="close"?"마감":"오픈";
- return `<h2 class="title">${IC('check')}오픈 · 마감 체크</h2>
+ const label=modeName(ckMode);
+ return `<h2 class="title">${IC('check')}오픈 · 미들 · 마감 체크</h2>
    <div class="seg"><button class="${ckMode==='open'?'on':''}" onclick="setCk('open')">오픈</button>
+     <button class="${ckMode==='mid'?'on':''}" onclick="setCk('mid')">미들</button>
      <button class="${ckMode==='close'?'on':''}" onclick="setCk('close')">마감</button></div>
    ${role==='admin'?`<button class="btn sec" style="margin-bottom:10px" onclick="tab='closeAdmin';render()">마감 확인 화면 (관리자) — 진행 상황·인증 사진</button>`:''}
    <div class="muted" style="margin-bottom:4px">진행 ${doneAll}/${all.length} · 전 항목 완료 시 제출${submitted?` · <b style="color:var(--deep)">✓ ${submitted.time} ${submitted.who} 제출</b>`:''}</div>
@@ -735,22 +742,34 @@ function screenAdmin(){
  return `<h2 class="title">${IC('check')}마감 확인 <span class="muted" style="font-size:12px;font-weight:400">관리자</span></h2>
    <div class="card"><h3>오늘 마감 상태</h3>
      <div class="muted">완료 ${done}/${all.length} · ${done===all.length?'<b style="color:var(--deep)">전 항목 완료</b>':'<b style="color:var(--warn)">진행 중</b>'}</div>
-     ${sub.length?`<div class="muted" style="margin-top:4px">${sub.map(x=>`✓ ${x.mode==='close'?'마감':'오픈'} — ${x.time} ${x.who}`).join('<br>')}</div>`:''}</div>
+     ${sub.length?`<div class="muted" style="margin-top:4px">${sub.map(x=>`✓ ${modeName(x.mode)} — ${x.time} ${x.who}`).join('<br>')}</div>`:''}</div>
    ${undone.length?`<div class="grp">미완료 항목 (${undone.length})</div>
      ${undone.map(it=>`<div class="ck"><div class="tx">${it}</div></div>`).join('')}`
    :'<p class="muted" style="padding:6px 2px">모든 항목이 완료되었습니다.</p>'}
    ${(()=>{const ph=ckToday().photos||{};const ks=Object.keys(ph);if(!ks.length)return '<div class="grp">인증 사진</div><p class="muted" style="padding:2px">아직 촬영된 사진이 없습니다.</p>';
      return `<div class="grp">인증 사진 (${ks.length})</div><div class="grid2">${ks.map(pk=>{
        const [md,k]=pk.split('|');
-       const list=md==='close'?CLOSE_LIST:OPEN_LIST;let nm=k;
+       const list=ckLists(md);let nm=k;
        list.forEach(g=>g.items.forEach(it=>{if(key(it)===k)nm=it;}));
-       return `<div style="text-align:center"><img src="${ph[pk]}" onclick="viewPhotoAdmin('${pk}')" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;border:1px solid var(--edge);cursor:pointer"><div class="muted" style="font-size:10.5px;margin-top:3px">${md==='close'?'마감':'오픈'} · ${nm}</div></div>`;}).join('')}</div>`;})()}
+       return `<div style="text-align:center"><img src="${ph[pk]}" onclick="viewPhotoAdmin('${pk}')" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;border:1px solid var(--edge);cursor:pointer"><div class="muted" style="font-size:10.5px;margin-top:3px">${modeName(md)} · ${nm}</div></div>`;}).join('')}</div>`;})()}
    <div class="row" style="margin-top:14px"><button class="btn sec" onclick="toast('보완 요청을 보냈습니다')">보완 요청</button>
      <button class="btn" onclick="toast('마감을 승인했습니다')">승인</button></div>
    <button class="btn sec" style="margin-top:14px" onclick="tab='close';render()">← 체크리스트로 돌아가기</button>`;
 }
 
 /* ═══════════ 공지 · 발주 ═══════════ */
+/* 고정 공지: 매월 1·15일(주말이면 다음 평일) 식기세척기 청소 */
+function adjWeekday(y,mo,day){const d=new Date(y,mo,day);const w=d.getDay();
+ if(w===6)d.setDate(day+2);else if(w===0)d.setDate(day+1);return d;}
+function cleaningDaysOfMonth(y,mo){return [adjWeekday(y,mo,1),adjWeekday(y,mo,15)];}
+function isCleaningDay(){const n=new Date();n.setHours(0,0,0,0);
+ return cleaningDaysOfMonth(n.getFullYear(),n.getMonth()).some(c=>+c===+n);}
+function nextCleaning(){const n=new Date();n.setHours(0,0,0,0);const cand=[];
+ [0,1].forEach(off=>{const d=new Date(n.getFullYear(),n.getMonth()+off,1);
+   cleaningDaysOfMonth(d.getFullYear(),d.getMonth()).forEach(c=>cand.push(c));});
+ cand.sort((a,b)=>a-b);return cand.find(c=>+c>=+n)||cand[0];}
+function confirmNote(i){const n=NOTICES[i];if(!n)return;n.seen=n.seen||{};
+ n.seen[CUR]=curUser().name;save();render();toast('확인했습니다');}
 function screenNotice(){
  const admin=role==='admin';
  READS[CUR]=READS[CUR]||{}; READS[CUR][noticeView==='order'?'order':'notice']=Date.now(); // 읽음 처리
@@ -777,10 +796,20 @@ function screenNotice(){
        <button class="btn" style="width:auto;padding:0 16px" onclick="addOrder()">등록</button></div>
      <p class="muted" style="font-size:11px;margin-top:8px;text-align:center">${admin?'복사해서 발주 담당께 카톡으로 전달 → 발주 넣은 항목은 체크(발주됨)':'대표님이 발주를 넣으면 체크(발주됨)로 바뀝니다'}</p>`;
  }
- let list=NOTICES.map(n=>`<div class="note"><div class="nm">
+ const nc=nextCleaning(), cToday=isCleaningDay();
+ const pinned=`<div class="note" style="border-color:${cToday?'#f0c36b':'#DBE9DD'};background:${cToday?'#fdf6e3':'#EDF7F0'}">
+   <div class="nm"><span class="pill" style="background:#fdf2d8;color:#a16207">📌 고정</span>대표님</div>
+   <div class="bd">🧼 <b>식기세척기 청소</b> — 매월 1일·15일(주변 평일).${cToday?' <b style="color:#c0392b">오늘이 청소일입니다!</b>':` 다음: <b>${nc.getMonth()+1}/${nc.getDate()}(${WD[nc.getDay()]})</b>`}</div></div>`;
+ let list=NOTICES.map((n,i)=>{
+   const seen=n.seen||{}, names=Object.values(seen), mine=!!seen[CUR];
+   const foot=`<div style="display:flex;align-items:center;gap:8px;margin-top:7px">
+     ${mine?`<span class="pill" style="background:#EDF7F0;color:var(--deep)">✓ 확인함</span>`:`<button class="cam" onclick="confirmNote(${i})">확인</button>`}
+     ${names.length?`<span class="muted" style="font-size:11px">확인 ${names.length}명${admin?' · '+names.join(', '):''}</span>`:''}</div>`;
+   return `<div class="note"><div class="nm">
    <span class="pill" style="${n.gold?'background:#fdf2d8;color:#a16207':''}">${n.tag}</span>${n.who}</div>
-   <div class="dt">${n.dt}</div><div class="bd">${n.bd}</div></div>`).join("");
+   <div class="dt">${n.dt}</div><div class="bd">${n.bd}</div>${foot}</div>`;}).join("");
  return `<h2 class="title">${IC('bell')}공지 · 발주</h2>${seg}
+   ${pinned}
    <div class="card"><h3>${admin?'공지 올리기':'인수인계 남기기'}</h3>
      <textarea class="inp" id="hoText" placeholder="${admin?'전 직원에게 보이는 공지를 작성하세요':'예: 우유 1팩 남음, 3번 테이블 의자 흔들림…'}"></textarea>
      <button class="btn" style="margin-top:8px" onclick="addNote()">등록</button></div>
