@@ -6,12 +6,6 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#FAFCF8">
 <title>FarmPlanet</title>
-<link rel="manifest" href="manifest.webmanifest">
-<link rel="apple-touch-icon" href="apple-touch-icon.png">
-<link rel="icon" type="image/png" href="favicon.png">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="FarmPlanet">
-
 <style>
 :root{
  --bg:#FAFCF8; --card:#FFFFFF; --edge:#E8EDE6;
@@ -94,7 +88,9 @@ input.inp{min-height:auto}
 .note .dt{font-size:10.5px;color:var(--sub);margin:2px 0 6px}
 .note .bd{font-size:12.5px;line-height:1.65;color:#3d4f42}
 /* 발주방 */
-.omsg{margin-bottom:10px}
+.omsg{margin-bottom:6px}
+.oday{text-align:center;font-size:10.5px;font-weight:800;color:var(--sub);background:#EDF1EA;border-radius:20px;padding:3px 0;margin:14px auto 8px;width:64px}
+.omsg:first-child .oday,.oday:first-child{margin-top:2px}
 .ometa{font-size:10.5px;color:var(--sub);margin:0 0 3px 4px}
 .obub{background:#fff;border:1px solid var(--edge);border-radius:2px 10px 10px 10px;padding:10px 12px;display:flex;align-items:center;gap:10px;max-width:94%}
 .obx{width:19px;height:19px;border-radius:5px;border:1.6px solid #cfd8cf;flex:none;display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff}
@@ -312,7 +308,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='1.1.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='1.1.2'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자가 됩니다 (대표님 이메일로 교체) */
 const ADMIN_EMAILS=['boss@farmplanet.kr'];
@@ -350,7 +346,7 @@ function load(){
   if(!d||!d.STAFF)throw 0;
   ({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS}=Object.assign({ORDERS:[],NOTICES:[],CK:{},SUBMITS:[],CUR:null,REFS:{},READS:{}},d));
   REFS=REFS||{}; READS=READS||{};
-  NOTICES.forEach(n=>{if(n.ts===undefined)n.ts=0;}); ORDERS.forEach(o=>{if(o.ts===undefined)o.ts=0; if(o.st===undefined)o.st=o.done?'done':'wait';});
+  NOTICES.forEach(n=>{if(n.ts===undefined)n.ts=0;}); ORDERS.forEach(o=>{if(o.ts===undefined)o.ts=0; o.st=(o.st==='ordered'||o.st==='done'||o.done)?'ordered':'wait';});
   // 14일 지난 체크 기록(사진 포함) 정리
   const lim=new Date();lim.setDate(lim.getDate()-14);const limK=dk(lim);
   Object.keys(CK).forEach(k=>{if(k<limK)delete CK[k];});
@@ -768,15 +764,17 @@ function screenNotice(){
  const seg=`<div class="seg"><button class="${noticeView==='notice'?'on':''}" onclick="noticeView='notice';render()">공지 · 인수인계${u.n?` <b style="color:#ff7d59">${u.n}</b>`:''}</button>
    <button class="${noticeView==='order'?'on':''}" onclick="noticeView='order';render()">발주방${u.o?` <b style="color:#ff7d59">${u.o}</b>`:''}</button></div>`;
  if(noticeView==='order'){
-   const STL={wait:['대기','#ff7d59','#fdeceb'],ordered:['발주됨','#9a6b1f','#fdf1df'],done:['구매완료','#2E8C49','#EDF7F0']};
    const waitCnt=ORDERS.filter(o=>o.st==='wait').length;
-   const list=ORDERS.map((o,i)=>{const s=STL[o.st]||STL.wait;
-     return `<div class="omsg">
-     <div class="ometa">${o.who} · ${o.dt}</div>
-     <div class="obub ${o.st==='done'?'done':''}">
-       <div class="obx" ${admin?`onclick="toggleOrder(${i})"`:''} style="${admin?'cursor:pointer':''}">${o.st==='done'?'✓':''}</div>
+   let lastDay='';
+   const list=ORDERS.map((o,i)=>{const done=o.st==='ordered';
+     const day=(o.dt||'').split(' ')[0];
+     const hdr=day!==lastDay?`<div class="oday">${day}</div>`:''; lastDay=day;
+     return `${hdr}<div class="omsg">
+     <div class="ometa">${o.who}</div>
+     <div class="obub ${done?'done':''}">
+       <div class="obx" ${admin?`onclick="toggleOrder(${i})"`:''} style="${admin?'cursor:pointer':''}">${done?'✓':''}</div>
        <div class="otx">${o.txt}</div>
-       <span class="ost" style="color:${s[1]}">${s[0]}</span>
+       <span class="ost" style="color:${done?'#2E8C49':'#ff7d59'}">${done?'발주됨':'대기'}</span>
      </div></div>`;}).join("");
    return `<h2 class="title">${IC('cart')}공지 · 발주</h2>${seg}
      ${waitCnt?`<button class="btn sec" style="margin-bottom:10px" onclick="copyOrders()">${IC('copy','li sm')} 대기 발주 복사 (${waitCnt}건) — 붙여넣어 전달</button>`:''}
@@ -784,7 +782,7 @@ function screenNotice(){
      <div class="row" style="gap:7px;margin-top:10px">
        <input class="inp" id="odText" style="flex:1" placeholder="필요한 물건 (예: 우유 2팩)" onkeydown="if(event.key==='Enter')addOrder()">
        <button class="btn" style="width:auto;padding:0 16px" onclick="addOrder()">등록</button></div>
-     <p class="muted" style="font-size:11px;margin-top:8px;text-align:center">대기 → 복사해 전달하면 <b>발주됨</b> → 물건 확인 후 ${admin?'체크박스로 <b>구매완료</b>':'대표님이 체크하면 <b>구매완료</b>'}</p>`;
+     <p class="muted" style="font-size:11px;margin-top:8px;text-align:center">${admin?'복사해서 발주 담당께 카톡으로 전달 → 발주 넣은 항목은 체크(발주됨)':'대표님이 발주를 넣으면 체크(발주됨)로 바뀝니다'}</p>`;
  }
  let list=NOTICES.map(n=>`<div class="note"><div class="nm">
    <span class="pill" style="${n.gold?'background:#fdf2d8;color:#a16207':''}">${n.tag}</span>${n.who}</div>
@@ -800,18 +798,18 @@ function addOrder(){
  ORDERS.push({who:curUser().name,txt:v,dt:fmtDT(),ts:Date.now(),st:'wait'});render();toast('발주 요청이 등록되었습니다');
 }
 function toggleOrder(i){
- if(role!=='admin'){toast('구매 체크는 대표님·매니저만 할 수 있어요');return;}
+ if(role!=='admin'){toast('발주 체크는 대표님·매니저만 할 수 있어요');return;}
  const o=ORDERS[i];
- o.st = o.st==='done' ? 'ordered' : 'done';
- render();toast(o.st==='done'?'구매완료 처리했습니다':'발주됨으로 되돌렸습니다');
+ o.st = o.st==='ordered' ? 'wait' : 'ordered';
+ render();toast(o.st==='ordered'?'발주됨 처리했습니다':'대기로 되돌렸습니다');
 }
-/* 대기 발주 복사 → 붙여넣기용 텍스트, 복사되면 자동 '발주됨' */
+/* 대기 발주 복사 → 카톡 붙여넣기용 텍스트만 생성 (발주됨 체크는 별도 수동) */
 function copyOrders(){
  const wait=ORDERS.filter(o=>o.st==='wait');
  if(!wait.length){toast('복사할 대기 항목이 없습니다');return;}
  const n=new Date();
- const txt=`[FarmPlanet 발주 요청 ${n.getMonth()+1}/${n.getDate()}]\n`+wait.map(o=>`- ${o.txt} (${o.who})`).join('\n');
- const ok=()=>{wait.forEach(o=>o.st='ordered');render();toast(wait.length+'건 복사 완료 — 발주됨으로 표시했습니다');};
+ const txt=`[FarmPlanet 발주 요청 ${n.getMonth()+1}/${n.getDate()}]\n`+wait.map(o=>`- ${o.txt}`).join('\n');
+ const ok=()=>{toast(wait.length+'건 복사 완료 — 카톡에 붙여넣어 전달하세요');};
  if(navigator.clipboard&&navigator.clipboard.writeText){
    navigator.clipboard.writeText(txt).then(ok).catch(()=>copyFallback(txt,ok));
  }else copyFallback(txt,ok);
@@ -871,6 +869,5 @@ setInterval(checkUpdate,5*60*1000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkUpdate();});
 
 </script>
-<script>if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js");</script>
 </body>
 </html>
