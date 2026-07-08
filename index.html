@@ -459,7 +459,7 @@ function labor(){
    get total(){return this.tbase+this.tj;}};
 }
 function screenSched(){
- const admin=role==='admin', L=labor();
+ const admin=role==='admin';
  const wkLabel=`${WEEK[0].m}/${WEEK[0].d} ~ ${WEEK[6].m}/${WEEK[6].d}`+(weekOffset===0?' · 이번 주':weekOffset===-1?' · 지난주':weekOffset===1?' · 다음 주':'');
  const wnav=`<div class="wnav">
    <button onclick="setWeek(${weekOffset-1})">${IC('chevL','li sm')}</button>
@@ -472,18 +472,12 @@ function screenSched(){
     <button class="btn sec" onclick="autoFill()">기본 패턴</button>
     <button class="btn sec" onclick="staffManage()">직원 관리</button>`:''}</div>`;
  const view=renderGrid();
- const laborCard=`<div class="card"><h3>이번 주 인건비 <span class="muted" style="font-weight:400">· 예상</span></h3>
-   <div class="lrow"><span>총 근로시간</span><b>${L.th.toFixed(1)}시간</b></div>
-   <div class="lrow"><span>기본 급여</span><b>${won(L.tbase)}</b></div>
-   <div class="lrow"><span>예상 주휴수당</span><b>${won(L.tj)}</b></div>
-   <div class="lrow tot"><span>합계</span><b>${won(L.total)}</b></div>
-   <div class="muted" style="font-size:11px;margin-top:6px">2026 최저임금 ${won(MINWAGE)}/h 기준 · 주휴수당=주 15h+ 개근 시 추정</div></div>`;
  return `<h2 class="title">${IC('cal')}시간표</h2>
    <div class="card note-card"><div class="muted" style="font-size:12px">
-     근태·급여는 <b>가치업</b>에서 운영 — 이 화면은 편성·인건비 전용.
+     근태·급여는 <b>가치업</b>에서 운영 — 이 화면은 편성 전용.
      ${admin?'<br><b>관리자:</b> 요일 빈 곳 = 추가 · 블록 = 수정':''}</div></div>
    ${wnav}
-   ${actions}${view}${laborCard}`;
+   ${actions}${view}`;
 }
 function segLayout(dkey){
  const list=STAFF.filter(s=>!onlyMine||s.id===CUR).map(s=>({s,sh:SHIFTS[s.id+'|'+dkey]})).filter(x=>x.sh)
@@ -770,7 +764,6 @@ function screenNotice(){
      const day=(o.dt||'').split(' ')[0];
      const hdr=day!==lastDay?`<div class="oday">${day}</div>`:''; lastDay=day;
      return `${hdr}<div class="omsg">
-     <div class="ometa">${o.who}</div>
      <div class="obub ${done?'done':''}">
        <div class="obx" ${admin?`onclick="toggleOrder(${i})"`:''} style="${admin?'cursor:pointer':''}">${done?'✓':''}</div>
        <div class="otx">${o.txt}</div>
