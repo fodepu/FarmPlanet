@@ -153,7 +153,13 @@ input.inp{min-height:auto}
 /* 로그인 */
 .login-note{font-size:11.5px;color:var(--sub);text-align:center;line-height:1.7;margin-top:12px}
 .reset{font-size:10.5px;color:#b5c4b9;text-align:center;margin-top:14px;cursor:pointer;text-decoration:underline}
+#authOverlay{position:fixed;inset:0;z-index:120;background:var(--bg);display:none;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:28px;text-align:center}
+#authOverlay .ttl{font-weight:800;color:var(--deep);font-size:20px;letter-spacing:.5px}
+#authOverlay .sub{font-size:12.5px;color:var(--sub)}
+#authMsg{font-size:12px;color:var(--sub);line-height:1.7;max-width:290px}
+.authlink{color:var(--deep);text-decoration:underline;cursor:pointer;font-weight:700}
 </style>
+<script src="https://accounts.google.com/gsi/client" async></script>
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute">
@@ -191,6 +197,12 @@ input.inp{min-height:auto}
 </div>
 <div class="toast" id="toast"></div>
 <div class="modal" id="modal" onclick="if(event.target.id==='modal')closeModal()"><div class="mbox" id="mbox"></div></div>
+<div id="authOverlay">
+  <div class="ttl">FARM PLANET</div>
+  <div class="sub">매장 앱 · 구글 계정으로 로그인</div>
+  <div id="gsiButton"></div>
+  <div id="authMsg"></div>
+</div>
 
 <script>
 /* ═══════════ 아이콘 헬퍼 ═══════════ */
@@ -312,10 +324,20 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='1.1.2'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='1.2.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
-/* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자가 됩니다 (대표님 이메일로 교체) */
+/* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자가 됩니다 (대표님 Gmail로 교체) */
 const ADMIN_EMAILS=['boss@farmplanet.kr'];
+/* ▼ Firebase 구글 로그인 — 콘솔 값으로 교체하면 활성화됩니다. (그대로 두면 기존 이름선택 로그인으로 동작) */
+const FIREBASE_CONFIG={
+  apiKey:"여기에_apiKey",
+  authDomain:"여기에_authDomain",     // 예: farmplanet-xxxx.firebaseapp.com
+  projectId:"여기에_projectId",
+  appId:"여기에_appId"
+};
+const GIS_CLIENT_ID="여기에_웹OAuth클라이언트ID.apps.googleusercontent.com";
+const USE_FB=FIREBASE_CONFIG.apiKey.indexOf('여기')===-1 && GIS_CLIENT_ID.indexOf('여기')===-1;
+let _fbAuth=null,_fbSignInCred=null,_fbSignOut=null;
 let STAFF, SHIFTS, ORDERS, NOTICES, CK, SUBMITS, CUR, REFS, READS;
 function defaults(){
  STAFF=[
@@ -394,7 +416,49 @@ function screenLogin(){
 function login(id){CUR=id;role=isAdmin(STAFF.find(s=>s.id===id))?'admin':'staff';tab='home';
  const b=$("userBtn");b.style.display='';b.textContent=curUser().name+' ⏻';
  save();render();toast(curUser().name+'님, 어서오세요');}
-function logout(){if(!confirm('로그아웃할까요?'))return;CUR=null;role='staff';onlyMine=false;$("userBtn").style.display='none';save();render();}
+function logout(){if(!confirm('로그아웃할까요?'))return;
+ if(USE_FB&&_fbSignOut){_fbSignOut();return;}
+ CUR=null;role='staff';onlyMine=false;$("userBtn").style.display='none';save();render();}
+/* ── Firebase 구글 로그인 (GIS + signInWithCredential) — iOS Safari/GitHub Pages 안정 방식 ── */
+async function fbBoot(){
+ try{
+  const {initializeApp}=await import('https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js');
+  const {getAuth,GoogleAuthProvider,signInWithCredential,onAuthStateChanged,signOut,setPersistence,browserLocalPersistence}
+    =await import('https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js');
+  const app=initializeApp(FIREBASE_CONFIG);
+  _fbAuth=getAuth(app);
+  await setPersistence(_fbAuth,browserLocalPersistence).catch(()=>{});
+  _fbSignInCred=(idTok)=>signInWithCredential(_fbAuth,GoogleAuthProvider.credential(idTok));
+  _fbSignOut=()=>signOut(_fbAuth);
+  onAuthStateChanged(_fbAuth,(user)=>{ if(user)onFbLogin(user.email||''); else onFbLogout(); });
+  gisStart();
+ }catch(e){ console.warn('firebase 초기화 실패 → 폴백 로그인',e); fbFallbackBoot(); }
+}
+function gisStart(){
+ if(!(window.google&&google.accounts&&google.accounts.id)) return setTimeout(gisStart,300);
+ google.accounts.id.initialize({client_id:GIS_CLIENT_ID, callback:(resp)=>{
+   if(!resp||!resp.credential){authMsg('로그인 토큰을 받지 못했습니다');return;}
+   _fbSignInCred(resp.credential).catch(e=>authMsg('로그인 실패: '+(e.code||e.message||e)));
+ }});
+ const el=$("gsiButton"); if(el){el.innerHTML=''; google.accounts.id.renderButton(el,
+   {theme:'filled_blue',size:'large',text:'signin_with',shape:'pill',logo_alignment:'center'});}
+}
+function authMsg(m){const e=$("authMsg");if(e)e.innerHTML=m||'';}
+function showAuthOverlay(show){const ov=$("authOverlay");if(ov)ov.style.display=show?'flex':'none';}
+function onFbLogin(email){
+ email=(email||'').toLowerCase();
+ const s=STAFF.find(x=>(x.email||'').toLowerCase()===email);
+ if(s){ CUR=s.id; role=isAdmin(s)?'admin':'staff'; tab='home';
+   const b=$("userBtn"); b.style.display=''; b.textContent=s.name+' ⏻';
+   showAuthOverlay(false); save(); render(); }
+ else { CUR=null; role='staff'; $("userBtn").style.display='none'; showAuthOverlay(true);
+   authMsg(`<b>${email||'알 수 없는 계정'}</b><br>아직 직원 명단에 없는 구글 계정이에요.<br>대표님께 <b>직원 관리</b>에서 이 이메일 등록을 요청하세요.<br><span class="authlink" onclick="fbRelogin()">다른 계정으로 로그인</span>`); }
+}
+function onFbLogout(){ CUR=null; role='staff'; onlyMine=false; $("userBtn").style.display='none'; showAuthOverlay(true); authMsg(''); render(); }
+function fbRelogin(){ if(_fbSignOut)_fbSignOut(); }
+function fbFallbackBoot(){ showAuthOverlay(false);
+ if(CUR){const s=curUser();if(s){role=isAdmin(s)?'admin':'staff';const b=$("userBtn");b.style.display='';b.textContent=s.name+' ⏻';}else CUR=null;}
+ render(); }
 
 /* ═══════════ 홈 ═══════════ */
 function screenHome(){
@@ -874,8 +938,15 @@ function render(){
 }
 /* 부팅 */
 load();
-if(CUR){const s=curUser();if(s){role=isAdmin(s)?'admin':'staff';const b=$("userBtn");b.style.display='';b.textContent=s.name+' ⏻';}else CUR=null;}
-render();
+if(USE_FB){
+ CUR=null;                 // 신원은 구글 인증으로 결정
+ showAuthOverlay(true);
+ render();                 // 뒤 배경 렌더 (오버레이가 덮음)
+ fbBoot();
+}else{
+ if(CUR){const s=curUser();if(s){role=isAdmin(s)?'admin':'staff';const b=$("userBtn");b.style.display='';b.textContent=s.name+' ⏻';}else CUR=null;}
+ render();
+}
 /* 새 버전 감지 → 상단 배너 */
 async function checkUpdate(){
  try{
