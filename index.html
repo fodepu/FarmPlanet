@@ -329,7 +329,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='1.4.3'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='1.4.4'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com'];
@@ -371,14 +371,23 @@ function defaults(){
  NOTICES=[{tag:"공지",gold:true,who:"대표님",dt:fmtDT(),ts:Date.now(),bd:"FarmPlanet 앱 사용을 시작합니다. 공지·발주·시간표·마감을 여기서 관리해요."}];
  CUR=null;
 }
-/* 주간 패턴 시드 (월:주함·지한 / 화~목:예흔·주함·건하 / 금:4명 / 토:주함 / 일:다연) */
+/* 주간 기본 패턴 (2026-07 확정, 화면 편성 기준)
+   월: 예흔08~14·미루11~14·지한12:30~16·효원16~19
+   화: 예흔08~14·다연11~14·주함12:30~16·지한16~19
+   수: 예흔08~14·채원11~14·주함12:30~16·지한16~19
+   목: 주함08~14·예흔11~15:30·다연12:30~16·건하16~19
+   금: 주함08~14·미루11~14·효원14~16·건하16~19
+   토: 건하12~18 / 일: 없음 */
 function seedWeek(week){
+ const set=(id,d,s,e)=>{SHIFTS[id+'|'+d.k]={s,e};};
  week.forEach((d,i)=>{
-  if(i===0){SHIFTS['me|'+d.k]={s:'12:30',e:'15:00'};SHIFTS['jh|'+d.k]={s:'15:00',e:'17:30'};}
-  else if(i<4){SHIFTS['ye|'+d.k]={s:'08:00',e:'13:30'};SHIFTS['me|'+d.k]={s:'11:30',e:'16:00'};SHIFTS['gh|'+d.k]={s:'16:00',e:'19:00'};}
-  else if(i===4){SHIFTS['ye|'+d.k]={s:'08:00',e:'12:30'};SHIFTS['me|'+d.k]={s:'11:00',e:'14:00'};SHIFTS['jh|'+d.k]={s:'12:30',e:'16:00'};SHIFTS['gh|'+d.k]={s:'16:00',e:'19:00'};}
-  else if(i===5){SHIFTS['me|'+d.k]={s:'12:30',e:'17:30'};}
-  else{SHIFTS['dy|'+d.k]={s:'12:30',e:'17:30'};}});
+  if(i===0){set('ye',d,'08:00','14:00');set('mr',d,'11:00','14:00');set('jh',d,'12:30','16:00');set('hw',d,'16:00','19:00');}
+  else if(i===1){set('ye',d,'08:00','14:00');set('dy',d,'11:00','14:00');set('me',d,'12:30','16:00');set('jh',d,'16:00','19:00');}
+  else if(i===2){set('ye',d,'08:00','14:00');set('cw',d,'11:00','14:00');set('me',d,'12:30','16:00');set('jh',d,'16:00','19:00');}
+  else if(i===3){set('me',d,'08:00','14:00');set('ye',d,'11:00','15:30');set('dy',d,'12:30','16:00');set('gh',d,'16:00','19:00');}
+  else if(i===4){set('me',d,'08:00','14:00');set('mr',d,'11:00','14:00');set('hw',d,'14:00','16:00');set('gh',d,'16:00','19:00');}
+  else if(i===5){set('gh',d,'12:00','18:00');}
+  });
 }
 function save(){try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS}));}catch(e){}
  if(SYNC_ENABLED&&typeof pushSync==='function')pushSync();}
