@@ -110,20 +110,21 @@ input.inp{min-height:auto}
 .wnav .wk{font-size:12.5px;font-weight:800;color:var(--ink)}
 .wnav button{border:1px solid var(--edge);background:#fff;border-radius:6px;width:30px;height:30px;cursor:pointer;color:var(--deep);display:flex;align-items:center;justify-content:center}
 .wnav .now{width:auto;padding:0 10px;font-size:11px;font-weight:800}
-.wcal{display:flex;gap:2px;margin-bottom:4px}
-.wtime{width:18px;flex:none;position:relative;margin-top:34px;height:242px}
-.wtime span{position:absolute;right:2px;font-size:8px;color:var(--sub);transform:translateY(-50%)}
-.wcol{flex:1;min-width:0;display:flex;flex-direction:column}
+.wcal{display:flex;gap:3px;margin-bottom:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px}
+.wtime{width:20px;flex:none;position:sticky;left:0;z-index:3;background:var(--bg);margin-top:38px;height:242px}
+.wtime span{position:absolute;right:3px;font-size:8.5px;color:var(--sub);transform:translateY(-50%)}
+.wcol{flex:0 0 78px;min-width:0;display:flex;flex-direction:column}
 .wch{font-size:11px;font-weight:800;text-align:center;color:var(--deep);padding:4px 0;line-height:1.25;cursor:pointer;border-radius:6px}
+.wch .wadd{color:var(--btn);font-weight:900}
 .wcol.wtoday .wch{background:#E2F0E7}
 .wbody{position:relative;height:242px;border-radius:6px;overflow:hidden;background:#fff;
   background-image:repeating-linear-gradient(to bottom,#edf1ea 0 1px,transparent 1px 44px);border:1px solid var(--edge)}
 .wpeak{position:absolute;left:0;right:0;background:var(--peak);opacity:.7}
 .wsh{position:absolute;color:#3c4a40;font-weight:700;padding:2px 1px;text-align:center;
   overflow:hidden;cursor:pointer;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center}
-.z7 .wsh{font-size:9px;line-height:1.25}
+.z7 .wsh{font-size:10px;line-height:1.25}
 .wsh .wt{display:block;font-weight:400;opacity:.85;white-space:nowrap}
-.z7 .wsh .wt{font-size:8px}
+.z7 .wsh .wt{font-size:8.5px}
 .wcov{text-align:center;font-size:12px;padding:3px 0;cursor:pointer}
 .wcov .wcn{font-size:9px;color:var(--sub);margin-left:2px}
 .tl{position:relative;background:#fff;border:1px solid var(--edge);border-radius:7px;padding:10px 6px 22px;overflow:hidden}
@@ -327,7 +328,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='1.2.4'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='1.3.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자가 됩니다 (대표님 Gmail로 교체) */
 const ADMIN_EMAILS=['kimjuham1120@gmail.com'];
@@ -524,13 +525,13 @@ function fbFallbackBoot(){ showAuthOverlay(false);
 
 /* ═══════════ 홈 ═══════════ */
 function screenHome(){
- const td=TODAY(), s=td?SHIFTS[CUR+'|'+td.k]:null;
+ const td=TODAY(), todayShift=td?rangesLabel(CUR+'|'+td.k):'';
  const n=new Date();
  const u=unread(), newsCnt=u.n+u.o;
  return `
  <div class="hero"><div class="hi">${n.getFullYear()}년 ${n.getMonth()+1}월 ${n.getDate()}일 ${WD[n.getDay()]}요일</div>
    <div class="big">안녕하세요, ${hon(curUser().name)}</div>
-   <div class="sh">${IC('clock','li sm')}오늘 근무 · ${s?`${s.s} ~ ${s.e}`:'휴무'}</div></div>
+   <div class="sh">${IC('clock','li sm')}오늘 근무 · ${todayShift||'휴무'}</div></div>
  <div class="grid2" style="margin-bottom:12px">
    <div class="qbtn" onclick="go('sched')">${IC('cal')}시간표</div>
    <div class="qbtn" onclick="go('close')">${IC('check')}오픈·마감 체크</div>
@@ -577,14 +578,14 @@ function filterManual(v){renderManual(v);}
 function setWeek(off){weekOffset=off;WEEK=buildWeek(off);
  render();}
 function coverage(dkey){
- const list=STAFF.map(s=>({s,sh:SHIFTS[s.id+'|'+dkey]})).filter(x=>x.sh);
- const peak=list.filter(x=>t2n(x.sh.s)<=PEAK_S && t2n(x.sh.e)>=PEAK_E);
+ const list=STAFF.map(s=>({s,rs:getRanges(s.id+'|'+dkey)})).filter(x=>x.rs.length);
+ const peak=list.filter(x=>x.rs.some(r=>t2n(r.s)<=PEAK_S && t2n(r.e)>=PEAK_E));
  const warns=[];
  if(list.length && peak.length<PEAK_MIN) warns.push(`피크 인원 ${peak.length}/${PEAK_MIN}명`);
  return {list,peak,count:list.length,warns};
 }
 function labor(){
- const per=STAFF.map(s=>{let h=0;WEEK.forEach(d=>{const sh=SHIFTS[s.id+'|'+d.k];if(sh)h+=t2n(sh.e)-t2n(sh.s);});
+ const per=STAFF.map(s=>{let h=0;WEEK.forEach(d=>{getRanges(s.id+'|'+d.k).forEach(r=>h+=t2n(r.e)-t2n(r.s));});
    const base=h*s.wage, juhyu=h>=15?(Math.min(h,40)/40*8)*s.wage:0;
    return {s,h,base,juhyu};});
  return {per,th:per.reduce((a,b)=>a+b.h,0),tbase:per.reduce((a,b)=>a+b.base,0),tj:per.reduce((a,b)=>a+b.juhyu,0),
@@ -607,14 +608,16 @@ function screenSched(){
  return `<h2 class="title">${IC('cal')}시간표</h2>
    <div class="card note-card"><div class="muted" style="font-size:12px">
      근태·급여는 <b>가치업</b>에서 운영 — 이 화면은 편성 전용.
-     ${admin?'<br><b>관리자:</b> 요일 빈 곳 = 추가 · 블록 = 수정':''}</div></div>
+     ${admin?'<br><b>관리자:</b> 요일 이름(＋) 눌러 추가 · 블록 = 수정 · 한 사람 분할은 쉼표(예: 12~1, 5~6)':''}</div></div>
    ${wnav}
    ${actions}${view}`;
 }
 function segLayout(dkey){
- const list=STAFF.filter(s=>!onlyMine||s.id===CUR).map(s=>({s,sh:SHIFTS[s.id+'|'+dkey]})).filter(x=>x.sh)
-   .map(x=>({s:x.s,sh:x.sh,a:t2n(x.sh.s),b:t2n(x.sh.e)}))
-   .sort((p,q)=>p.a-q.a||p.b-q.b);
+ const list=[];
+ STAFF.filter(s=>!onlyMine||s.id===CUR).forEach(s=>{
+   getRanges(s.id+'|'+dkey).forEach((r,ri)=>list.push({s,sh:r,key:s.id+'#'+ri,a:t2n(r.s),b:t2n(r.e)}));
+ });
+ list.sort((p,q)=>p.a-q.a||p.b-q.b);
  const lanes=[];
  list.forEach(x=>{let li=lanes.findIndex(e=>e<=x.a);
    if(li<0){li=lanes.length;lanes.push(0);}
@@ -627,9 +630,9 @@ function segLayout(dkey){
    act.forEach((x,idx)=>segs.push({x,t1,t2,idx,n:act.length}));
  }
  const best={};
- segs.forEach(g=>{const k=g.x.s.id,area=(g.t2-g.t1)/g.n;
+ segs.forEach(g=>{const k=g.x.key,area=(g.t2-g.t1)/g.n;
    if(!best[k]||area>best[k].area)best[k]={g,area};});
- segs.forEach(g=>g.lbl=(best[g.x.s.id].g===g));
+ segs.forEach(g=>g.lbl=(best[g.x.key].g===g));
  return segs;
 }
 function renderGrid(){
@@ -646,9 +649,9 @@ function renderGrid(){
      return `<div class="wsh" style="top:${top}%;height:${h}%;left:${g.idx/g.n*100}%;width:${100/g.n}%;background:${g.x.s.c}"
        ${admin?`onclick="event.stopPropagation();editCell('${g.x.s.id}','${d.k}')"`:''}>${lbl}</div>`;
    }).join('');
-   const head=`${d.w}<br><span style="font-weight:400">${d.d}</span>`;
+   const head=`${d.w}<br><span style="font-weight:400">${d.d}</span>${admin?' <span class="wadd">＋</span>':''}`;
    return `<div class="wcol ${d.today?'wtoday':''}">
-     <div class="wch">${head}</div>
+     <div class="wch" ${admin?`onclick="editShift('${d.k}')" title="이 날에 근무 추가"`:''}>${head}</div>
      <div class="wbody" ${admin?`onclick="editShift('${d.k}')"`:''}>
        <div class="wpeak" style="top:${peakT}%;height:${peakH}%"></div>${blocks}</div>
      <div class="wcov" title="근무 인원">
@@ -660,8 +663,15 @@ function renderGrid(){
 }
 /* 빠른 입력 */
 let ecStaff=null, ecDay=null;
+/* 근무 = 하루에 여러 구간 가능. 저장 형태: {s,e}(단일) 또는 {ranges:[{s,e},...]}(분할) */
+function getRanges(key){const v=SHIFTS[key]; if(!v)return []; if(Array.isArray(v.ranges))return v.ranges; if(v.s)return [{s:v.s,e:v.e}]; return [];}
+function setRanges(key,rs){ if(!rs||!rs.length){delete SHIFTS[key];return;}
+ rs=rs.slice().sort((a,b)=>t2n(a.s)-t2n(b.s)); SHIFTS[key]= rs.length===1?{s:rs[0].s,e:rs[0].e}:{ranges:rs.map(r=>({s:r.s,e:r.e}))}; }
+function rangesLabel(key){return getRanges(key).map(r=>cT(r.s)+'~'+cT(r.e)).join(', ');}
+function parseRanges(v){ const parts=String(v).split(',').map(x=>x.trim()).filter(Boolean); if(!parts.length)return null;
+ const out=[]; for(const p of parts){const r=parseRange(p); if(!r)return null; out.push(r);} return out; }
 function parseRange(v){
- const m=String(v).trim().match(/^(\d{1,2})(?:[:시.](\d{1,2}))?\s*[~\-–,]\s*(\d{1,2})(?:[:시.](\d{1,2}))?$/);
+ const m=String(v).trim().match(/^(\d{1,2})(?:[:시.](\d{1,2}))?\s*[~\-–]\s*(\d{1,2})(?:[:시.](\d{1,2}))?$/);
  if(!m)return null;
  let h1=+m[1],m1=+(m[2]||0),h2=+m[3],m2=+(m[4]||0);
  if(m[2]==='5')m1=30; if(m[4]==='5')m2=30;
@@ -673,19 +683,19 @@ function parseRange(v){
  const f=(h,mm)=>String(h).padStart(2,'0')+':'+String(mm).padStart(2,'0');
  return {s:f(h1,m1),e:f(h2,m2)};
 }
-const T_INPUT=(val)=>`<div class="fld"><label>근무 시간 <span class="muted">예: 8~12:30 · 3~4 = 오후 15~16</span></label>
-  <input id="ecT" class="tsel" value="${val}" placeholder="8~12:30" autocomplete="off"
+const T_INPUT=(val)=>`<div class="fld"><label>근무 시간 <span class="muted">예: 8~12:30 · 나눠서: 12~1, 5~6</span></label>
+  <input id="ecT" class="tsel" value="${val}" placeholder="8~12:30  또는  12~1, 5~6" autocomplete="off"
    onkeydown="if(event.key==='Enter')saveCell()"></div>`;
 function editCell(sid,dkey){
- ecStaff=sid; ecDay=dkey; const st=STAFF.find(s=>s.id===sid), sh=SHIFTS[sid+'|'+dkey], d=WEEK.find(x=>x.k===dkey);
+ ecStaff=sid; ecDay=dkey; const st=STAFF.find(s=>s.id===sid), has=getRanges(sid+'|'+dkey).length, d=WEEK.find(x=>x.k===dkey);
  openModal(`<h3>${st.name} — ${d.m}/${d.d}(${d.w}) 편성</h3>
-   ${T_INPUT(sh?cT(sh.s)+'~'+cT(sh.e):'')}
-   <div class="row"><button class="btn sec" onclick="delCell()">${sh?'근무 삭제':'닫기'}</button><button class="btn" onclick="saveCell()">저장</button></div>`);
+   ${T_INPUT(rangesLabel(sid+'|'+dkey))}
+   <div class="row"><button class="btn sec" onclick="delCell()">${has?'근무 삭제':'닫기'}</button><button class="btn" onclick="saveCell()">저장</button></div>`);
  const i=$('ecT'); i.focus(); i.select();
 }
 function editShift(dkey){
- const d=WEEK.find(x=>x.k===dkey), free=STAFF.filter(s=>!SHIFTS[s.id+'|'+dkey]);
- if(!free.length){toast('이 날은 전원 편성되어 있습니다 — 블록을 눌러 수정하세요');return;}
+ const d=WEEK.find(x=>x.k===dkey), free=STAFF.filter(s=>!getRanges(s.id+'|'+dkey).length);
+ if(!free.length){toast('이 날은 전원 편성되어 있어요 — 블록을 눌러 수정하세요');return;}
  ecStaff=null; ecDay=dkey;
  openModal(`<h3>${d.m}/${d.d}(${d.w}) — 근무 추가</h3>
    <div class="fld"><label>직원</label><select id="ecW" class="tsel">${free.map(s=>`<option value="${s.id}">${s.name}</option>`).join('')}</select></div>
@@ -694,18 +704,18 @@ function editShift(dkey){
  $('ecT').focus();
 }
 function saveCell(){
- const r=parseRange($('ecT').value), sid=ecStaff||$('ecW').value;
- if(!r){toast('시간 형식을 확인하세요 — 예: 8~12:30, 3~4');return;}
- SHIFTS[sid+'|'+ecDay]={s:r.s,e:r.e};closeModal();render();
- toast(`${STAFF.find(s=>s.id===sid).name} ${r.s}~${r.e} 저장`);}
-function delCell(){const key=ecStaff+'|'+ecDay;if(SHIFTS[key]){delete SHIFTS[key];closeModal();render();toast('근무를 삭제했습니다');}else closeModal();}
+ const rs=parseRanges($('ecT').value), sid=ecStaff||$('ecW').value;
+ if(!rs){toast('시간 형식을 확인하세요 — 예: 8~12:30 · 나눠서 12~1, 5~6');return;}
+ setRanges(sid+'|'+ecDay, rs); closeModal(); render();
+ toast(`${STAFF.find(s=>s.id===sid).name} ${rs.map(r=>r.s+'~'+r.e).join(', ')} 저장`);}
+function delCell(){const key=ecStaff+'|'+ecDay;if(getRanges(key).length){delete SHIFTS[key];closeModal();render();toast('근무를 삭제했습니다');}else closeModal();}
 function autoFill(){seedWeek(WEEK);render();toast('기본 패턴이 채워졌습니다 — 검토 후 수정하세요');}
 function copyLastWeek(){
  const prev=buildWeek(weekOffset-1);
  let n=0;
  prev.forEach((pd,i)=>{STAFF.forEach(s=>{
-   const sh=SHIFTS[s.id+'|'+pd.k];
-   if(sh){SHIFTS[s.id+'|'+WEEK[i].k]={s:sh.s,e:sh.e};n++;}});});
+   const rs=getRanges(s.id+'|'+pd.k);
+   if(rs.length){setRanges(s.id+'|'+WEEK[i].k, rs.map(r=>({s:r.s,e:r.e})));n++;}});});
  render();toast(n?`지난주 편성 ${n}건을 복사했습니다`:'지난주에 편성이 없습니다');}
 /* ── 직원 관리 (관리자 = ADMIN_EMAILS 이메일 계정) ── */
 function staffManage(){
