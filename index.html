@@ -329,7 +329,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='1.4.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='1.4.2'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com'];
@@ -351,7 +351,7 @@ const USE_FB=LOGIN_ENABLED && FIREBASE_CONFIG.apiKey.indexOf('여기')===-1 && G
 /* ▼ 실시간 공유 — config만 있으면 로그인과 무관하게 켜집니다 (발주·시간표·공지·체크가 모든 폰에 동기화, 사진 제외) */
 const SYNC_ENABLED=FIREBASE_CONFIG.apiKey.indexOf('여기')===-1;
 let _fbAuth=null,_fbSignInCred=null,_fbSignOut=null;
-let _fsSet=null,_applyingRemote=false,_syncT=null,_lastSyncJSON='';
+let _fsSet=null,_applyingRemote=false,_syncT=null,_lastSyncJSON='',_syncReady=false;
 let STAFF, SHIFTS, ORDERS, NOTICES, CK, SUBMITS, CUR, REFS, READS;
 function defaults(){
  STAFF=[
@@ -396,12 +396,12 @@ async function syncBoot(){
   const db=getFirestore(app);
   const ref=doc(db,'shared','state');
   _fsSet=(data)=>setDoc(ref,data);
-  onSnapshot(ref,(snap)=>{ if(!snap.exists()){pushSync();return;} applyRemote(snap.data()); },
+  onSnapshot(ref,(snap)=>{ _syncReady=true; if(!snap.exists()){pushSync();return;} applyRemote(snap.data()); },
     (err)=>console.warn('sync 수신 오류',err));
  }catch(e){ console.warn('sync 초기화 실패',e); }
 }
 function pushSync(){
- if(!_fsSet||_applyingRemote)return;
+ if(!_fsSet||_applyingRemote||!_syncReady)return; // 원격 수신 전엔 내 기본데이터로 덮어쓰지 않음
  clearTimeout(_syncT);
  _syncT=setTimeout(()=>{
    const blob=JSON.stringify(syncPayload());
@@ -429,6 +429,13 @@ function applyRemote(data){
   render();
  }finally{ _applyingRemote=false; }
  if(JSON.stringify(syncPayload())!==data.blob)pushSync(); // 병합 결과 되반영
+}
+function shareSchedule(){
+ if(!SYNC_ENABLED){toast('공유 설정이 아직 준비 안 됐어요');return;}
+ if(!_fsSet){toast('동기화 연결 중이에요 — 잠시 후 다시 시도하세요');return;}
+ _syncReady=true;
+ const blob=JSON.stringify(syncPayload()); _lastSyncJSON=blob;
+ _fsSet({blob,ts:Date.now()}).then(()=>toast('시간표를 모든 직원에게 공유했습니다')).catch(()=>toast('공유 실패 — 잠시 후 다시'));
 }
 function load(){
  try{const d=JSON.parse(localStorage.getItem(SKEY));
@@ -649,7 +656,8 @@ function screenSched(){
      근태·급여는 <b>가치업</b>에서 운영 — 이 화면은 편성 전용.
      ${admin?'<br><b>관리자:</b> 요일 이름(＋) 눌러 추가 · 블록 = 수정 · 한 사람 분할은 쉼표(예: 12~1, 5~6)':''}</div></div>
    ${wnav}
-   ${actions}${view}`;
+   ${actions}${view}
+   ${admin?`<button class="btn" style="margin-top:12px" onclick="shareSchedule()">${IC('swap','li sm')} 시간표 공유 — 모든 직원에게 반영</button>`:''}`;
 }
 function segLayout(dkey){
  // 각 근무 = 온전한 직사각형. 겹침 그룹 안에서 레인(0=기본,전체폭)을 매기고
