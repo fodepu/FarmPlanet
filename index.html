@@ -327,10 +327,10 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='1.2.2'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='1.2.3'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자가 됩니다 (대표님 Gmail로 교체) */
-const ADMIN_EMAILS=['boss@farmplanet.kr'];
+const ADMIN_EMAILS=['kimjuham1120@gmail.com'];
 /* ▼ Firebase 구글 로그인 — 콘솔 값으로 교체하면 활성화됩니다. (그대로 두면 기존 이름선택 로그인으로 동작) */
 const FIREBASE_CONFIG={
   apiKey:"AIzaSyDzp2hqGQ_T2RQ0dUbrGmgHjOx6nZJKugY",
@@ -342,7 +342,7 @@ const FIREBASE_CONFIG={
 };
 const GIS_CLIENT_ID="608530011088-rsi3hahvdj5pu4enhlpdo5o20sq8je9i.apps.googleusercontent.com";
 /* ▼ 로그인 마스터 스위치 — 관리자 이메일(ADMIN_EMAILS) 설정 후 true로 켜세요. false면 기존 이름선택 로그인 */
-const LOGIN_ENABLED=false;
+const LOGIN_ENABLED=true;
 const USE_FB=LOGIN_ENABLED && FIREBASE_CONFIG.apiKey.indexOf('여기')===-1 && GIS_CLIENT_ID.indexOf('여기')===-1;
 /* ▼ 실시간 공유 — config만 있으면 로그인과 무관하게 켜집니다 (발주·시간표·공지·체크가 모든 폰에 동기화, 사진 제외) */
 const SYNC_ENABLED=FIREBASE_CONFIG.apiKey.indexOf('여기')===-1;
