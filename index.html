@@ -330,13 +330,17 @@ const SKEY='farmplanet.app.v2';
 const ADMIN_EMAILS=['boss@farmplanet.kr'];
 /* ▼ Firebase 구글 로그인 — 콘솔 값으로 교체하면 활성화됩니다. (그대로 두면 기존 이름선택 로그인으로 동작) */
 const FIREBASE_CONFIG={
-  apiKey:"여기에_apiKey",
-  authDomain:"여기에_authDomain",     // 예: farmplanet-xxxx.firebaseapp.com
-  projectId:"여기에_projectId",
-  appId:"여기에_appId"
+  apiKey:"AIzaSyDzp2hqGQ_T2RQ0dUbrGmgHjOx6nZJKugY",
+  authDomain:"farmplanet-c9807.firebaseapp.com",
+  projectId:"farmplanet-c9807",
+  storageBucket:"farmplanet-c9807.firebasestorage.app",
+  messagingSenderId:"608530011088",
+  appId:"1:608530011088:web:d44d1d1bec92090b1f1fd5"
 };
-const GIS_CLIENT_ID="여기에_웹OAuth클라이언트ID.apps.googleusercontent.com";
-const USE_FB=FIREBASE_CONFIG.apiKey.indexOf('여기')===-1 && GIS_CLIENT_ID.indexOf('여기')===-1;
+const GIS_CLIENT_ID="608530011088-rsi3hahvdj5pu4enhlpdo5o20sq8je9i.apps.googleusercontent.com";
+/* ▼ 로그인 마스터 스위치 — 관리자 이메일(ADMIN_EMAILS) 설정 후 true로 켜세요. false면 기존 이름선택 로그인 */
+const LOGIN_ENABLED=false;
+const USE_FB=LOGIN_ENABLED && FIREBASE_CONFIG.apiKey.indexOf('여기')===-1 && GIS_CLIENT_ID.indexOf('여기')===-1;
 let _fbAuth=null,_fbSignInCred=null,_fbSignOut=null;
 let STAFF, SHIFTS, ORDERS, NOTICES, CK, SUBMITS, CUR, REFS, READS;
 function defaults(){
@@ -447,7 +451,9 @@ function authMsg(m){const e=$("authMsg");if(e)e.innerHTML=m||'';}
 function showAuthOverlay(show){const ov=$("authOverlay");if(ov)ov.style.display=show?'flex':'none';}
 function onFbLogin(email){
  email=(email||'').toLowerCase();
- const s=STAFF.find(x=>(x.email||'').toLowerCase()===email);
+ let s=STAFF.find(x=>(x.email||'').toLowerCase()===email);
+ // 부트스트랩: 관리자 이메일인데 명단에 없으면 대표님 계정에 연결(최초 로그인 자가치유)
+ if(!s && ADMIN_EMAILS.includes(email)){ s=STAFF.find(x=>x.id==='boss')||STAFF[0]; if(s)s.email=email; }
  if(s){ CUR=s.id; role=isAdmin(s)?'admin':'staff'; tab='home';
    const b=$("userBtn"); b.style.display=''; b.textContent=s.name+' ⏻';
    showAuthOverlay(false); save(); render(); }
