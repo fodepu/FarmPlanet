@@ -110,10 +110,10 @@ input.inp{min-height:auto}
 .wnav .wk{font-size:12.5px;font-weight:800;color:var(--ink)}
 .wnav button{border:1px solid var(--edge);background:#fff;border-radius:6px;width:30px;height:30px;cursor:pointer;color:var(--deep);display:flex;align-items:center;justify-content:center}
 .wnav .now{width:auto;padding:0 10px;font-size:11px;font-weight:800}
-.wcal{display:flex;gap:3px;margin-bottom:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px}
-.wtime{width:20px;flex:none;position:sticky;left:0;z-index:3;background:var(--bg);margin-top:38px;height:242px}
-.wtime span{position:absolute;right:3px;font-size:8.5px;color:var(--sub);transform:translateY(-50%)}
-.wcol{flex:0 0 78px;min-width:0;display:flex;flex-direction:column}
+.wcal{display:flex;gap:2px;margin-bottom:4px}
+.wtime{width:18px;flex:none;position:relative;margin-top:34px;height:242px}
+.wtime span{position:absolute;right:2px;font-size:8px;color:var(--sub);transform:translateY(-50%)}
+.wcol{flex:1;min-width:0;display:flex;flex-direction:column}
 .wch{font-size:11px;font-weight:800;text-align:center;color:var(--deep);padding:4px 0;line-height:1.25;cursor:pointer;border-radius:6px}
 .wch .wadd{color:var(--btn);font-weight:900}
 .wcol.wtoday .wch{background:#E2F0E7}
@@ -122,9 +122,9 @@ input.inp{min-height:auto}
 .wpeak{position:absolute;left:0;right:0;background:var(--peak);opacity:.7}
 .wsh{position:absolute;color:#3c4a40;font-weight:700;padding:2px 1px;text-align:center;
   overflow:hidden;cursor:pointer;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center}
-.z7 .wsh{font-size:10px;line-height:1.25}
+.z7 .wsh{font-size:9px;line-height:1.25}
 .wsh .wt{display:block;font-weight:400;opacity:.85;white-space:nowrap}
-.z7 .wsh .wt{font-size:8.5px}
+.z7 .wsh .wt{font-size:8px}
 .wcov{text-align:center;font-size:12px;padding:3px 0;cursor:pointer}
 .wcov .wcn{font-size:9px;color:var(--sub);margin-left:2px}
 .tl{position:relative;background:#fff;border:1px solid var(--edge);border-radius:7px;padding:10px 6px 22px;overflow:hidden}
@@ -328,7 +328,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='1.3.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='1.3.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자가 됩니다 (대표님 Gmail로 교체) */
 const ADMIN_EMAILS=['kimjuham1120@gmail.com'];
