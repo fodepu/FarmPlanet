@@ -329,10 +329,12 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='1.4.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='1.4.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
-/* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자가 됩니다 (대표님 Gmail로 교체) */
-const ADMIN_EMAILS=['kimjuham1120@gmail.com'];
+/* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
+const ADMIN_EMAILS=['candy310r@gmail.com'];
+/* ▼ 매니저 이메일 — 로그인 시 자동으로 매니저 권한 부여 */
+const MANAGER_EMAILS=['yhyoo061117@gmail.com'];
 /* ▼ Firebase 구글 로그인 — 콘솔 값으로 교체하면 활성화됩니다. (그대로 두면 기존 이름선택 로그인으로 동작) */
 const FIREBASE_CONFIG={
   apiKey:"AIzaSyDzp2hqGQ_T2RQ0dUbrGmgHjOx6nZJKugY",
@@ -439,6 +441,8 @@ function load(){
   Object.keys(CK).forEach(k=>{if(k<limK)delete CK[k];});
   STAFF.forEach((s,i)=>{if(s.email===undefined)s.email=(s.id==='boss'?ADMIN_EMAILS[0]:'');if(s.mgr===undefined)s.mgr=false;
     s.c=PALETTE[i%PALETTE.length];}); // 구버전 데이터 보정 + 구분 잘 되는 색으로 재지정
+  const _boss=STAFF.find(x=>x.id==='boss'); if(_boss)_boss.email=ADMIN_EMAILS[0]; // 대표님 계정 고정
+  STAFF.forEach(s=>{ if(MANAGER_EMAILS.includes((s.email||'').toLowerCase()))s.mgr=true; }); // 매니저 자동
  }catch(e){defaults();}
 }
 function isOwner(s){return !!s && ADMIN_EMAILS.includes((s.email||'').toLowerCase());}
@@ -513,7 +517,7 @@ function onFbLogin(email){
  let s=STAFF.find(x=>(x.email||'').toLowerCase()===email);
  // 부트스트랩: 관리자 이메일인데 명단에 없으면 대표님 계정에 연결(최초 로그인 자가치유)
  if(!s && ADMIN_EMAILS.includes(email)){ s=STAFF.find(x=>x.id==='boss')||STAFF[0]; if(s)s.email=email; }
- if(s){ CUR=s.id; role=isAdmin(s)?'admin':'staff'; tab='home';
+ if(s){ if(MANAGER_EMAILS.includes(email))s.mgr=true; CUR=s.id; role=isAdmin(s)?'admin':'staff'; tab='home';
    const b=$("userBtn"); b.style.display=''; b.textContent=s.name+' ⏻';
    showAuthOverlay(false); save(); render(); }
  else { // 신규 가입 — 누구나 가능. 이름만 정하면 직원 리스트에 추가됨
@@ -529,14 +533,27 @@ function onFbLogin(email){
    setTimeout(()=>{const i=$('signName'); if(i)i.focus();},60); }
 }
 let pendingEmail='';
+/* 가입 이름 해석: 기존 직원(이메일 미연결)과 이름이 겹치면 그 직원으로 연결(성 떼고 표시),
+   이미 찬 이름이면 성 유지해 구분 */
+function resolveSignup(name){
+ name=(name||'').trim();
+ let s=STAFF.find(x=>x.name===name && !x.email);           // 정확히 같은 이름
+ if(s) return {existing:s, display:s.name};
+ s=STAFF.find(x=>x.name && name!==x.name && name.endsWith(x.name) && !x.email); // '성+기존이름'
+ if(s) return {existing:s, display:s.name};
+ return {existing:null, display:name};                      // 신규(성 유지)
+}
 function finishSignup(){
  const el=$('signName'); const nm=(el?el.value:'').trim();
  if(!nm){toast('이름을 입력하세요');return;}
- const s={id:'u'+Date.now(),name:nm,email:pendingEmail,wage:MINWAGE,c:PALETTE[STAFF.length%PALETTE.length],mgr:false};
- STAFF.push(s); CUR=s.id; role=isAdmin(s)?'admin':'staff'; tab='home';
+ const r=resolveSignup(nm); let s;
+ if(r.existing){ s=r.existing; s.email=pendingEmail; }
+ else { s={id:'u'+Date.now(),name:r.display,email:pendingEmail,wage:MINWAGE,c:PALETTE[STAFF.length%PALETTE.length],mgr:false}; STAFF.push(s); }
+ if(MANAGER_EMAILS.includes((pendingEmail||'').toLowerCase())) s.mgr=true;
+ CUR=s.id; role=isAdmin(s)?'admin':'staff'; tab='home';
  const b=$("userBtn"); b.style.display=''; b.textContent=s.name+' ⏻';
  const gb=$('gsiButton'); if(gb)gb.style.display='';
- showAuthOverlay(false); save(); render(); toast(hon(nm)+', 환영합니다!');
+ showAuthOverlay(false); save(); render(); toast(hon(s.name)+', 환영합니다!');
 }
 function onFbLogout(){ CUR=null; role='staff'; onlyMine=false; $("userBtn").style.display='none';
  const gb=$('gsiButton'); if(gb)gb.style.display=''; showAuthOverlay(true); authMsg(''); render(); }
