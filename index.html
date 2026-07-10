@@ -327,7 +327,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='1.2.3'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='1.2.4'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자가 됩니다 (대표님 Gmail로 교체) */
 const ADMIN_EMAILS=['kimjuham1120@gmail.com'];
@@ -452,6 +452,7 @@ const $=id=>document.getElementById(id);
 function toast(m){const t=$("toast");t.textContent=m;t.classList.add("show");clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove("show"),1800);}
 function go(t){tab=t;render();const sc=$("screen");if(sc.scrollTo)sc.scrollTo(0,0);}
 function curUser(){return STAFF.find(s=>s.id===CUR);}
+function hon(n){return /님$/.test(n||'')?n:(n||'')+'님';} // 이미 '님'으로 끝나면 중복 안 붙임
 function ckToday(){const k=todayK();CK[k]=CK[k]||{open:{},mid:{},close:{}};if(!CK[k].mid)CK[k].mid={};return CK[k];}
 function modeName(m){return m==='close'?'마감':m==='mid'?'미들':'오픈';}
 function ckLists(m){return m==='close'?CLOSE_LIST:m==='mid'?MID_LIST:OPEN_LIST;}
@@ -474,7 +475,7 @@ function screenLogin(){
 }
 function login(id){CUR=id;role=isAdmin(STAFF.find(s=>s.id===id))?'admin':'staff';tab='home';
  const b=$("userBtn");b.style.display='';b.textContent=curUser().name+' ⏻';
- save();render();toast(curUser().name+'님, 어서오세요');}
+ save();render();toast(hon(curUser().name)+', 어서오세요');}
 function logout(){if(!confirm('로그아웃할까요?'))return;
  if(USE_FB&&_fbSignOut){_fbSignOut();return;}
  CUR=null;role='staff';onlyMine=false;$("userBtn").style.display='none';save();render();}
@@ -528,7 +529,7 @@ function screenHome(){
  const u=unread(), newsCnt=u.n+u.o;
  return `
  <div class="hero"><div class="hi">${n.getFullYear()}년 ${n.getMonth()+1}월 ${n.getDate()}일 ${WD[n.getDay()]}요일</div>
-   <div class="big">안녕하세요, ${curUser().name}님</div>
+   <div class="big">안녕하세요, ${hon(curUser().name)}</div>
    <div class="sh">${IC('clock','li sm')}오늘 근무 · ${s?`${s.s} ~ ${s.e}`:'휴무'}</div></div>
  <div class="grid2" style="margin-bottom:12px">
    <div class="qbtn" onclick="go('sched')">${IC('cal')}시간표</div>
