@@ -324,7 +324,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='1.2.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='1.2.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자가 됩니다 (대표님 Gmail로 교체) */
 const ADMIN_EMAILS=['boss@farmplanet.kr'];
@@ -341,7 +341,10 @@ const GIS_CLIENT_ID="608530011088-rsi3hahvdj5pu4enhlpdo5o20sq8je9i.apps.googleus
 /* ▼ 로그인 마스터 스위치 — 관리자 이메일(ADMIN_EMAILS) 설정 후 true로 켜세요. false면 기존 이름선택 로그인 */
 const LOGIN_ENABLED=false;
 const USE_FB=LOGIN_ENABLED && FIREBASE_CONFIG.apiKey.indexOf('여기')===-1 && GIS_CLIENT_ID.indexOf('여기')===-1;
+/* ▼ 실시간 공유 — config만 있으면 로그인과 무관하게 켜집니다 (발주·시간표·공지·체크가 모든 폰에 동기화, 사진 제외) */
+const SYNC_ENABLED=FIREBASE_CONFIG.apiKey.indexOf('여기')===-1;
 let _fbAuth=null,_fbSignInCred=null,_fbSignOut=null;
+let _fsSet=null,_applyingRemote=false,_syncT=null,_lastSyncJSON='';
 let STAFF, SHIFTS, ORDERS, NOTICES, CK, SUBMITS, CUR, REFS, READS;
 function defaults(){
  STAFF=[
@@ -370,7 +373,56 @@ function seedWeek(week){
   else if(i===5){SHIFTS['me|'+d.k]={s:'12:30',e:'17:30'};}
   else{SHIFTS['dy|'+d.k]={s:'12:30',e:'17:30'};}});
 }
-function save(){try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS}));}catch(e){}}
+function save(){try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS}));}catch(e){}
+ if(SYNC_ENABLED&&typeof pushSync==='function')pushSync();}
+/* ── 실시간 공유 (Firestore 단일 문서, 사진 제외) ── */
+function syncPayload(){
+ const ckLite={};
+ Object.keys(CK).forEach(k=>{const d=CK[k]||{};ckLite[k]={open:d.open||{},mid:d.mid||{},close:d.close||{}};});
+ return {STAFF,SHIFTS,ORDERS,NOTICES,SUBMITS,READS,CK:ckLite};
+}
+async function syncBoot(){
+ try{
+  const {initializeApp,getApps}=await import('https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js');
+  const {getFirestore,doc,onSnapshot,setDoc}=await import('https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js');
+  const app=getApps().length?getApps()[0]:initializeApp(FIREBASE_CONFIG);
+  const db=getFirestore(app);
+  const ref=doc(db,'shared','state');
+  _fsSet=(data)=>setDoc(ref,data);
+  onSnapshot(ref,(snap)=>{ if(!snap.exists()){pushSync();return;} applyRemote(snap.data()); },
+    (err)=>console.warn('sync 수신 오류',err));
+ }catch(e){ console.warn('sync 초기화 실패',e); }
+}
+function pushSync(){
+ if(!_fsSet||_applyingRemote)return;
+ clearTimeout(_syncT);
+ _syncT=setTimeout(()=>{
+   const blob=JSON.stringify(syncPayload());
+   if(blob===_lastSyncJSON)return;
+   _lastSyncJSON=blob;
+   _fsSet({blob,ts:Date.now()}).catch(e=>console.warn('sync 전송 오류',e));
+ },1000);
+}
+function applyRemote(data){
+ if(!data||!data.blob||data.blob===_lastSyncJSON)return;
+ let d; try{d=JSON.parse(data.blob);}catch(e){return;}
+ _lastSyncJSON=data.blob;
+ _applyingRemote=true;
+ try{
+  if(d.STAFF)STAFF=d.STAFF;
+  if(d.SHIFTS)SHIFTS=d.SHIFTS;
+  if(d.NOTICES)NOTICES=d.NOTICES;
+  if(d.SUBMITS)SUBMITS=d.SUBMITS;
+  if(d.READS)READS=d.READS;
+  if(d.ORDERS){ const m={}; [...d.ORDERS,...ORDERS].forEach(o=>{const id=(o.ts||0)+'|'+o.txt; if(!(id in m))m[id]=o;});
+    ORDERS=Object.values(m).sort((a,b)=>(a.ts||0)-(b.ts||0)); }
+  if(d.CK){ const merged={}; Object.keys(d.CK).forEach(k=>{merged[k]=Object.assign({},d.CK[k]); if(CK[k]&&CK[k].photos)merged[k].photos=CK[k].photos;});
+    Object.keys(CK).forEach(k=>{if(!merged[k])merged[k]=CK[k];}); CK=merged; }
+  try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS}));}catch(e){}
+  render();
+ }finally{ _applyingRemote=false; }
+ if(JSON.stringify(syncPayload())!==data.blob)pushSync(); // 병합 결과 되반영
+}
 function load(){
  try{const d=JSON.parse(localStorage.getItem(SKEY));
   if(!d||!d.STAFF)throw 0;
@@ -426,10 +478,10 @@ function logout(){if(!confirm('로그아웃할까요?'))return;
 /* ── Firebase 구글 로그인 (GIS + signInWithCredential) — iOS Safari/GitHub Pages 안정 방식 ── */
 async function fbBoot(){
  try{
-  const {initializeApp}=await import('https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js');
+  const {initializeApp,getApps}=await import('https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js');
   const {getAuth,GoogleAuthProvider,signInWithCredential,onAuthStateChanged,signOut,setPersistence,browserLocalPersistence}
     =await import('https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js');
-  const app=initializeApp(FIREBASE_CONFIG);
+  const app=getApps().length?getApps()[0]:initializeApp(FIREBASE_CONFIG);
   _fbAuth=getAuth(app);
   await setPersistence(_fbAuth,browserLocalPersistence).catch(()=>{});
   _fbSignInCred=(idTok)=>signInWithCredential(_fbAuth,GoogleAuthProvider.credential(idTok));
@@ -953,6 +1005,7 @@ if(USE_FB){
  if(CUR){const s=curUser();if(s){role=isAdmin(s)?'admin':'staff';const b=$("userBtn");b.style.display='';b.textContent=s.name+' ⏻';}else CUR=null;}
  render();
 }
+if(SYNC_ENABLED)syncBoot();
 /* 새 버전 감지 → 상단 배너 */
 async function checkUpdate(){
  try{
