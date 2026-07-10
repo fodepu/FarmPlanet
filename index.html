@@ -329,12 +329,12 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='1.4.2'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='1.4.3'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com'];
 /* ▼ 매니저 이메일 — 로그인 시 자동으로 매니저 권한 부여 */
-const MANAGER_EMAILS=['yhyoo061117@gmail.com'];
+const MANAGER_EMAILS=['yhyoo061117@gmail.com','kimjuham1120@gmail.com'];
 /* ▼ Firebase 구글 로그인 — 콘솔 값으로 교체하면 활성화됩니다. (그대로 두면 기존 이름선택 로그인으로 동작) */
 const FIREBASE_CONFIG={
   apiKey:"AIzaSyDzp2hqGQ_T2RQ0dUbrGmgHjOx6nZJKugY",
@@ -351,7 +351,7 @@ const USE_FB=LOGIN_ENABLED && FIREBASE_CONFIG.apiKey.indexOf('여기')===-1 && G
 /* ▼ 실시간 공유 — config만 있으면 로그인과 무관하게 켜집니다 (발주·시간표·공지·체크가 모든 폰에 동기화, 사진 제외) */
 const SYNC_ENABLED=FIREBASE_CONFIG.apiKey.indexOf('여기')===-1;
 let _fbAuth=null,_fbSignInCred=null,_fbSignOut=null;
-let _fsSet=null,_applyingRemote=false,_syncT=null,_lastSyncJSON='',_syncReady=false;
+let _fsSet=null,_applyingRemote=false,_syncT=null,_lastSyncJSON='',_syncReady=false,_syncStat='연결 준비 중',_syncAt=0;
 let STAFF, SHIFTS, ORDERS, NOTICES, CK, SUBMITS, CUR, REFS, READS;
 function defaults(){
  STAFF=[
@@ -396,9 +396,10 @@ async function syncBoot(){
   const db=getFirestore(app);
   const ref=doc(db,'shared','state');
   _fsSet=(data)=>setDoc(ref,data);
-  onSnapshot(ref,(snap)=>{ _syncReady=true; if(!snap.exists()){pushSync();return;} applyRemote(snap.data()); },
-    (err)=>console.warn('sync 수신 오류',err));
- }catch(e){ console.warn('sync 초기화 실패',e); }
+  onSnapshot(ref,(snap)=>{ _syncReady=true; _syncStat='연결됨'; _syncAt=Date.now();
+    if(!snap.exists()){pushSync();if(tab==='sched'&&CUR)render();return;} applyRemote(snap.data()); },
+    (err)=>{ _syncStat='수신 오류: '+(err&&(err.code||err.message)||err); console.warn('sync 수신 오류',err); if(CUR)render(); });
+ }catch(e){ _syncStat='초기화 실패: '+(e&&(e.code||e.message)||e); console.warn('sync 초기화 실패',e); }
 }
 function pushSync(){
  if(!_fsSet||_applyingRemote||!_syncReady)return; // 원격 수신 전엔 내 기본데이터로 덮어쓰지 않음
@@ -435,7 +436,8 @@ function shareSchedule(){
  if(!_fsSet){toast('동기화 연결 중이에요 — 잠시 후 다시 시도하세요');return;}
  _syncReady=true;
  const blob=JSON.stringify(syncPayload()); _lastSyncJSON=blob;
- _fsSet({blob,ts:Date.now()}).then(()=>toast('시간표를 모든 직원에게 공유했습니다')).catch(()=>toast('공유 실패 — 잠시 후 다시'));
+ _fsSet({blob,ts:Date.now()}).then(()=>toast('시간표를 모든 직원에게 공유했습니다'))
+   .catch(e=>{_syncStat='전송 오류: '+(e&&(e.code||e.message)||e);toast('공유 실패: '+(e&&(e.code||e.message)||e));if(CUR)render();});
 }
 function load(){
  try{const d=JSON.parse(localStorage.getItem(SKEY));
@@ -657,7 +659,8 @@ function screenSched(){
      ${admin?'<br><b>관리자:</b> 요일 이름(＋) 눌러 추가 · 블록 = 수정 · 한 사람 분할은 쉼표(예: 12~1, 5~6)':''}</div></div>
    ${wnav}
    ${actions}${view}
-   ${admin?`<button class="btn" style="margin-top:12px" onclick="shareSchedule()">${IC('swap','li sm')} 시간표 공유 — 모든 직원에게 반영</button>`:''}`;
+   ${admin?`<button class="btn" style="margin-top:12px" onclick="shareSchedule()">${IC('swap','li sm')} 시간표 공유 — 모든 직원에게 반영</button>`:''}
+   <div class="muted" style="font-size:10.5px;text-align:center;margin-top:8px">실시간 동기화: ${SYNC_ENABLED?_syncStat:'꺼짐'}${_syncAt?' · '+new Date(_syncAt).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}):''} · v${APP_VER}</div>`;
 }
 function segLayout(dkey){
  // 각 근무 = 온전한 직사각형. 겹침 그룹 안에서 레인(0=기본,전체폭)을 매기고
