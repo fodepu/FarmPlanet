@@ -123,6 +123,7 @@ input.inp{min-height:auto}
 .wsh{position:absolute;color:#3c4a40;font-weight:700;padding:2px 1px;text-align:center;
   overflow:hidden;cursor:pointer;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center}
 .z7 .wsh{font-size:9px;line-height:1.25}
+.wsh.ov{box-shadow:inset 0 0 0 1.5px #fff,0 1px 3px rgba(0,0,0,.18);border-radius:3px}
 .wsh .wt{display:block;font-weight:400;opacity:.85;white-space:nowrap}
 .z7 .wsh .wt{font-size:8px}
 .wcov{text-align:center;font-size:12px;padding:3px 0;cursor:pointer}
@@ -328,7 +329,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='1.3.6'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='1.3.7'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자가 됩니다 (대표님 Gmail로 교체) */
 const ADMIN_EMAILS=['kimjuham1120@gmail.com'];
@@ -614,28 +615,22 @@ function screenSched(){
    ${actions}${view}`;
 }
 function segLayout(dkey){
- // 시간 경계마다 잘라 그 구간의 동시 근무 수로 폭을 나누는 방식(맞물려 겹침)
+ // 각 근무 = 온전한 직사각형. 겹침 그룹 안에서 레인(0=기본,전체폭)을 매기고
+ // 렌더에서 레인1=오른쪽, 레인2=왼쪽… 번갈아 붙여 위로 겹친다.
  const list=[];
  STAFF.filter(s=>!onlyMine||s.id===CUR).forEach(s=>{
    getRanges(s.id+'|'+dkey).forEach((r,ri)=>list.push({s,sh:r,key:s.id+'#'+ri,a:t2n(r.s),b:t2n(r.e)}));
  });
  list.sort((p,q)=>p.a-q.a||p.b-q.b);
- const lanes=[];
- list.forEach(x=>{let li=lanes.findIndex(e=>e<=x.a);
-   if(li<0){li=lanes.length;lanes.push(0);}
-   lanes[li]=x.b; x.lane=li;});
- const bs=[...new Set(list.flatMap(x=>[x.a,x.b]))].sort((x,y)=>x-y);
- const segs=[];
- for(let i=0;i<bs.length-1;i++){
-   const t1=bs[i],t2=bs[i+1];
-   const act=list.filter(x=>x.a<=t1&&x.b>=t2).sort((p,q)=>p.lane-q.lane);
-   act.forEach((x,idx)=>segs.push({x,t1,t2,idx,n:act.length}));
- }
- const best={};
- segs.forEach(g=>{const k=g.x.key,area=(g.t2-g.t1)/g.n;
-   if(!best[k]||area>best[k].area)best[k]={g,area};});
- segs.forEach(g=>g.lbl=(best[g.x.key].g===g));
- return segs;
+ const out=[]; let comp=[], compEnd=-1;
+ const flush=()=>{ if(!comp.length)return;
+   const lanes=[];
+   comp.forEach(x=>{let li=lanes.findIndex(e=>e<=x.a); if(li<0){li=lanes.length;lanes.push(0);} lanes[li]=x.b; x.lane=li;});
+   const cols=lanes.length; comp.forEach(x=>{x.cols=cols; out.push(x);}); comp=[];
+ };
+ list.forEach(x=>{ if(comp.length&&x.a<compEnd){comp.push(x);compEnd=Math.max(compEnd,x.b);} else {flush();comp=[x];compEnd=x.b;} });
+ flush();
+ return out;
 }
 function renderGrid(){
  const admin=role==='admin', span=CLOSE_H-OPEN_H;
@@ -645,10 +640,12 @@ function renderGrid(){
    const segs=segLayout(d.k), c=coverage(d.k), ok=c.count>0&&c.warns.length===0;
    const cvColor=c.count===0?'#c4cdc7':(ok?'#1E6B3C':'#c2410c');
    const blocks=segs.map(g=>{
-     const top=(g.t1-OPEN_H)/span*100, h=(g.t2-g.t1)/span*100;
-     const lbl=g.lbl?`${g.x.s.name}<span class="wt">${cT(g.x.sh.s)}&thinsp;~&thinsp;${cT(g.x.sh.e)}</span>`:'';
-     return `<div class="wsh" style="top:${top}%;height:${h}%;left:${g.idx/g.n*100}%;width:${100/g.n}%;background:${g.x.s.c}"
-       ${admin?`onclick="event.stopPropagation();editCell('${g.x.s.id}','${d.k}')"`:''}>${lbl}</div>`;
+     const top=(g.a-OPEN_H)/span*100, h=(g.b-g.a)/span*100;
+     const lbl=`${g.s.name}<span class="wt">${cT(g.sh.s)}&thinsp;~&thinsp;${cT(g.sh.e)}</span>`;
+     let left=0,width=100,z=0,cls='wsh';
+     if(g.lane>0){ const W=46; width=W; z=g.lane; cls='wsh ov'; left=(g.lane%2===1)?100-W:0; }
+     return `<div class="${cls}" style="top:${top}%;height:${h}%;left:${left}%;width:${width}%;background:${g.s.c};z-index:${z}"
+       ${admin?`onclick="event.stopPropagation();editCell('${g.s.id}','${d.k}')"`:''}>${lbl}</div>`;
    }).join('');
    const head=`${d.w}<br><span style="font-weight:400">${d.d}</span>${admin?' <span class="wadd">＋</span>':''}`;
    return `<div class="wcol ${d.today?'wtoday':''}">
