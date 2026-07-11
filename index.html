@@ -332,7 +332,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='1.6.4'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='1.6.5'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com'];
@@ -564,7 +564,7 @@ function attView(){
    <button class="btn sec" style="margin-top:14px" onclick="closeModal()">닫기</button>`;
 }
 /* ── 카카오맵으로 매장 위치 지정 (상호명 검색 + 위성) ── */
-const KAKAO_KEY='4a79c6a128a4938315b5279401448ed6';
+const KAKAO_KEY='b41c960c3a3262123f9bca95ffa3d59a';
 let _kmap=null,_kmarker=null,_kcircle=null;
 function loadKakao(cb){
  if(window.kakao&&window.kakao.maps&&kakao.maps.services){cb();return;}
