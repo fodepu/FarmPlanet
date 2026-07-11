@@ -329,7 +329,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='1.4.4'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='1.4.5'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com'];
@@ -778,13 +778,12 @@ function staffManage(){
  const rows=STAFF.map((s,i)=>`<div class="ck">
    <span style="width:24px;height:24px;border-radius:6px;background:${s.c};flex:none"></span>
    <div class="tx"><b>${s.name}</b>${isOwner(s)?' <span class="pill">관리자</span>':s.mgr?' <span class="pill">매니저</span>':''}
-     <div class="muted" style="font-size:11px">${s.wage?won(s.wage)+'/h':'시급 없음'}${s.email?' · '+s.email:''}</div></div>
+     <div class="muted" style="font-size:11px">${s.email||'이메일 미등록'}</div></div>
    <button class="cam" onclick="editStaffInfo(${i})">수정</button>
-   ${owner&&!isOwner(s)?`<button class="cam" style="${s.mgr?'':'color:var(--deep)'}" onclick="toggleMgr(${i})">${s.mgr?'매니저 해제':'매니저 지정'}</button>`:''}
    ${isAdmin(s)||s.id===CUR?'':`<button class="cam" style="color:var(--warn);border-color:#f0d9bd" onclick="removeStaff(${i})">삭제</button>`}
  </div>`).join('');
  openModal(`<h3>직원 관리</h3>${rows}
-   <div class="muted" style="font-size:11px;margin:4px 0 10px">관리자 = 대표님 이메일 계정 · 매니저 = 대표님이 지정한 관리 권한. 매니저는 해제 후 삭제할 수 있습니다. 로그인하면 누구나 이름을 정해 명단에 추가됩니다.</div>
+   <div class="muted" style="font-size:11px;margin:4px 0 10px">관리자 = 대표님 · 매니저 권한은 <b>수정</b>에서 지정. 로그인하면 누구나 이름을 정해 명단에 추가됩니다.</div>
    <div class="row"><button class="btn sec" onclick="closeModal()">닫기</button><button class="btn" onclick="addStaff()">+ 직원 추가</button></div>`);
 }
 function toggleMgr(i){
@@ -796,16 +795,22 @@ function toggleMgr(i){
 }
 function addStaff(){const n=prompt('직원 이름:','');if(!n)return;
  const em=(prompt('이메일 (선택 — 대표님 이메일이면 관리자 권한):','')||'').trim().toLowerCase();
- const w=parseInt(prompt('시급(원):',MINWAGE),10)||MINWAGE;
- STAFF.push({id:'u'+Date.now(),name:n.trim(),wage:w,c:PALETTE[STAFF.length%PALETTE.length],email:em,mgr:false});
- closeModal();render();toast(n+'님이 명단에 추가되었습니다 — 요일 빈 곳을 눌러 배정하세요');}
-function editStaffInfo(i){const s=STAFF[i];
- const n=prompt('이름:',s.name);if(n===null)return;
- const em=prompt('이메일:',s.email||'');if(em===null)return;
- const w=prompt('시급(원):',s.wage);if(w===null)return;
- if(n.trim())s.name=n.trim();
- s.email=em.trim().toLowerCase();
- const wn=parseInt(w,10);if(!isNaN(wn))s.wage=wn;
+ STAFF.push({id:'u'+Date.now(),name:n.trim(),c:PALETTE[STAFF.length%PALETTE.length],email:em,mgr:false});
+ closeModal();render();toast(n+'님이 명단에 추가되었습니다 — 요일 이름(＋)을 눌러 배정하세요');}
+function editStaffInfo(i){const s=STAFF[i], owner=isOwner(curUser()), canMgr=owner&&!isOwner(s);
+ openModal(`<h3>${s.name} 정보 수정</h3>
+   <div class="fld"><label>이름</label><input id="edNm" class="tsel" value="${s.name}" autocomplete="off"></div>
+   <div class="fld" style="margin-top:8px"><label>이메일 <span class="muted">(구글 로그인 계정)</span></label><input id="edEm" class="tsel" value="${s.email||''}" placeholder="example@gmail.com" autocomplete="off"></div>
+   ${canMgr?`<label class="ck" style="margin-top:10px;cursor:pointer" onclick="toggleEdMgr(this)"><span class="box ${s.mgr?'on':''}" id="edMgrBox" style="background:${s.mgr?'var(--btn)':'#fff'};border-color:${s.mgr?'var(--btn)':'#cfd8cf'}">${s.mgr?'✓':''}</span><div class="tx"><b>매니저 권한</b><div class="muted" style="font-size:11px">편성·발주 확인·마감 관리 가능</div></div></label>`:''}
+   <div class="row" style="margin-top:12px"><button class="btn sec" onclick="staffManage()">취소</button><button class="btn" onclick="saveStaffInfo(${i})">저장</button></div>`);
+ setTimeout(()=>{const el=$('edNm');if(el)el.focus();},50);
+}
+function toggleEdMgr(lbl){ const b=lbl.querySelector('.box'); const on=!b.classList.contains('on');
+ b.classList.toggle('on',on); b.textContent=on?'✓':''; b.style.background=on?'var(--btn)':'#fff'; b.style.borderColor=on?'var(--btn)':'#cfd8cf'; }
+function saveStaffInfo(i){const s=STAFF[i];
+ const nm=($('edNm')?$('edNm').value:'').trim(); const em=($('edEm')?$('edEm').value:'').trim().toLowerCase();
+ if(nm)s.name=nm; s.email=em;
+ const box=$('edMgrBox'); if(box && !isOwner(s)) s.mgr=box.classList.contains('on');
  closeModal();render();toast('저장되었습니다');
  if(s.id===CUR){role=isAdmin(s)?'admin':'staff';render();}}
 function removeStaff(i){const s=STAFF[i];
