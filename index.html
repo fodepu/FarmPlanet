@@ -95,14 +95,14 @@ input.inp{min-height:auto}
 .oday{text-align:center;font-size:10.5px;font-weight:800;color:var(--sub);background:#EDF1EA;border-radius:20px;padding:3px 0;margin:14px auto 8px;width:64px}
 .omsg:first-child .oday,.oday:first-child{margin-top:2px}
 .ometa{font-size:10.5px;color:var(--sub);margin:0 0 3px 4px}
-.obub{background:#fff;border:1px solid var(--edge);border-radius:2px 10px 10px 10px;padding:10px 12px;display:flex;align-items:center;gap:10px;max-width:94%}
+.obub{background:#fff;border:1px solid var(--edge);border-radius:2px 10px 10px 10px;padding:9px 10px;display:flex;align-items:center;gap:6px;max-width:100%}
 .obx{width:19px;height:19px;border-radius:5px;border:1.6px solid #cfd8cf;flex:none;display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff}
 .obub.done .obx{background:var(--btn);border-color:var(--btn)}
 .otx{font-size:13px;font-weight:600}
 .obub.done .otx{color:#a9bfae;text-decoration:line-through}
 .ost{margin-left:auto;font-size:10px;font-weight:800;color:var(--coral);flex:none}
 .obub.done .ost{color:var(--deep)}
-.oact{font-size:10.5px;font-weight:700;color:var(--sub);cursor:pointer;padding:2px 9px;border:1px solid var(--edge);border-radius:6px;background:#fff}
+.oact{font-size:10px;font-weight:700;color:var(--sub);cursor:pointer;padding:2px 6px;border:1px solid var(--edge);border-radius:6px;background:#fff;flex:none}
 .oact.del{color:var(--warn);border-color:#f0d9bd}
 /* 시간표 */
 .dsel{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px}
@@ -332,7 +332,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='1.5.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='1.5.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com'];
@@ -1026,10 +1026,8 @@ function screenNotice(){
        <div class="obx" ${admin?`onclick="toggleOrder(${i})"`:''} style="${admin?'cursor:pointer':''}">${done?'✓':''}</div>
        <div class="otx">${o.txt}</div>
        <span class="ost" style="color:${done?'#2E8C49':'#ff7d59'}">${done?'발주됨':'대기'}</span>
-     </div>
-     ${mine?`<div style="display:flex;gap:6px;justify-content:flex-end;margin-top:3px">
-       <span class="oact" onclick="editOrder(${i})">수정</span><span class="oact del" onclick="deleteOrder(${i})">삭제</span></div>`:''}
-     </div>`;}).join("");
+       ${mine?`<span class="oact" onclick="editOrder(${i})">수정</span><span class="oact del" onclick="deleteOrder(${i})">삭제</span>`:''}
+     </div></div>`;}).join("");
    return `<h2 class="title">${IC('cart')}공지 · 발주</h2>${seg}
      ${waitCnt?`<button class="btn sec" style="margin-bottom:10px" onclick="copyOrders()">${IC('copy','li sm')} 대기 발주 복사 (${waitCnt}건) — 붙여넣어 전달</button>`:''}
      ${list||'<p class="muted" style="padding:10px 2px">아직 발주 요청이 없습니다. 필요한 물건을 적어주세요.</p>'}
@@ -1107,8 +1105,8 @@ function openModal(h){$("mbox").innerHTML=h;$("modal").classList.add("show");}
 function closeModal(){$("modal").classList.remove("show");}
 let _confirmCb=null;
 function askConfirm(msg,yesLabel,cb){ _confirmCb=cb;
- openModal(`<h3 style="color:var(--warn)">⚠️ 정말 진행할까요?</h3>
-   <p style="margin:8px 0 16px;line-height:1.65;font-size:13.5px;color:var(--ink)">${msg}</p>
+ openModal(`<h3 style="color:var(--ink)">정말 진행할까요?</h3>
+   <p style="margin:10px 0 18px;line-height:1.65;font-size:13.5px;color:var(--sub)">${msg}</p>
    <div class="row"><button class="btn sec" onclick="closeModal()">취소</button>
      <button class="btn" style="background:var(--warn)" onclick="runConfirm()">${yesLabel||'확인'}</button></div>`);}
 function runConfirm(){const cb=_confirmCb;_confirmCb=null;closeModal();if(cb)cb();}
