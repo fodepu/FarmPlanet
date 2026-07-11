@@ -332,7 +332,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='1.6.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='1.6.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com'];
@@ -356,7 +356,7 @@ const SYNC_ENABLED=FIREBASE_CONFIG.apiKey.indexOf('여기')===-1;
 let _fbAuth=null,_fbSignInCred=null,_fbSignOut=null;
 let _fsSet=null,_applyingRemote=false,_syncT=null,_lastSyncJSON='',_syncReady=false,_syncStat='연결 준비 중',_syncAt=0;
 let _pendingUser=null,_authTO=null,_authForce=false;
-let STAFF, SHIFTS, ORDERS, NOTICES, CK, SUBMITS, CUR, REFS, READS, SCHED_TS=0, DELETED=[], ODEL=[], PATTERN=null, ATT={}, STORE_LOC=null;
+let STAFF, SHIFTS, ORDERS, NOTICES, CK, SUBMITS, CUR, REFS, READS, SCHED_TS=0, DELETED=[], ODEL=[], PATTERN=null, ATT={}, STORE_LOC=null, WAGE=0;
 function touchSched(){SCHED_TS=Date.now();} // 시간표 변경 시각 기록(신규 표시용)
 function defaults(){
  STAFF=[
@@ -374,7 +374,7 @@ function defaults(){
  SHIFTS={}; seedWeek(buildWeek(0));
  ORDERS=[]; SUBMITS=[]; CK={}; REFS={}; READS={};
  NOTICES=[{tag:"공지",gold:true,who:"대표님",dt:fmtDT(),ts:Date.now(),bd:"FarmPlanet 앱 사용을 시작합니다. 공지·발주·시간표·마감을 여기서 관리해요."}];
- CUR=null; SCHED_TS=0; DELETED=[]; ODEL=[]; PATTERN=null; ATT={}; STORE_LOC=null;
+ CUR=null; SCHED_TS=0; DELETED=[]; ODEL=[]; PATTERN=null; ATT={}; STORE_LOC=null; WAGE=MINWAGE;
 }
 /* 주간 기본 패턴 (2026-07 확정, 화면 편성 기준)
    월: 예흔08~14·미루11~14·지한12:30~16·효원16~19
@@ -394,13 +394,13 @@ function seedWeek(week){
   else if(i===5){set('gh',d,'12:00','18:00');}
   });
 }
-function save(){try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC}));}catch(e){}
+function save(){try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE}));}catch(e){}
  if(SYNC_ENABLED&&typeof pushSync==='function')pushSync();}
 /* ── 실시간 공유 (Firestore 단일 문서, 사진 제외) ── */
 function syncPayload(){
  const ckLite={};
  Object.keys(CK).forEach(k=>{const d=CK[k]||{};ckLite[k]={open:d.open||{},mid:d.mid||{},close:d.close||{}};});
- return {STAFF,SHIFTS,ORDERS,NOTICES,SUBMITS,READS,CK:ckLite,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC};
+ return {STAFF,SHIFTS,ORDERS,NOTICES,SUBMITS,READS,CK:ckLite,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE};
 }
 async function syncBoot(){
  try{
@@ -438,6 +438,7 @@ function applyRemote(data){
   if(d.ODEL)ODEL=[...new Set([...(ODEL||[]),...d.ODEL])];
   if(d.PATTERN!==undefined && d.PATTERN)PATTERN=d.PATTERN;
   if(d.STORE_LOC)STORE_LOC=d.STORE_LOC;
+  if(d.WAGE)WAGE=d.WAGE;
   if(d.ATT){ const m=Object.assign({},d.ATT); // 사용자별 최신 기록 유지
     Object.keys(ATT||{}).forEach(uid=>{const l=ATT[uid],r=m[uid]; if(!r||attStamp(l)>attStamp(r))m[uid]=l;}); ATT=m; }
   if(d.STAFF){ // 병합: 원격 기준 + 로컬 신규/이메일/매니저 보존, 삭제표식 제외
@@ -457,7 +458,7 @@ function applyRemote(data){
     ORDERS=Object.values(m).filter(o=>!(ODEL||[]).includes(o.id)).sort((a,b)=>(a.ts||0)-(b.ts||0)); }
   if(d.CK){ const merged={}; Object.keys(d.CK).forEach(k=>{merged[k]=Object.assign({},d.CK[k]); if(CK[k]&&CK[k].photos)merged[k].photos=CK[k].photos;});
     Object.keys(CK).forEach(k=>{if(!merged[k])merged[k]=CK[k];}); CK=merged; }
-  try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC}));}catch(e){}
+  try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE}));}catch(e){}
   render();
  }finally{ _applyingRemote=false; }
  if(JSON.stringify(syncPayload())!==data.blob)pushSync(); // 병합 결과 되반영
@@ -473,8 +474,8 @@ function shareSchedule(){
 function load(){
  try{const d=JSON.parse(localStorage.getItem(SKEY));
   if(!d||!d.STAFF)throw 0;
-  ({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC}=Object.assign({ORDERS:[],NOTICES:[],CK:{},SUBMITS:[],CUR:null,REFS:{},READS:{},SCHED_TS:0,DELETED:[],ODEL:[],PATTERN:null,ATT:{},STORE_LOC:null},d));
-  REFS=REFS||{}; READS=READS||{}; SCHED_TS=SCHED_TS||0; DELETED=DELETED||[]; ODEL=ODEL||[]; ATT=ATT||{};
+  ({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE}=Object.assign({ORDERS:[],NOTICES:[],CK:{},SUBMITS:[],CUR:null,REFS:{},READS:{},SCHED_TS:0,DELETED:[],ODEL:[],PATTERN:null,ATT:{},STORE_LOC:null,WAGE:MINWAGE},d));
+  REFS=REFS||{}; READS=READS||{}; SCHED_TS=SCHED_TS||0; DELETED=DELETED||[]; ODEL=ODEL||[]; ATT=ATT||{}; WAGE=WAGE||MINWAGE;
   NOTICES.forEach(n=>{if(n.ts===undefined)n.ts=0;}); ORDERS.forEach(o=>{if(o.ts===undefined)o.ts=0; o.st=(o.st==='ordered'||o.st==='done'||o.done)?'ordered':'wait';});
   // 14일 지난 체크 기록(사진 포함) 정리
   const lim=new Date();lim.setDate(lim.getDate()-14);const limK=dk(lim);
@@ -504,7 +505,7 @@ function ckToday(){const k=todayK();CK[k]=CK[k]||{open:{},mid:{},close:{}};if(!C
 function modeName(m){return m==='close'?'마감':m==='mid'?'미들':'오픈';}
 function ckLists(m){return m==='close'?CLOSE_LIST:m==='mid'?MID_LIST:OPEN_LIST;}
 /* ═══════════ 출퇴근 · 휴게 (GPS) ═══════════ */
-const STORE_RADIUS=150; // m — 이 반경 안에서만 출퇴근
+const STORE_RADIUS=50; // m — 이 반경 안에서만 출퇴근 (GPS 정밀도 고려한 좁은 값)
 function attStamp(a){ if(!a)return 0; let m=Math.max(a.in||0,a.out||0); (a.breaks||[]).forEach(b=>{m=Math.max(m,b.s||0,b.e||0);}); return m; }
 function attToday(){ const a=ATT[CUR]; return (a&&a.date===todayK())?a:null; }
 function attOpenBreak(a){ const b=a&&a.breaks&&a.breaks[a.breaks.length-1]; return (b&&!b.e)?b:null; }
@@ -523,18 +524,22 @@ function gpsGate(actName, ok){
  }, e=>toast('위치 확인 실패 — 위치 권한을 켜고 다시 시도하세요'), {enableHighAccuracy:true,timeout:12000,maximumAge:30000});
 }
 function clockIn(){ const a=attToday(); if(a&&a.in&&!a.out){toast('이미 출근 상태예요');return;}
- gpsGate('출근',()=>{ ATT[CUR]={date:todayK(),in:Date.now(),out:null,breaks:[]}; render(); toast('출근했습니다 — 좋은 하루 되세요!'); }); }
+ gpsGate('출근',()=>{ ATT[CUR]={date:todayK(),in:Date.now(),out:null,breaks:[]}; render(); reAtt(); toast('출근했습니다 — 좋은 하루 되세요!'); }); }
 function clockOut(){ const a=attToday(); if(!a||!a.in){toast('먼저 출근하세요');return;} if(a.out){toast('이미 퇴근했어요');return;}
- gpsGate('퇴근',()=>{ const b=attOpenBreak(a); if(b)b.e=Date.now(); a.out=Date.now(); render(); toast('퇴근했습니다 — 수고하셨습니다!'); }); }
+ gpsGate('퇴근',()=>{ const b=attOpenBreak(a); if(b)b.e=Date.now(); a.out=Date.now(); render(); reAtt(); toast('퇴근했습니다 — 수고하셨습니다!'); }); }
 function breakStart(){ const a=attToday(); if(!a||!a.in||a.out){toast('출근 상태에서만 가능해요');return;} if(attOpenBreak(a)){toast('이미 휴게 중이에요');return;}
- a.breaks.push({s:Date.now()}); render(); toast('휴게 시작 — 푹 쉬세요'); }
-function breakEnd(){ const a=attToday(); const b=a&&attOpenBreak(a); if(!b){toast('휴게 중이 아니에요');return;} b.e=Date.now(); render(); toast('복귀했습니다'); }
-function setStoreLoc(){ if(!navigator.geolocation){toast('이 기기는 위치를 지원하지 않아요');return;}
- toast('현재 위치 가져오는 중…');
- navigator.geolocation.getCurrentPosition(p=>{ STORE_LOC={lat:p.coords.latitude,lng:p.coords.longitude,at:Date.now()}; save(); render(); toast('현재 위치를 매장으로 설정했습니다 ✓'); },
-   e=>toast('위치 실패 — 위치 권한을 켜주세요'), {enableHighAccuracy:true,timeout:12000}); }
-function attCard(){
- const a=attToday(), st=attStatus(a);
+ a.breaks.push({s:Date.now()}); render(); reAtt(); toast('휴게 시작 — 푹 쉬세요'); }
+function breakEnd(){ const a=attToday(); const b=a&&attOpenBreak(a); if(!b){toast('휴게 중이 아니에요');return;} b.e=Date.now(); render(); reAtt(); toast('복귀했습니다'); }
+/* 오늘 실제 근무(ms) = 퇴근-출근 - 휴게합, 급여·주휴수당(하우머치식) */
+function workedMs(a){ if(!a||!a.in)return 0; const end=a.out||Date.now(); let ms=end-a.in;
+ (a.breaks||[]).forEach(b=>{ if(!b.s)return; const be=b.e||(a.out||Date.now()); ms-=Math.max(0,be-b.s); }); return Math.max(0,ms); }
+function weekSchedHours(uid){ let h=0; WEEK.forEach(d=>{getRanges(uid+'|'+d.k).forEach(r=>h+=t2n(r.e)-t2n(r.s));}); return h; }
+function juhyuPay(weekH){ if(weekH<15)return 0; return Math.round((Math.min(weekH,40)/40)*8*WAGE); }
+function reAtt(){ if($("modal")&&$("modal").classList.contains('show'))$("mbox").innerHTML=attView(); }
+function openAtt(){ openModal(attView()); }
+function setWage(){ const v=prompt('시급(원):',WAGE); if(v===null)return; const n=parseInt(String(v).replace(/[^0-9]/g,''),10); if(!n){toast('숫자를 입력하세요');return;} WAGE=n; save(); reAtt(); toast('시급을 '+won(n)+'(으)로 저장했습니다'); }
+function attView(){
+ const admin=role==='admin', a=attToday(), st=attStatus(a);
  const dot={off:'#c4cdc7',work:'#2f80ed',break:'#f5a623',done:'#8fbf9b'}[st];
  const label={off:'미출근',work:'근무 중',break:'휴게 중',done:'퇴근 완료'}[st];
  let btns;
@@ -542,12 +547,53 @@ function attCard(){
  else if(st==='work') btns=`<div class="grid2"><button class="btn sec" onclick="breakStart()">휴게 시작</button><button class="btn" onclick="clockOut()">퇴근</button></div>`;
  else if(st==='break') btns=`<div class="grid2"><button class="btn" onclick="breakEnd()">복귀</button><button class="btn sec" style="color:var(--warn);border-color:#f0d9bd" onclick="clockOut()">퇴근</button></div>`;
  else btns=`<div class="muted" style="text-align:center;padding:6px">오늘 근무 완료 · 수고하셨습니다</div>`;
- const info = a? `<div class="muted" style="font-size:11.5px;margin-top:2px">출근 ${fmtT(a.in)}${a.out?` · 퇴근 ${fmtT(a.out)}`:''}${(a.breaks||[]).length?` · 휴게 ${a.breaks.length}회`:''}</div>`:'<div class="muted" style="font-size:11.5px;margin-top:2px">아직 출근 전이에요</div>';
- const admin=role==='admin';
- const locLine = admin? `<div class="muted" style="font-size:11px;margin-top:8px">${STORE_LOC?'📍 매장 위치 설정됨':'매장 위치 미설정 — GPS 확인이 안 됩니다'} · <span class="authlink" onclick="setStoreLoc()">${STORE_LOC?'재설정':'현재 위치를 매장으로'}</span></div>`:'';
- return `<div class="card"><h3>${IC('clock','li sm')}출퇴근 · 휴게<span style="margin-left:auto;font-size:11.5px;font-weight:800;color:${dot}">● ${label}</span></h3>
-   ${info}<div style="margin-top:10px">${btns}</div>${locLine}${admin?attRoster():''}</div>`;
+ const info=a?`출근 ${fmtT(a.in)}${a.out?` · 퇴근 ${fmtT(a.out)}`:''}${(a.breaks||[]).length?` · 휴게 ${a.breaks.length}회`:''}`:'아직 출근 전이에요';
+ const ms=workedMs(a), min=Math.round(ms/60000), hh=Math.floor(min/60), mm=min%60, pay=Math.round(ms/3600000*WAGE);
+ const wH=weekSchedHours(CUR), jh=juhyuPay(wH);
+ const payBox=`<div class="card" style="margin-top:12px;background:#F6FAF4"><h3>${IC('spark','li sm')}오늘 정산 <span class="muted" style="font-weight:400;margin-left:auto">시급 ${won(WAGE)}</span></h3>
+   <div class="lrow"><span>오늘 근무시간</span><b>${hh}시간 ${mm}분</b></div>
+   <div class="lrow"><span>오늘 급여</span><b>${won(pay)}</b></div>
+   <div class="lrow"><span>이번 주 소정근로</span><b>${wH.toFixed(1)}시간</b></div>
+   <div class="lrow tot"><span>주휴수당(예상)</span><b>${jh?won(jh):'해당 없음(주15h↑)'}</b></div>
+   <div class="muted" style="font-size:10.5px;margin-top:6px">주휴수당 = 주 15시간 이상 시 (주소정/40)×8×시급 · 하우머치 방식 참고</div></div>`;
+ return `<h3>${IC('clock','li sm')}근태<span style="margin-left:auto;font-size:12px;font-weight:800;color:${dot}">● ${label}</span></h3>
+   <div class="muted" style="font-size:11.5px;margin-top:2px">${info}</div>
+   <div style="margin-top:10px">${btns}</div>
+   ${payBox}
+   ${admin?`<div class="muted" style="font-size:11px;margin-top:10px">${STORE_LOC?'📍 매장 위치 설정됨':'매장 위치 미설정 — GPS 확인 안 됨'} · <span class="authlink" onclick="setStoreLocMap()">지도에서 ${STORE_LOC?'재설정':'설정'}</span> · <span class="authlink" onclick="setWage()">시급 변경</span></div>${attRoster()}`:''}
+   <button class="btn sec" style="margin-top:14px" onclick="closeModal()">닫기</button>`;
 }
+/* ── 지도(Leaflet)로 매장 위치 지정 ── */
+let _lmap=null,_lmarker=null;
+function loadLeaflet(cb){
+ if(window.L){cb();return;}
+ const css=document.createElement('link');css.rel='stylesheet';css.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';document.head.appendChild(css);
+ const js=document.createElement('script');js.src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';js.onload=cb;js.onerror=()=>toast('지도 로드 실패 — 인터넷을 확인하세요');document.head.appendChild(js);
+}
+function setStoreLocMap(){
+ openModal(`<h3>매장 위치 설정</h3>
+   <div class="muted" style="font-size:11.5px;margin-bottom:6px">지도를 눌러 <b>매장 중심</b>에 핀을 맞춘 뒤 저장하세요. 반경 <b>${STORE_RADIUS}m</b> 안에서만 출퇴근됩니다.</div>
+   <div id="lmap" style="height:300px;border-radius:8px;border:1px solid var(--edge);background:#eef2ee"></div>
+   <div class="row" style="margin-top:10px"><button class="btn sec" onclick="locateMe()">📍 내 위치로</button><button class="btn" onclick="saveMapLoc()">이 위치로 저장</button></div>
+   <button class="btn sec" style="margin-top:8px" onclick="openAtt()">← 근태로 돌아가기</button>`);
+ loadLeaflet(()=>initStoreMap());
+}
+function initStoreMap(){
+ const el=$("lmap"); if(!el||!window.L)return;
+ const c=STORE_LOC?[STORE_LOC.lat,STORE_LOC.lng]:[37.5665,126.9780];
+ _lmap=L.map(el).setView(c, STORE_LOC?17:12);
+ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(_lmap);
+ _lmarker=L.marker(c,{draggable:true}).addTo(_lmap);
+ if(STORE_LOC)L.circle(c,{radius:STORE_RADIUS,color:'#3FA05A',fillOpacity:.08}).addTo(_lmap);
+ _lmap.on('click',e=>_lmarker.setLatLng(e.latlng));
+ setTimeout(()=>_lmap.invalidateSize(),200);
+ if(!STORE_LOC)locateMe();
+}
+function locateMe(){ if(!navigator.geolocation){toast('이 기기는 위치를 지원하지 않아요');return;} toast('내 위치 확인 중…');
+ navigator.geolocation.getCurrentPosition(p=>{ const ll=[p.coords.latitude,p.coords.longitude]; if(_lmap){_lmap.setView(ll,18);_lmarker.setLatLng(ll);} },
+   e=>toast('위치 실패 — 위치 권한을 켜주세요'), {enableHighAccuracy:true,timeout:12000}); }
+function saveMapLoc(){ if(!_lmarker){toast('지도가 아직 안 떴어요 — 잠시 후 다시');return;} const ll=_lmarker.getLatLng();
+ STORE_LOC={lat:ll.lat,lng:ll.lng,at:Date.now()}; save(); toast('매장 위치를 저장했습니다 ✓'); openAtt(); }
 function attRoster(){
  const rows=STAFF.map(s=>{const a=ATT[s.id], cur=(a&&a.date===todayK())?a:null, st=attStatus(cur);
    if(st==='off')return '';
@@ -670,7 +716,8 @@ function screenHome(){
  <div class="hero"><div class="hi">${n.getFullYear()}년 ${n.getMonth()+1}월 ${n.getDate()}일 ${WD[n.getDay()]}요일</div>
    <div class="big">안녕하세요, ${hon(curUser().name)}</div>
    <div class="sh">${IC('clock','li sm')}오늘 근무 · ${todayShift||'휴무'}</div></div>
- ${attCard()}
+ ${(()=>{const a=attToday(),s=attStatus(a);const sf=s==='work'?' · 근무 중':s==='break'?' · 휴게 중':s==='done'?' · 퇴근':'';
+   return `<button class="btn" style="margin-bottom:12px" onclick="openAtt()">${IC('clock','li sm')} 근태 · 출퇴근 / 휴게${sf}</button>`;})()}
  <div class="grid2" style="margin-bottom:12px">
    <div class="qbtn" onclick="go('sched')">${IC('cal')}시간표</div>
    <div class="qbtn" onclick="go('close')">${IC('check')}오픈·마감 체크</div>
