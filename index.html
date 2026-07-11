@@ -329,7 +329,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='1.4.5'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='1.4.6'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com'];
@@ -595,6 +595,7 @@ function screenHome(){
    <div class="qbtn" onclick="go('manual')">${IC('book')}매뉴얼·레시피</div>
    <div class="qbtn" onclick="go('notice')">${IC('bell')}공지·발주 ${newsCnt?`<span class="bdg">${newsCnt}</span>`:''}</div>
  </div>
+ ${role==='admin'?`<div class="qbtn" style="margin-bottom:12px" onclick="staffManage()">${IC('user')}직원 관리 <span class="muted" style="font-weight:400;font-size:11px">· 대표님·매니저</span></div>`:''}
  <div class="card note-card"><h3>${IC('bell','li sm')}최근 공지</h3>
    <div class="muted">${NOTICES[0]?NOTICES[0].bd:'등록된 공지가 없습니다.'}</div></div>
  <div class="card"><h3>${IC('tv','li sm')}매장 TV</h3>
@@ -660,7 +661,7 @@ function screenSched(){
     <button class="btn sec" style="${onlyMine?'background:var(--deep);color:#fff;border-color:var(--deep)':''}" onclick="onlyMine=!onlyMine;render()">${onlyMine?'전체 보기':'내 근무만'}</button>
     ${admin?`<button class="btn sec" onclick="copyLastWeek()">지난주 복사</button>
     <button class="btn sec" onclick="autoFill()">기본 패턴</button>
-    <button class="btn sec" onclick="staffManage()">직원 관리</button>`:''}</div>`;
+    <button class="btn sec" style="color:var(--warn);border-color:#f0d9bd" onclick="resetWeek()">시간표 초기화</button>`:''}</div>`;
  const view=renderGrid();
  return `<h2 class="title">${IC('cal')}시간표</h2>
    <div class="card note-card"><div class="muted" style="font-size:12px">
@@ -765,6 +766,10 @@ function saveCell(){
  toast(`${STAFF.find(s=>s.id===sid).name} ${rs.map(r=>r.s+'~'+r.e).join(', ')} 저장`);}
 function delCell(){const key=ecStaff+'|'+ecDay;if(getRanges(key).length){delete SHIFTS[key];closeModal();render();toast('근무를 삭제했습니다');}else closeModal();}
 function autoFill(){seedWeek(WEEK);render();toast('기본 패턴이 채워졌습니다 — 검토 후 수정하세요');}
+function resetWeek(){
+ if(!confirm(`${WEEK[0].m}/${WEEK[0].d} ~ ${WEEK[6].m}/${WEEK[6].d} 주간 시간표를 모두 지울까요?`))return;
+ WEEK.forEach(d=>STAFF.forEach(s=>{delete SHIFTS[s.id+'|'+d.k];}));
+ render();toast('이번 주 시간표를 초기화했습니다 — 공유하려면 시간표 공유를 누르세요');}
 function copyLastWeek(){
  const prev=buildWeek(weekOffset-1);
  let n=0;
