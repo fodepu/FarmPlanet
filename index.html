@@ -332,7 +332,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='1.6.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='1.6.2'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com'];
@@ -572,25 +572,30 @@ function loadLeaflet(cb){
 }
 function setStoreLocMap(){
  openModal(`<h3>매장 위치 설정</h3>
-   <div class="muted" style="font-size:11.5px;margin-bottom:6px">지도를 눌러 <b>매장 중심</b>에 핀을 맞춘 뒤 저장하세요. 반경 <b>${STORE_RADIUS}m</b> 안에서만 출퇴근됩니다.</div>
-   <div id="lmap" style="height:300px;border-radius:8px;border:1px solid var(--edge);background:#eef2ee"></div>
+   <div class="muted" style="font-size:11.5px;margin-bottom:6px">위성으로 건물까지 확대해 <b>매장 중심(입구)</b>을 누르세요. 우측 상단에서 위성/지도 전환. 반경 <b>${STORE_RADIUS}m</b> 안에서만 출퇴근됩니다.</div>
+   <div id="lmap" style="height:340px;border-radius:8px;border:1px solid var(--edge);background:#eef2ee"></div>
    <div class="row" style="margin-top:10px"><button class="btn sec" onclick="locateMe()">📍 내 위치로</button><button class="btn" onclick="saveMapLoc()">이 위치로 저장</button></div>
    <button class="btn sec" style="margin-top:8px" onclick="openAtt()">← 근태로 돌아가기</button>`);
  loadLeaflet(()=>initStoreMap());
 }
+let _lcircle=null;
 function initStoreMap(){
  const el=$("lmap"); if(!el||!window.L)return;
  const c=STORE_LOC?[STORE_LOC.lat,STORE_LOC.lng]:[37.5665,126.9780];
- _lmap=L.map(el).setView(c, STORE_LOC?17:12);
- L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(_lmap);
+ _lmap=L.map(el,{maxZoom:21}).setView(c, STORE_LOC?19:16);
+ const sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:21,maxNativeZoom:19,attribution:'Esri 위성'});
+ const street=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'});
+ sat.addTo(_lmap);
+ L.control.layers({'위성':sat,'지도(글자)':street},null,{position:'topright'}).addTo(_lmap);
  _lmarker=L.marker(c,{draggable:true}).addTo(_lmap);
- if(STORE_LOC)L.circle(c,{radius:STORE_RADIUS,color:'#3FA05A',fillOpacity:.08}).addTo(_lmap);
+ const drawCircle=()=>{ if(_lcircle)_lmap.removeLayer(_lcircle); _lcircle=L.circle(_lmarker.getLatLng(),{radius:STORE_RADIUS,color:'#3FA05A',fillOpacity:.1}).addTo(_lmap); };
+ drawCircle(); _lmarker.on('move',drawCircle);
  _lmap.on('click',e=>_lmarker.setLatLng(e.latlng));
  setTimeout(()=>_lmap.invalidateSize(),200);
  if(!STORE_LOC)locateMe();
 }
 function locateMe(){ if(!navigator.geolocation){toast('이 기기는 위치를 지원하지 않아요');return;} toast('내 위치 확인 중…');
- navigator.geolocation.getCurrentPosition(p=>{ const ll=[p.coords.latitude,p.coords.longitude]; if(_lmap){_lmap.setView(ll,18);_lmarker.setLatLng(ll);} },
+ navigator.geolocation.getCurrentPosition(p=>{ const ll=[p.coords.latitude,p.coords.longitude]; if(_lmap){_lmap.setView(ll,20);_lmarker.setLatLng(ll);} },
    e=>toast('위치 실패 — 위치 권한을 켜주세요'), {enableHighAccuracy:true,timeout:12000}); }
 function saveMapLoc(){ if(!_lmarker){toast('지도가 아직 안 떴어요 — 잠시 후 다시');return;} const ll=_lmarker.getLatLng();
  STORE_LOC={lat:ll.lat,lng:ll.lng,at:Date.now()}; save(); toast('매장 위치를 저장했습니다 ✓'); openAtt(); }
