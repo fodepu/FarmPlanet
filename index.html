@@ -218,32 +218,26 @@ const IC=(n,cls='li')=>`<svg class="${cls}"><use href="#i-${n}"/></svg>`;
 
 /* ═══════════ 고정 데이터 (레시피·매뉴얼·체크리스트) ═══════════ */
 const RECIPES = [
- {n:"카페라떼",c:"커피",t:["HOT","ICE"],ing:[["HOT","샷 + 중형 피처 스팀"],["ICE","얼음 / 우유 180g"]]},
- {n:"연유라떼",c:"커피",t:["ICE"],ing:[["얼음","가득"],["우유","180g"],["연유","30g"]]},
- {n:"바닐라빈 라떼",c:"커피",t:["HOT","ICE"],ing:[["HOT","샷 + 바닐라시럽 → 중형 스팀"],["ICE","얼음 / 우유 180g / 바닐라빈 1스푼"]]},
- {n:"카페모카",c:"커피",t:["HOT","ICE"],ing:[["HOT","샷 + 초코시럽 1.5펌프 + 설탕 1T → 중형 스팀"],["ICE","얼음 / 우유 180g / 모카샷 / 초코 1.5펌프"]]},
- {n:"솔티드 카라멜",c:"커피",t:["HOT","ICE"],ing:[["베이스","솔티드카라멜 베이스 + 크림 + 소금 소량"],["샷/시럽","2샷 / 카라멜시럽 1.5펌프 / 설탕 1T"]]},
- {n:"카푸치노",c:"커피",t:["HOT"],ing:[["구성","샷 + 소형 피처 스팀"]]},
- {n:"에스프레소",c:"커피",t:["HOT"],ing:[["구성","샷"]]},
- {n:"밀크 바닐라",c:"커피",t:["HOT","ICE"],ing:[["우유","200g"],["바닐라빈","계량스푼 1"]]},
- {n:"밀크티 바닐라",c:"커피",t:["HOT","ICE"],ing:[["HOT","밀크티 1스푼 + 중형 스팀"],["ICE","얼음 / 우유 200g / 밀크티 1스푼"]]},
- {n:"핫초코",c:"커피",t:["HOT"],ing:[["초코","시럽 1펌프 / 파우더 0.5스푼"],["방법","뜨거운 물로 녹인 후 소형 피처 스팀 혼합"]]},
- {n:"복숭아 에이드",c:"에이드",t:["ICE"],ing:[["복숭아청","40g"],["토닉워터","1캔"],["간얼음","1스쿱"],["가니쉬","레몬 한 조각"]]},
- {n:"자두 에이드",c:"에이드",t:["ICE"],ing:[["자두청","40g"],["토닉워터","1캔"],["간얼음","1스쿱"],["가니쉬","레몬 한 조각"]]},
- {n:"생레몬 에이드",c:"에이드",t:["ICE"],ing:[["레몬청","계량스푼 2 (레몬즙 2T)"],["토닉워터","1캔"],["레몬","한 조각"]]},
- {n:"바나나 밀크쉐이크",c:"스무디",t:["ICE"],ing:[["우유","180g"],["얼린 바나나","1개"],["꿀","한 바퀴 반"],["얼음","5개"],["대체","바나나1(생)/꿀2바퀴/얼음7"]]},
- {n:"단백질 쉐이크",c:"스무디",t:["ICE"],ing:[["우유","180g"],["꿀","14g"],["프로틴","7g"],["귀리가루","1스푼"],["얼음","6개"]]},
- {n:"복숭아 스무디",c:"스무디",t:["ICE"],ing:[["복숭아","70g"],["얼음","330g"],["물","100g"]]},
- {n:"자두 스무디",c:"스무디",t:["ICE"],ing:[["자두","70g"],["얼음","330g"],["물","100g"]]},
- {n:"시즌 생과일주스",c:"주스",t:["ICE"],ing:[["과일","오렌지+포도+키위 200g"],["설탕","2t"],["얼음","5개"],["레몬즙","세 바퀴"]]},
- {n:"수박 주스",c:"주스",t:["ICE"],ing:[["수박","230g"],["설탕","2t"],["얼음","5개"]]},
- {n:"한라봉 주스",c:"주스",t:["ICE"],ing:[["한라봉","180g"],["설탕","3t"],["얼음","6개"]]},
- {n:"귤 주스",c:"주스",t:["ICE"],ing:[["귤","180g"],["설탕","2t"],["얼음","5개"]]},
- {n:"캐모마일 레몬 (ICE)",c:"티",t:["ICE"],ing:[["소형 피처","물 + 캐모마일 우림"],["대형 피처","얼음 가득 → 칠링"],["컵","얼음 가득 / 레몬 2T / 가니쉬"]]},
- {n:"캐모마일 (ICE)",c:"티",t:["ICE"],ing:[["과정","소형 우림 → 대형 칠링 → 컵 얼음 가득"]]},
- {n:"캐모마일 레몬 (HOT)",c:"티",t:["HOT"],ing:[["티백","캐모마일"],["레몬청","계량스푼 2"],["레몬","3~4조각"],["물","뜨거운 물(최대)"]]},
- {n:"레몬차",c:"티",t:["HOT"],ing:[["레몬청","계량스푼 2"],["레몬","3~4조각"],["물","뜨거운 물(최대)"]]},
- {n:"딸기 레몬",c:"티",t:["HOT"],ing:[["티백","딸기"],["레몬청","계량스푼 2"],["레몬","두 조각"]]},
+ {n:"카페라떼",c:"커피",t:["HOT","ICE"],ing:[["우유","180g"]]},
+ {n:"연유라떼",c:"커피",t:["ICE"],ing:[["우유","180g"],["연유","30g"]]},
+ {n:"바닐라빈 라떼",c:"커피",t:["HOT","ICE"],ing:[["우유","180g"],["바닐라빈","30 (계량스푼 1)"]]},
+ {n:"카페모카",c:"커피",t:["HOT","ICE"],ing:[["우유","180g"],["초코시럽","1.5펌프"],["설탕","1tt"]]},
+ {n:"솔티드 카라멜",c:"커피",t:["HOT","ICE"],ing:[["샷","2샷"],["카라멜시럽","1.5펌프"],["설탕","1tt"]]},
+ {n:"밀크 바닐라",c:"음료",t:["HOT","ICE"],ing:[["우유","200g"],["바닐라빈","계량스푼 1"]]},
+ {n:"밀크티 바닐라",c:"음료",t:["HOT","ICE"],ing:[["우유","200g"],["밀크티","계량스푼 1"]]},
+ {n:"멜팅 핫초코",c:"음료",t:["HOT"],ing:[["우유","200g"],["밀크티","계량스푼 1"]]},
+ {n:"에이드",c:"에이드",t:["ICE"],ing:[["시럽","40"],["토닉워터","1"],["간얼음","1"],["레몬","한 조각"]]},
+ {n:"생레몬 에이드",c:"에이드",t:["ICE"],ing:[["레몬청","계량스푼 2"],["토닉워터","1"],["레몬","한 조각"]]},
+ {n:"스무디",c:"스무디",t:["ICE"],ing:[["시럽","70"],["물","디카페인 잔 1"],["얼음","330g"]]},
+ {n:"바나나 밀크쉐이크",c:"스무디",t:["ICE"],ing:[["우유","180g"],["바나나","1"],["꿀","한 바퀴 반"],["얼음","5"]]},
+ {n:"단백질 쉐이크",c:"스무디",t:["ICE"],ing:[["우유","180g"],["프로틴","7g"],["가루","한 스푼"],["꿀","한 바퀴 반"],["얼음","6"]]},
+ {n:"시즌 생과일주스",c:"주스",t:["ICE"],ing:[["과일","오렌지+포도+키위 200g"],["설탕","2t"],["얼음","5"],["레몬즙","세 바퀴"]]},
+ {n:"수박 주스",c:"주스",t:["ICE"],ing:[["수박","230g"],["설탕","2t"],["얼음","5"]]},
+ {n:"한라봉 주스",c:"주스",t:["ICE"],ing:[["한라봉","180g"],["설탕","3t"],["얼음","6"]]},
+ {n:"귤 주스",c:"주스",t:["ICE"],ing:[["귤","180g"],["설탕","2t"],["얼음","5"]]},
+ {n:"레몬차",c:"티",t:["HOT"],ing:[["물","250g"],["레몬청","계량스푼 2"],["레몬","3~4 조각"]]},
+ {n:"캐모마일 레몬",c:"티",t:["HOT"],ing:[["물","250g"],["캐모마일","티백"],["레몬청","계량스푼 2"],["레몬","3~4 조각"]]},
+ {n:"딸기 레몬",c:"티",t:["HOT"],ing:[["물","250g"],["딸기","티백"],["레몬청","계량스푼 2"],["레몬","두 조각"]]},
  {n:"바닐라 베이스",c:"베이스",t:[],ing:[["우유","한 팩"],["바닐라빈","계량스푼 5"]]},
 ];
 const SMARTFLAT_URL='https://www.smartflat.co.kr/'; // 실제 관리자 주소로 교체 가능
@@ -332,7 +326,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='1.6.7'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='1.7.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com'];
@@ -548,19 +542,13 @@ function attView(){
  else if(st==='break') btns=`<div class="grid2"><button class="btn" onclick="breakEnd()">복귀</button><button class="btn sec" style="color:var(--warn);border-color:#f0d9bd" onclick="clockOut()">퇴근</button></div>`;
  else btns=`<div class="muted" style="text-align:center;padding:6px">오늘 근무 완료 · 수고하셨습니다</div>`;
  const info=a?`출근 ${fmtT(a.in)}${a.out?` · 퇴근 ${fmtT(a.out)}`:''}${(a.breaks||[]).length?` · 휴게 ${a.breaks.length}회`:''}`:'아직 출근 전이에요';
- const ms=workedMs(a), min=Math.round(ms/60000), hh=Math.floor(min/60), mm=min%60, pay=Math.round(ms/3600000*WAGE);
- const wH=weekSchedHours(CUR), jh=juhyuPay(wH);
- const payBox=`<div class="card" style="margin-top:12px;background:#F6FAF4"><h3>${IC('spark','li sm')}오늘 정산 <span class="muted" style="font-weight:400;margin-left:auto">시급 ${won(WAGE)}</span></h3>
-   <div class="lrow"><span>오늘 근무시간</span><b>${hh}시간 ${mm}분</b></div>
-   <div class="lrow"><span>오늘 급여</span><b>${won(pay)}</b></div>
-   <div class="lrow"><span>이번 주 소정근로</span><b>${wH.toFixed(1)}시간</b></div>
-   <div class="lrow tot"><span>주휴수당(예상)</span><b>${jh?won(jh):'해당 없음(주15h↑)'}</b></div>
-   <div class="muted" style="font-size:10.5px;margin-top:6px">주휴수당 = 주 15시간 이상 시 (주소정/40)×8×시급 · 하우머치 방식 참고</div></div>`;
+ const min=Math.round(workedMs(a)/60000);
+ const workLine=(a&&a.in)?`<div class="lrow" style="margin-top:10px"><span>오늘 근무시간</span><b>${Math.floor(min/60)}시간 ${min%60}분</b></div>`:'';
  return `<h3>${IC('clock','li sm')}근태<span style="margin-left:auto;font-size:12px;font-weight:800;color:${dot}">● ${label}</span></h3>
    <div class="muted" style="font-size:11.5px;margin-top:2px">${info}</div>
    <div style="margin-top:10px">${btns}</div>
-   ${payBox}
-   ${admin?`<div class="muted" style="font-size:11px;margin-top:10px">${STORE_LOC?'📍 매장 위치 설정됨':'매장 위치 미설정 — GPS 확인 안 됨'} · <span class="authlink" onclick="setStoreLocMap()">지도에서 ${STORE_LOC?'재설정':'설정'}</span> · <span class="authlink" onclick="setWage()">시급 변경</span></div>${attRoster()}`:''}
+   ${workLine}
+   ${admin?`<div class="muted" style="font-size:11px;margin-top:12px">${STORE_LOC?'매장 위치 설정됨':'매장 위치 미설정 — GPS 확인 안 됨'} · <span class="authlink" onclick="setStoreLocMap()">${STORE_LOC?'위치 재설정':'매장 위치 설정'}</span></div>${attRoster()}`:''}
    <button class="btn sec" style="margin-top:14px" onclick="closeModal()">닫기</button>`;
 }
 /* ── 카카오맵으로 매장 위치 지정 (상호명 검색 + 위성) ── */
@@ -575,15 +563,20 @@ function loadKakao(cb){
  s.onerror=()=>toast('카카오맵 로드 실패 — 키·도메인 등록을 확인하세요');
  document.head.appendChild(s);
 }
+function saveHereAsStore(){ if(!navigator.geolocation){toast('이 기기는 위치를 지원하지 않아요');return;} toast('현재 위치 확인 중…');
+ navigator.geolocation.getCurrentPosition(p=>{ STORE_LOC={lat:p.coords.latitude,lng:p.coords.longitude,at:Date.now()}; save(); toast('현재 위치를 매장으로 저장했습니다 ✓'); openAtt(); },
+   e=>toast('위치 실패 — 위치 권한을 켜주세요'), {enableHighAccuracy:true,timeout:12000}); }
 function setStoreLocMap(){
  openModal(`<h3>매장 위치 설정</h3>
+   <button class="btn" style="margin-bottom:10px" onclick="saveHereAsStore()">매장에서 · 현재 위치를 매장으로 저장</button>
+   <div class="muted" style="font-size:11px;margin-bottom:10px">가장 간단: 매장 안에서 위 버튼을 누르면 지도 없이 바로 등록됩니다. 아래 지도는 원격으로 지정할 때만 쓰세요.</div>
    <div class="row" style="gap:6px;margin-bottom:8px">
      <input class="tsel" id="geoQ" style="flex:1" placeholder="매장명 검색 (예: 스타벅스 판교…)" onkeydown="if(event.key==='Enter'){geoSearch();return false;}">
      <button class="btn" style="width:auto;padding:0 14px" onclick="geoSearch()">검색</button></div>
    <div id="geoRes" style="margin-bottom:8px"></div>
    <div class="muted" style="font-size:11.5px;margin-bottom:6px">매장명·주소를 검색해 결과를 누르면 이동합니다. 위성에서 <b>매장 입구</b>에 핀을 맞추고 저장하세요. 반경 <b>${STORE_RADIUS}m</b> 안에서만 출퇴근됩니다.</div>
    <div id="lmap" style="height:320px;border-radius:8px;border:1px solid var(--edge);background:#eef2ee"></div>
-   <div class="row" style="margin-top:10px"><button class="btn sec" onclick="locateMe()">📍 내 위치로</button><button class="btn" onclick="saveMapLoc()">이 위치로 저장</button></div>
+   <div class="row" style="margin-top:10px"><button class="btn sec" onclick="locateMe()">내 위치로</button><button class="btn" onclick="saveMapLoc()">이 위치로 저장</button></div>
    <button class="btn sec" style="margin-top:8px" onclick="openAtt()">← 근태로 돌아가기</button>`);
  loadKakao(()=>initStoreMap());
 }
