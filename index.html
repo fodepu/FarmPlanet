@@ -98,7 +98,7 @@ input.inp{min-height:auto}
 .oday.fold{background:transparent;border:1.5px dashed var(--edge);color:var(--sub);font-weight:700}
 .oday .odmeta{margin-left:auto;font-weight:400;font-size:11px}
 .oday .odchev{font-weight:700;font-size:11px;flex:none}
-.ordscroll{max-height:52vh;overflow-y:auto;-webkit-overflow-scrolling:touch;margin-bottom:10px}
+.ordscroll{max-height:52vh;overflow-y:auto;overscroll-behavior:contain;margin-bottom:10px}
 .ometa{font-size:10.5px;color:var(--sub);margin:0 0 3px 4px}
 .obub{background:#fff;border:1px solid var(--edge);border-radius:2px 10px 10px 10px;padding:9px 10px;display:flex;align-items:center;gap:6px;max-width:100%}
 .obx{width:19px;height:19px;border-radius:5px;border:1.6px solid #cfd8cf;flex:none;display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff}
@@ -344,7 +344,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='1.8.3'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='1.9.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com'];
@@ -500,6 +500,7 @@ function load(){
 }
 function isFixedOwner(s){return !!s && ADMIN_EMAILS.includes((s.email||'').toLowerCase());} // 대표님(고정)
 function isOwner(s){return isFixedOwner(s) || (!!s && !!s.admin);} // 대표님 또는 관리자 지정
+function schedName(s){ const n=(s&&s.name)||''; if(isFixedOwner(s)||n.length<3)return n; return n.slice(-2); } // 시간표는 이름만(성 떼기)
 function isAdmin(s){return isOwner(s) || (!!s && !!s.mgr);}
 function resetAll(){askConfirm('<b>모든 데이터</b>(시간표·발주·공지·체크)를 초기화합니다.<br>되돌릴 수 없어요.','전체 초기화',()=>{
  localStorage.removeItem(SKEY);defaults();render();toast('초기화되었습니다');});}
@@ -566,6 +567,22 @@ function attElapsed(){ const a=attToday(); if(!a)return 0; const st=attStatus(a)
 function tickAtt(){ if(tab!=='att'||!CUR)return; const el=$('aClock'); if(!el)return; const st=attStatus(attToday()); if(st==='work'||st==='break')el.textContent=fmtHMS(attElapsed()); }
 setInterval(tickAtt,1000);
 function confirmClockOut(){ askConfirm('퇴근하시겠어요? 오늘 근무를 종료합니다.','퇴근',()=>clockOut()); }
+function parseTs(v){ const m=String(v).trim().match(/^(\d{1,2}):?(\d{2})$/); if(!m)return null; const h=+m[1],mm=+m[2]; if(h>23||mm>59)return null; const d=new Date(); d.setHours(h,mm,0,0); return d.getTime(); }
+function editAtt(){ const a=attToday(); if(!a){toast('오늘 출근 기록이 없어요');return;}
+ openModal(`<h3>근태 기록 수정 · ${curUser().name}</h3>
+   <div class="muted" style="font-size:11.5px;margin-bottom:10px">실수로 누른 출근·퇴근을 바로잡을 수 있어요.</div>
+   <div class="fld"><label>출근 시각</label><input id="atIn" class="tsel" value="${fmtT(a.in)}" placeholder="12:30" autocomplete="off"></div>
+   <div class="fld" style="margin-top:8px"><label>퇴근 시각 <span class="muted">(비우면 다시 근무 중)</span></label><input id="atOut" class="tsel" value="${a.out?fmtT(a.out):''}" placeholder="16:00" autocomplete="off"></div>
+   <div class="row" style="margin-top:12px"><button class="btn sec" onclick="go('att')">취소</button><button class="btn" onclick="saveAtt()">저장</button></div>
+   <button class="btn sec" style="margin-top:8px;color:var(--warn);border-color:#f0d9bd" onclick="clearAtt()">출근 기록 삭제(미출근으로)</button>`);
+ setTimeout(()=>{const el=$('atIn');if(el)el.focus();},50); }
+function saveAtt(){ const a=attToday(); if(!a)return;
+ const ti=parseTs($('atIn').value); if(!ti){toast('출근 시각 형식 확인 (예: 12:30)');return;} a.in=ti;
+ const ov=($('atOut')?$('atOut').value:'').trim();
+ if(ov){ const to=parseTs(ov); if(!to){toast('퇴근 시각 형식 확인');return;} a.out=to; }
+ else { a.out=null; const b=attOpenBreak(a); if(b)b.e=null; }
+ save(); go('att'); toast('근태 기록을 수정했습니다'); }
+function clearAtt(){ askConfirm('오늘 출근 기록을 삭제하고 <b>미출근</b>으로 되돌릴까요?','삭제',()=>{ delete ATT[CUR]; save(); go('att'); toast('출근 기록을 삭제했습니다'); }); }
 function screenAtt(){
  const admin=isAdmin(curUser()), a=attToday(), st=attStatus(a);
  const td=TODAY(), shift=td?rangesLabel(CUR+'|'+td.k):'';
@@ -588,8 +605,9 @@ function screenAtt(){
      <div class="atimer done"><div class="albl">오늘 근무</div><div class="aclock">${fmtDur(workedMs(a))}</div></div>
      <div class="asum">출근 ${fmtT(a.in)} · 퇴근 ${fmtT(a.out)} · 휴게 ${a.breaks.length}회</div>`;
  }
+ const editLink = a? `<div style="text-align:center;margin-top:14px;padding-top:10px;border-top:1px solid var(--edge)"><span class="authlink" onclick="editAtt()">잘못 눌렀나요? 기록 수정</span></div>`:'';
  const adminBox = admin? `<div class="muted" style="font-size:11px;margin-top:14px">${STORE_LOC?'매장 위치 설정됨':'매장 위치 미설정 — GPS 확인 안 됨'} · <span class="authlink" onclick="setStoreLocMap()">${STORE_LOC?'위치 재설정':'매장 위치 설정'}</span></div>${attRoster()}`:'';
- return `<h2 class="title">${IC('clock')}근태</h2><div class="card">${body}</div>${adminBox}`;
+ return `<h2 class="title">${IC('clock')}근태</h2><div class="card">${body}${editLink}</div>${adminBox}`;
 }
 function setWage(){ const v=prompt('시급(원):',WAGE); if(v===null)return; const n=parseInt(String(v).replace(/[^0-9]/g,''),10); if(!n){toast('숫자를 입력하세요');return;} WAGE=n; save(); reAtt(); toast('시급을 '+won(n)+'(으)로 저장했습니다'); }
 function attView(){
@@ -754,9 +772,9 @@ function onFbLogin(email){
    const gb=$('gsiButton'); if(gb)gb.style.display='none';
    showAuthOverlay(true);
    authMsg(`<div style="font-weight:800;color:var(--ink);font-size:13px;margin-bottom:3px">${email}</div>
-     처음 오셨네요! 시간표에 표시될 <b>이름</b>을 정해주세요.
+     처음 오셨네요! <b>이름(성 포함)</b>을 입력하세요. 예: 김주함, 유예흔
      <div style="margin-top:10px;display:flex;gap:6px">
-       <input id="signName" class="tsel" style="flex:1" placeholder="이름" autocomplete="off" onkeydown="if(event.key==='Enter')finishSignup()">
+       <input id="signName" class="tsel" style="flex:1" placeholder="성 포함 이름 (예: 김주함)" autocomplete="off" onkeydown="if(event.key==='Enter')finishSignup()">
        <button class="btn" style="width:auto;padding:0 18px" onclick="finishSignup()">시작</button></div>
      <div style="margin-top:10px"><span class="authlink" onclick="fbRelogin()">다른 계정으로</span></div>`);
    setTimeout(()=>{const i=$('signName'); if(i)i.focus();},60); }
@@ -767,16 +785,17 @@ let pendingEmail='';
 function resolveSignup(name){
  name=(name||'').trim();
  let s=STAFF.find(x=>x.name===name && !x.email);           // 정확히 같은 이름
- if(s) return {existing:s, display:s.name};
- s=STAFF.find(x=>x.name && name!==x.name && name.endsWith(x.name) && !x.email); // '성+기존이름'
- if(s) return {existing:s, display:s.name};
- return {existing:null, display:name};                      // 신규(성 유지)
+ if(s) return {existing:s, display:name};
+ // '성+기존이름'(예: 유예흔 → 기존 예흔) 또는 기존이 성포함이고 입력이 이름만인 경우까지 통합
+ s=STAFF.find(x=>x.name && !x.email && (name.endsWith(x.name) || x.name.endsWith(name)));
+ if(s) return {existing:s, display:name.length>=(s.name||'').length?name:s.name}; // 더 긴(성 포함) 이름 채택
+ return {existing:null, display:name};
 }
 function finishSignup(){
  const el=$('signName'); const nm=(el?el.value:'').trim();
  if(!nm){toast('이름을 입력하세요');return;}
  const r=resolveSignup(nm); let s;
- if(r.existing){ s=r.existing; s.email=pendingEmail; }
+ if(r.existing){ s=r.existing; s.name=r.display; s.email=pendingEmail; } // 기존 직원에 통합 + 성 포함 이름으로
  else { s={id:'u'+Date.now(),name:r.display,email:pendingEmail,wage:MINWAGE,c:PALETTE[STAFF.length%PALETTE.length],mgr:false}; STAFF.push(s); }
  if(MANAGER_EMAILS.includes((pendingEmail||'').toLowerCase())) s.mgr=true;
  CUR=s.id; role=isAdmin(s)?'admin':'staff'; tab='home';
@@ -912,7 +931,7 @@ function renderGrid(){
    const cvColor=c.count===0?'#c4cdc7':(ok?'#1E6B3C':'#c2410c');
    const blocks=segs.map(g=>{
      const top=(g.a-OPEN_H)/span*100, h=(g.b-g.a)/span*100;
-     const lbl=`${g.s.name}<span class="wt">${cT(g.sh.s)}&thinsp;~&thinsp;${cT(g.sh.e)}</span>`;
+     const lbl=`${schedName(g.s)}<span class="wt">${cT(g.sh.s)}&thinsp;~&thinsp;${cT(g.sh.e)}</span>`;
      let left=0,width=100,z=0,cls='wsh';
      if(g.lane>0){ const W=46; width=W; z=g.lane; cls='wsh ov'; left=(g.lane%2===1)?100-W:0; }
      return `<div class="${cls}" style="top:${top}%;height:${h}%;left:${left}%;width:${width}%;background:${g.s.c};z-index:${z}"
@@ -967,7 +986,7 @@ function editShift(dkey){
  if(!free.length){toast('이 날은 전원 편성되어 있어요 — 블록을 눌러 수정하세요');return;}
  ecStaff=null; ecDay=dkey;
  openModal(`<h3>${d.m}/${d.d}(${d.w}) — 근무 추가</h3>
-   <div class="fld"><label>직원</label><select id="ecW" class="tsel">${free.map(s=>`<option value="${s.id}">${s.name}</option>`).join('')}</select></div>
+   <div class="fld"><label>직원</label><select id="ecW" class="tsel">${free.map(s=>`<option value="${s.id}">${schedName(s)}</option>`).join('')}</select></div>
    ${T_INPUT('')}
    <div class="row"><button class="btn sec" onclick="closeModal()">닫기</button><button class="btn" onclick="saveCell()">저장</button></div>`);
  $('ecT').focus();
