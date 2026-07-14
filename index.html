@@ -344,7 +344,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='1.8.2'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='1.8.3'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com'];
@@ -1207,7 +1207,7 @@ function screenNotice(){
    const waitCnt=ORDERS.filter(o=>o.st==='wait').length;
    const groups={}, days=[];
    ORDERS.forEach((o,i)=>{ const day=(o.dt||'').split(' ')[0]||'-'; if(!groups[day]){groups[day]=[];days.push(day);} groups[day].push({o,i}); });
-   days.sort((a,b)=>{const pa=a.split('/').map(Number),pb=b.split('/').map(Number); return (pa[0]*100+(pa[1]||0))-(pb[0]*100+(pb[1]||0));});
+   days.sort((a,b)=>{const pa=a.split('/').map(Number),pb=b.split('/').map(Number); return (pb[0]*100+(pb[1]||0))-(pa[0]*100+(pa[1]||0));}); // 최신 날짜 위로
    const listHtml=days.map(day=>{
      const items=groups[day], pend=items.filter(x=>x.o.st==='wait').length, allDone=pend===0, exp=ordExpanded(day,pend>0);
      const head=exp
