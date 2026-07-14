@@ -92,8 +92,10 @@ input.inp{min-height:auto}
 .note .bd{font-size:12.5px;line-height:1.65;color:#3d4f42}
 /* 발주방 */
 .omsg{margin-bottom:6px}
-.oday{text-align:center;font-size:10.5px;font-weight:800;color:var(--sub);background:#EDF1EA;border-radius:20px;padding:3px 0;margin:14px auto 8px;width:64px}
-.omsg:first-child .oday,.oday:first-child{margin-top:2px}
+.oday{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:800;color:var(--sub);background:#EDF1EA;border-radius:8px;padding:8px 12px;margin:12px 0 8px;cursor:pointer}
+.oday.done{background:#EDF7F0;color:var(--deep)}
+.oday .odmeta{margin-left:auto;font-weight:400;font-size:11px}
+.oday .odchev{font-weight:700;font-size:11px;flex:none}
 .ometa{font-size:10.5px;color:var(--sub);margin:0 0 3px 4px}
 .obub{background:#fff;border:1px solid var(--edge);border-radius:2px 10px 10px 10px;padding:9px 10px;display:flex;align-items:center;gap:6px;max-width:100%}
 .obx{width:19px;height:19px;border-radius:5px;border:1.6px solid #cfd8cf;flex:none;display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff}
@@ -339,7 +341,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='1.8.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='1.8.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com'];
@@ -842,7 +844,8 @@ function coverage(dkey){
  const list=STAFF.map(s=>({s,rs:getRanges(s.id+'|'+dkey)})).filter(x=>x.rs.length);
  const peak=list.filter(x=>x.rs.some(r=>t2n(r.s)<=PEAK_S && t2n(r.e)>=PEAK_E));
  const warns=[];
- if(list.length && peak.length<PEAK_MIN) warns.push(`피크 인원 ${peak.length}/${PEAK_MIN}명`);
+ const dow=new Date(dkey).getDay(); // 토요일(6)은 혼자 근무 OK — 피크 경고 제외
+ if(dow!==6 && list.length && peak.length<PEAK_MIN) warns.push(`피크 인원 ${peak.length}/${PEAK_MIN}명`);
  return {list,peak,count:list.length,warns};
 }
 function labor(){
@@ -1199,25 +1202,29 @@ function screenNotice(){
    <button class="${noticeView==='order'?'on':''}" onclick="noticeView='order';render()">발주방${u.o?'<span class="bdotn"></span>':''}</button></div>`;
  if(noticeView==='order'){
    const waitCnt=ORDERS.filter(o=>o.st==='wait').length;
-   let lastDay='';
-   const list=ORDERS.map((o,i)=>{const done=o.st==='ordered';
-     const day=(o.dt||'').split(' ')[0];
-     const hdr=day!==lastDay?`<div class="oday">${day}</div>`:''; lastDay=day;
-     const mine=(o.who===curUser().name)||admin;
-     return `${hdr}<div class="omsg">
-     <div class="obub ${done?'done':''}">
-       <div class="obx" ${admin?`onclick="toggleOrder(${i})"`:''} style="${admin?'cursor:pointer':''}">${done?'✓':''}</div>
-       <div class="otx">${o.txt}</div>
-       <span class="ost" style="color:${done?'#2E8C49':'#ff7d59'}">${done?'발주됨':'대기'}</span>
-       ${mine?`<span class="oact" onclick="editOrder(${i})">수정</span><span class="oact del" onclick="deleteOrder(${i})">삭제</span>`:''}
-     </div></div>`;}).join("");
+   const groups={}, days=[];
+   ORDERS.forEach((o,i)=>{ const day=(o.dt||'').split(' ')[0]||'-'; if(!groups[day]){groups[day]=[];days.push(day);} groups[day].push({o,i}); });
+   days.sort((a,b)=>{const pa=a.split('/').map(Number),pb=b.split('/').map(Number); return (pa[0]*100+(pa[1]||0))-(pb[0]*100+(pb[1]||0));});
+   const listHtml=days.map(day=>{
+     const items=groups[day], pend=items.filter(x=>x.o.st==='wait').length, allDone=pend===0, exp=ordExpanded(day,pend>0);
+     const head=`<div class="oday ${allDone?'done':''}" onclick="toggleOrdDay('${day}',${pend>0})">
+       <span>${day}</span><span class="odmeta">${allDone?'전체 발주됨 · '+items.length+'건':'대기 '+pend+' / '+items.length+'건'}</span><span class="odchev">${exp?'▾':'▸'}</span></div>`;
+     const rows= exp? items.map(({o,i})=>{const done=o.st==='ordered', mine=(o.who===curUser().name)||admin;
+       return `<div class="omsg"><div class="obub ${done?'done':''}">
+         <div class="obx" ${admin?`onclick="toggleOrder(${i})"`:''} style="${admin?'cursor:pointer':''}">${done?'✓':''}</div>
+         <div class="otx">${o.txt}</div>
+         <span class="ost" style="color:${done?'#2E8C49':'#ff7d59'}">${done?'발주됨':'대기'}</span>
+         ${mine?`<span class="oact" onclick="editOrder(${i})">수정</span><span class="oact del" onclick="deleteOrder(${i})">삭제</span>`:''}
+       </div></div>`;}).join('') : '';
+     return head+rows;
+   }).join('');
    return `<h2 class="title">${IC('cart')}공지 · 발주</h2>${seg}
-     ${waitCnt?`<button class="btn sec" style="margin-bottom:10px" onclick="copyOrders()">${IC('copy','li sm')} 대기 발주 복사 (${waitCnt}건) — 붙여넣어 전달</button>`:''}
-     ${list||'<p class="muted" style="padding:10px 2px">아직 발주 요청이 없습니다. 필요한 물건을 적어주세요.</p>'}
-     <div class="row" style="gap:7px;margin-top:10px">
-       <input class="inp" id="odText" style="flex:1" placeholder="필요한 물건 (예: 우유 2팩)" onkeydown="if(event.key==='Enter')addOrder()">
+     <div class="card" style="margin-bottom:12px"><div class="row" style="gap:7px">
+       <input class="tsel" id="odText" style="flex:1" placeholder="필요한 물건 (예: 우유 2팩)" onkeydown="if(event.key==='Enter')addOrder()">
        <button class="btn" style="width:auto;padding:0 16px" onclick="addOrder()">등록</button></div>
-     <p class="muted" style="font-size:11px;margin-top:8px;text-align:center">${admin?'복사해서 발주 담당께 카톡으로 전달 → 발주 넣은 항목은 체크(발주됨)':'대표님이 발주를 넣으면 체크(발주됨)로 바뀝니다'}</p>`;
+       ${waitCnt?`<button class="btn sec" style="margin-top:8px" onclick="copyOrders()">${IC('copy','li sm')} 대기 발주 복사 (${waitCnt}건) — 붙여넣어 전달</button>`:''}</div>
+     ${listHtml||'<p class="muted" style="padding:10px 2px">아직 발주 요청이 없습니다. 위에 필요한 물건을 적어 등록하세요.</p>'}
+     <p class="muted" style="font-size:11px;margin-top:10px;text-align:center">${admin?'날짜별로 묶여요 · 그 날 전부 발주되면 자동으로 접힘(눌러 펼치기)':'대표님이 발주를 넣으면 발주됨으로 바뀝니다'}</p>`;
  }
  const nc=nextCleaning(), cToday=isCleaningDay();
  const pinned=`<div class="note" style="border-color:${cToday?'#f0c36b':'#DBE9DD'};background:${cToday?'#fdf6e3':'#EDF7F0'}">
@@ -1238,6 +1245,9 @@ function screenNotice(){
      <button class="btn" style="margin-top:8px" onclick="addNote()">등록</button></div>
    ${list}`;
 }
+let ordOpen={}; // 사용자가 수동으로 펼침/접힘 토글한 날짜
+function ordExpanded(day,hasPending){ return (day in ordOpen)?ordOpen[day]:hasPending; }
+function toggleOrdDay(day,hasPending){ ordOpen[day]=!ordExpanded(day,hasPending); render(); }
 function addOrder(){
  const v=$("odText").value.trim();if(!v){toast('물건을 입력하세요');return;}
  ORDERS.push({id:'o'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),who:curUser().name,txt:v,dt:fmtDT(),ts:Date.now(),mt:Date.now(),st:'wait'});
