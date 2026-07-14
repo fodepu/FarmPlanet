@@ -326,7 +326,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='1.7.4'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='1.7.5'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com'];
@@ -499,7 +499,7 @@ function ckToday(){const k=todayK();CK[k]=CK[k]||{open:{},mid:{},close:{}};if(!C
 function modeName(m){return m==='close'?'마감':m==='mid'?'미들':'오픈';}
 function ckLists(m){return m==='close'?CLOSE_LIST:m==='mid'?MID_LIST:OPEN_LIST;}
 /* ═══════════ 출퇴근 · 휴게 (GPS) ═══════════ */
-const STORE_RADIUS=50; // m — 이 반경 안에서만 출퇴근 (GPS 정밀도 고려한 좁은 값)
+const STORE_RADIUS=60; // m — 이 반경 안에서만 출퇴근 (멀리서 방지 + 실내 오차 감안)
 function attStamp(a){ if(!a)return 0; let m=Math.max(a.in||0,a.out||0); (a.breaks||[]).forEach(b=>{m=Math.max(m,b.s||0,b.e||0);}); return m; }
 function attToday(){ const a=ATT[CUR]; return (a&&a.date===todayK())?a:null; }
 function attOpenBreak(a){ const b=a&&a.breaks&&a.breaks[a.breaks.length-1]; return (b&&!b.e)?b:null; }
