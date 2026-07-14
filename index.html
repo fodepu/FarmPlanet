@@ -344,7 +344,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='1.9.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='1.9.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com'];
@@ -515,6 +515,14 @@ function toast(m){const t=$("toast");t.textContent=m;t.classList.add("show");cle
 function go(t){tab=t;render();const sc=$("screen");if(sc.scrollTo)sc.scrollTo(0,0);}
 function curUser(){return STAFF.find(s=>s.id===CUR);}
 function hon(n){return /님$/.test(n||'')?n:(n||'')+'님';} // 이미 '님'으로 끝나면 중복 안 붙임
+function pendingCount(){return STAFF.filter(s=>s.pending).length;}
+function screenPending(cu){
+ return `<div class="hero" style="margin-top:24px"><div class="big">가입 승인 대기 중 ${IC('clock','li sm')}</div>
+   <div style="font-size:12px;opacity:.9;margin-top:4px">${cu.email||''}</div></div>
+   <div class="card"><h3>${IC('user','li sm')}${cu.name}님, 환영합니다</h3>
+   <div class="muted" style="line-height:1.7;margin-top:6px">대표님·매니저가 가입을 <b>승인</b>하면 근태·시간표·발주를 이용할 수 있어요. 승인되면 이 화면이 자동으로 바뀝니다.</div>
+   <button class="btn sec" style="margin-top:14px" onclick="logout()">로그아웃</button></div>`;
+}
 function ckToday(){const k=todayK();CK[k]=CK[k]||{open:{},mid:{},close:{}};if(!CK[k].mid)CK[k].mid={};return CK[k];}
 function modeName(m){return m==='close'?'마감':m==='mid'?'미들':'오픈';}
 function ckLists(m){return m==='close'?CLOSE_LIST:m==='mid'?MID_LIST:OPEN_LIST;}
@@ -797,7 +805,9 @@ function finishSignup(){
  const r=resolveSignup(nm); let s;
  if(r.existing){ s=r.existing; s.name=r.display; s.email=pendingEmail; } // 기존 직원에 통합 + 성 포함 이름으로
  else { s={id:'u'+Date.now(),name:r.display,email:pendingEmail,wage:MINWAGE,c:PALETTE[STAFF.length%PALETTE.length],mgr:false}; STAFF.push(s); }
- if(MANAGER_EMAILS.includes((pendingEmail||'').toLowerCase())) s.mgr=true;
+ const _em=(pendingEmail||'').toLowerCase();
+ if(MANAGER_EMAILS.includes(_em)) s.mgr=true;
+ s.pending = !(ADMIN_EMAILS.includes(_em)||MANAGER_EMAILS.includes(_em)||s.admin); // 관리자·매니저 외에는 승인 대기
  CUR=s.id; role=isAdmin(s)?'admin':'staff'; tab='home';
  const b=$("userBtn"); b.style.display=''; b.textContent=s.name+' ⏻';
  const gb=$('gsiButton'); if(gb)gb.style.display='';
@@ -823,7 +833,7 @@ function screenHome(){
    <div class="qbtn" onclick="go('close')">${IC('check')}오픈·마감 체크</div>
    <div class="qbtn" onclick="go('manual')">${IC('book')}매뉴얼·레시피</div>
  </div>
- ${isAdmin(curUser())?`<div class="qbtn" style="margin-bottom:12px" onclick="staffManage()">${IC('user')}직원 관리 <span class="muted" style="font-weight:400;font-size:11px">· 대표님·매니저</span></div>`:''}
+ ${isAdmin(curUser())?`<div class="qbtn" style="margin-bottom:12px;position:relative" onclick="staffManage()">${IC('user')}직원 관리 <span class="muted" style="font-weight:400;font-size:11px">· 대표님·매니저</span>${pendingCount()?'<span class="bdotn" style="margin-left:6px"></span>':''}</div>`:''}
  <div class="card note-card"><h3>${IC('bell','li sm')}최근 공지</h3>
    <div class="muted">${NOTICES[0]?NOTICES[0].bd:'등록된 공지가 없습니다.'}</div></div>
  <div class="card"><h3>${IC('tv','li sm')}매장 TV</h3>
@@ -982,7 +992,7 @@ function editCell(sid,dkey){
  const i=$('ecT'); i.focus(); i.select();
 }
 function editShift(dkey){
- const d=WEEK.find(x=>x.k===dkey), free=STAFF.filter(s=>!getRanges(s.id+'|'+dkey).length);
+ const d=WEEK.find(x=>x.k===dkey), free=STAFF.filter(s=>!getRanges(s.id+'|'+dkey).length && !s.pending);
  if(!free.length){toast('이 날은 전원 편성되어 있어요 — 블록을 눌러 수정하세요');return;}
  ecStaff=null; ecDay=dkey;
  openModal(`<h3>${d.m}/${d.d}(${d.w}) — 근무 추가</h3>
@@ -1021,17 +1031,21 @@ function copyLastWeek(){
 /* ── 직원 관리 (관리자 = ADMIN_EMAILS 이메일 계정) ── */
 function staffManage(){
  const owner=isOwner(curUser());
- const rows=STAFF.map((s,i)=>`<div class="ck">
+ const sorted=STAFF.map((s,i)=>({s,i})).sort((a,b)=>(b.s.pending?1:0)-(a.s.pending?1:0)); // 승인 대기 먼저
+ const rows=sorted.map(({s,i})=>`<div class="ck" style="${s.pending?'border-color:#2f80ed;background:#f0f6ff':''}">
    <span style="width:24px;height:24px;border-radius:6px;background:${s.c};flex:none"></span>
-   <div class="tx"><b>${s.name}</b>${isOwner(s)?' <span class="pill">관리자</span>':s.mgr?' <span class="pill">매니저</span>':''}
+   <div class="tx"><b>${s.name}</b>${s.pending?' <span class="pill" style="background:#e6f1fb;color:#185fa5">승인 대기</span>':isOwner(s)?' <span class="pill">관리자</span>':s.mgr?' <span class="pill">매니저</span>':''}
      <div class="muted" style="font-size:11px">${s.email||'이메일 미등록'}</div></div>
-   <button class="cam" onclick="editStaffInfo(${i})">수정</button>
+   ${s.pending?`<button class="cam" style="color:var(--deep);border-color:#bfe0c8;font-weight:800" onclick="approveStaff(${i})">승인</button>`:`<button class="cam" onclick="editStaffInfo(${i})">수정</button>`}
    ${isAdmin(s)||s.id===CUR?'':`<button class="cam" style="color:var(--warn);border-color:#f0d9bd" onclick="removeStaff(${i})">삭제</button>`}
  </div>`).join('');
- openModal(`<h3>직원 관리</h3>${rows}
-   <div class="muted" style="font-size:11px;margin:4px 0 10px">관리자 = 대표님 · 매니저 권한은 <b>수정</b>에서 지정. 로그인하면 누구나 이름을 정해 명단에 추가됩니다.</div>
+ const pc=pendingCount();
+ openModal(`<h3>직원 관리${pc?` <span class="bdotn"></span> <span style="font-size:12px;font-weight:700;color:#2f80ed">승인 대기 ${pc}</span>`:''}</h3>${rows}
+   <div class="muted" style="font-size:11px;margin:4px 0 10px">새 가입은 <b>승인</b>해야 이용할 수 있어요. 관리자 = 대표님 · 권한은 <b>수정</b>에서 지정.</div>
    <div class="row"><button class="btn sec" onclick="closeModal()">닫기</button><button class="btn" onclick="addStaff()">+ 직원 추가</button></div>`);
 }
+function approveStaff(i){ const s=STAFF[i]; if(!isAdmin(curUser())){toast('승인은 대표님·매니저만 가능해요');return;}
+ s.pending=false; save(); staffManage(); render(); toast(s.name+'님 가입을 승인했습니다'); }
 function toggleMgr(i){
  if(!isOwner(curUser())){toast('매니저 지정은 대표님만 할 수 있어요');return;}
  const s=STAFF[i]; if(isOwner(s))return;
@@ -1330,6 +1344,7 @@ const NAV=[["home","home","홈"],["att","clock","근태"],["sched","cal","시간
 function render(){
  if(CUR&&!curUser()){ CUR=null; if(USE_FB){showAuthOverlay(true);} } // 내 계정이 사라지면 재로그인
  if(CUR){role=isAdmin(curUser())?'admin':'staff';} // 권한 항상 최신화
+ if(CUR){const cu=curUser(); if(cu&&cu.pending&&!isAdmin(cu)){$("screen").innerHTML=screenPending(cu);$("nav").innerHTML='';save();return;}}
  if(!CUR){$("screen").innerHTML=screenLogin();$("nav").innerHTML='';save();return;}
  let html="";
  if(tab==="closeAdmin" && role==="admin") html=screenAdmin();
