@@ -166,6 +166,19 @@ input.inp{min-height:auto}
 #authOverlay .sub{font-size:12.5px;color:var(--sub)}
 #authMsg{font-size:12px;color:var(--sub);line-height:1.7;max-width:290px}
 .authlink{color:var(--deep);text-decoration:underline;cursor:pointer;font-weight:700}
+.astat{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700;color:var(--ink);margin-bottom:14px}
+.astat .adot{width:9px;height:9px;border-radius:50%;flex:none}
+.astat .astat-r{margin-left:auto;font-weight:400;font-size:12px;color:var(--sub)}
+.abig{width:100%;height:96px;border:none;border-radius:14px;background:var(--btn);color:#fff;font-size:20px;font-weight:800;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;cursor:pointer}
+.abig svg{width:26px;height:26px}
+.atimer{border-radius:12px;padding:16px;text-align:center;margin-bottom:14px}
+.atimer.grn{background:#EAF3DE}.atimer.amb{background:#FAEEDA}.atimer.done{background:#EDF7F0}
+.atimer .albl{font-size:12px;margin-bottom:3px;color:var(--sub)}
+.atimer.grn .albl{color:#3B6D11}.atimer.amb .albl{color:#854F0B}
+.aclock{font-size:34px;font-weight:800;letter-spacing:1px;font-variant-numeric:tabular-nums;color:var(--ink)}
+.atimer.grn .aclock{color:#173404}.atimer.amb .aclock{color:#412402}.atimer.done .aclock{color:var(--deep)}
+.btn.adngr{background:var(--warn)}
+.asum{text-align:center;font-size:12px;color:var(--sub);margin-top:12px;padding-top:10px;border-top:1px solid var(--edge)}
 </style>
 <script src="https://accounts.google.com/gsi/client" async></script>
 </head>
@@ -326,7 +339,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='1.7.5'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='1.8.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com'];
@@ -480,7 +493,8 @@ function load(){
   STAFF.forEach(s=>{ if(MANAGER_EMAILS.includes((s.email||'').toLowerCase()))s.mgr=true; }); // 매니저 자동
  }catch(e){defaults();}
 }
-function isOwner(s){return !!s && ADMIN_EMAILS.includes((s.email||'').toLowerCase());}
+function isFixedOwner(s){return !!s && ADMIN_EMAILS.includes((s.email||'').toLowerCase());} // 대표님(고정)
+function isOwner(s){return isFixedOwner(s) || (!!s && !!s.admin);} // 대표님 또는 관리자 지정
 function isAdmin(s){return isOwner(s) || (!!s && !!s.mgr);}
 function resetAll(){askConfirm('<b>모든 데이터</b>(시간표·발주·공지·체크)를 초기화합니다.<br>되돌릴 수 없어요.','전체 초기화',()=>{
  localStorage.removeItem(SKEY);defaults();render();toast('초기화되었습니다');});}
@@ -539,7 +553,39 @@ function workedMs(a){ if(!a||!a.in)return 0; const end=a.out||Date.now(); let ms
 function weekSchedHours(uid){ let h=0; WEEK.forEach(d=>{getRanges(uid+'|'+d.k).forEach(r=>h+=t2n(r.e)-t2n(r.s));}); return h; }
 function juhyuPay(weekH){ if(weekH<15)return 0; return Math.round((Math.min(weekH,40)/40)*8*WAGE); }
 function reAtt(){ if($("modal")&&$("modal").classList.contains('show'))$("mbox").innerHTML=attView(); }
-function openAtt(){ openModal(attView()); }
+function openAtt(){ go('att'); }
+function fmtDur(ms){ const m=Math.round(ms/60000); return `${Math.floor(m/60)}시간 ${m%60}분`; }
+function fmtHMS(ms){ const s=Math.max(0,Math.floor(ms/1000)),p=n=>String(n).padStart(2,'0'); return p(Math.floor(s/3600))+':'+p(Math.floor(s%3600/60))+':'+p(s%60); }
+function attElapsed(){ const a=attToday(); if(!a)return 0; const st=attStatus(a);
+ if(st==='work')return workedMs(a); if(st==='break'){const b=attOpenBreak(a);return b?Date.now()-b.s:0;} return 0; }
+function tickAtt(){ if(tab!=='att'||!CUR)return; const el=$('aClock'); if(!el)return; const st=attStatus(attToday()); if(st==='work'||st==='break')el.textContent=fmtHMS(attElapsed()); }
+setInterval(tickAtt,1000);
+function confirmClockOut(){ askConfirm('퇴근하시겠어요? 오늘 근무를 종료합니다.','퇴근',()=>clockOut()); }
+function screenAtt(){
+ const admin=isAdmin(curUser()), a=attToday(), st=attStatus(a);
+ const td=TODAY(), shift=td?rangesLabel(CUR+'|'+td.k):'';
+ let body;
+ if(st==='off'){
+   body=`<div class="astat"><span class="adot" style="background:var(--sub)"></span>아직 출근 전</div>
+     <button class="abig" onclick="clockIn()">${IC('check','li lg')}<span>출근하기</span></button>
+     <div class="muted" style="text-align:center;margin-top:12px">오늘 예정 · ${shift||'휴무'}</div>`;
+ } else if(st==='work'){
+   body=`<div class="astat"><span class="adot" style="background:#639922"></span><b style="color:#3B6D11">근무 중</b><span class="astat-r">출근 ${fmtT(a.in)}</span></div>
+     <div class="atimer grn"><div class="albl">근무 시간</div><div class="aclock" id="aClock">${fmtHMS(attElapsed())}</div></div>
+     <div class="grid2"><button class="btn sec" onclick="breakStart()">${IC('clock','li sm')} 휴게 시작</button><button class="btn adngr" onclick="confirmClockOut()">퇴근</button></div>`;
+ } else if(st==='break'){
+   body=`<div class="astat"><span class="adot" style="background:#EF9F27"></span><b style="color:#854F0B">휴게 중</b><span class="astat-r">${a.breaks.length}회차</span></div>
+     <div class="atimer amb"><div class="albl">휴게 경과</div><div class="aclock" id="aClock">${fmtHMS(attElapsed())}</div></div>
+     <button class="btn" onclick="breakEnd()">${IC('refresh','li sm')} 업무 복귀</button>
+     <div class="asum">오늘 근무 ${fmtDur(workedMs(a))} · 휴게 ${a.breaks.length}회</div>`;
+ } else {
+   body=`<div class="astat"><span class="adot" style="background:#8fbf9b"></span><b style="color:var(--deep)">퇴근 완료</b><span class="astat-r">수고하셨어요</span></div>
+     <div class="atimer done"><div class="albl">오늘 근무</div><div class="aclock">${fmtDur(workedMs(a))}</div></div>
+     <div class="asum">출근 ${fmtT(a.in)} · 퇴근 ${fmtT(a.out)} · 휴게 ${a.breaks.length}회</div>`;
+ }
+ const adminBox = admin? `<div class="muted" style="font-size:11px;margin-top:14px">${STORE_LOC?'매장 위치 설정됨':'매장 위치 미설정 — GPS 확인 안 됨'} · <span class="authlink" onclick="setStoreLocMap()">${STORE_LOC?'위치 재설정':'매장 위치 설정'}</span></div>${attRoster()}`:'';
+ return `<h2 class="title">${IC('clock')}근태</h2><div class="card">${body}</div>${adminBox}`;
+}
 function setWage(){ const v=prompt('시급(원):',WAGE); if(v===null)return; const n=parseInt(String(v).replace(/[^0-9]/g,''),10); if(!n){toast('숫자를 입력하세요');return;} WAGE=n; save(); reAtt(); toast('시급을 '+won(n)+'(으)로 저장했습니다'); }
 function attView(){
  const admin=role==='admin', a=attToday(), st=attStatus(a);
@@ -748,15 +794,11 @@ function screenHome(){
  <div class="hero"><div class="hi">${n.getFullYear()}년 ${n.getMonth()+1}월 ${n.getDate()}일 ${WD[n.getDay()]}요일</div>
    <div class="big">안녕하세요, ${hon(curUser().name)}</div>
    <div class="sh">${IC('clock','li sm')}오늘 근무 · ${todayShift||'휴무'}</div></div>
- ${(()=>{const a=attToday(),s=attStatus(a);const sf=s==='work'?' · 근무 중':s==='break'?' · 휴게 중':s==='done'?' · 퇴근':'';
-   return `<button class="btn" style="margin-bottom:12px" onclick="openAtt()">${IC('clock','li sm')} 근태 · 출퇴근 / 휴게${sf}</button>`;})()}
  <div class="grid2" style="margin-bottom:12px">
-   <div class="qbtn" onclick="go('sched')">${IC('cal')}시간표</div>
    <div class="qbtn" onclick="go('close')">${IC('check')}오픈·마감 체크</div>
    <div class="qbtn" onclick="go('manual')">${IC('book')}매뉴얼·레시피</div>
-   <div class="qbtn" onclick="go('notice')">${IC('bell')}공지·발주 ${newsCnt?`<span class="bdg">${newsCnt}</span>`:''}</div>
  </div>
- ${role==='admin'?`<div class="qbtn" style="margin-bottom:12px" onclick="staffManage()">${IC('user')}직원 관리 <span class="muted" style="font-weight:400;font-size:11px">· 대표님·매니저</span></div>`:''}
+ ${isAdmin(curUser())?`<div class="qbtn" style="margin-bottom:12px" onclick="staffManage()">${IC('user')}직원 관리 <span class="muted" style="font-weight:400;font-size:11px">· 대표님·매니저</span></div>`:''}
  <div class="card note-card"><h3>${IC('bell','li sm')}최근 공지</h3>
    <div class="muted">${NOTICES[0]?NOTICES[0].bd:'등록된 공지가 없습니다.'}</div></div>
  <div class="card"><h3>${IC('tv','li sm')}매장 TV</h3>
@@ -976,20 +1018,25 @@ function addStaff(){const n=prompt('직원 이름:','');if(!n)return;
  const em=(prompt('이메일 (선택 — 대표님 이메일이면 관리자 권한):','')||'').trim().toLowerCase();
  STAFF.push({id:'u'+Date.now(),name:n.trim(),c:PALETTE[STAFF.length%PALETTE.length],email:em,mgr:false});
  closeModal();render();toast(n+'님이 명단에 추가되었습니다 — 요일 이름(＋)을 눌러 배정하세요');}
-function editStaffInfo(i){const s=STAFF[i], owner=isOwner(curUser()), canMgr=owner&&!isOwner(s);
+function editStaffInfo(i){const s=STAFF[i], owner=isOwner(curUser()), fixed=isFixedOwner(s);
+ const cur=fixed?'admin':(s.admin?'admin':(s.mgr?'mgr':'staff'));
  openModal(`<h3>${s.name} 정보 수정</h3>
    <div class="fld"><label>이름</label><input id="edNm" class="tsel" value="${s.name}" autocomplete="off"></div>
    <div class="fld" style="margin-top:8px"><label>이메일 <span class="muted">(구글 로그인 계정)</span></label><input id="edEm" class="tsel" value="${s.email||''}" placeholder="example@gmail.com" autocomplete="off"></div>
-   ${canMgr?`<label class="ck" style="margin-top:10px;cursor:pointer" onclick="toggleEdMgr(this)"><span class="box ${s.mgr?'on':''}" id="edMgrBox" style="background:${s.mgr?'var(--btn)':'#fff'};border-color:${s.mgr?'var(--btn)':'#cfd8cf'}">${s.mgr?'✓':''}</span><div class="tx"><b>매니저 권한</b><div class="muted" style="font-size:11px">편성·발주 확인·마감 관리 가능</div></div></label>`:''}
+   ${owner? (fixed
+     ? `<div class="muted" style="margin-top:10px">권한: <b>관리자(대표님)</b> · 고정</div>`
+     : `<div class="fld" style="margin-top:10px"><label>권한</label><select id="edRole" class="tsel">
+         <option value="staff" ${cur==='staff'?'selected':''}>직원</option>
+         <option value="mgr" ${cur==='mgr'?'selected':''}>매니저 (편성·발주확인·마감)</option>
+         <option value="admin" ${cur==='admin'?'selected':''}>관리자 (전체 권한)</option>
+       </select></div>`) : ''}
    <div class="row" style="margin-top:12px"><button class="btn sec" onclick="staffManage()">취소</button><button class="btn" onclick="saveStaffInfo(${i})">저장</button></div>`);
  setTimeout(()=>{const el=$('edNm');if(el)el.focus();},50);
 }
-function toggleEdMgr(lbl){ const b=lbl.querySelector('.box'); const on=!b.classList.contains('on');
- b.classList.toggle('on',on); b.textContent=on?'✓':''; b.style.background=on?'var(--btn)':'#fff'; b.style.borderColor=on?'var(--btn)':'#cfd8cf'; }
 function saveStaffInfo(i){const s=STAFF[i];
  const nm=($('edNm')?$('edNm').value:'').trim(); const em=($('edEm')?$('edEm').value:'').trim().toLowerCase();
  if(nm)s.name=nm; s.email=em;
- const box=$('edMgrBox'); if(box && !isOwner(s)) s.mgr=box.classList.contains('on');
+ const rs=$('edRole'); if(rs && !isFixedOwner(s)){ const v=rs.value; s.admin=(v==='admin'); s.mgr=(v==='mgr'); }
  closeModal();render();toast('저장되었습니다');
  if(s.id===CUR){role=isAdmin(s)?'admin':'staff';render();}}
 function removeStaff(i){const s=STAFF[i];
@@ -1246,7 +1293,7 @@ function askConfirm(msg,yesLabel,cb){ _confirmCb=cb;
    <div class="row"><button class="btn sec" onclick="closeModal()">취소</button>
      <button class="btn" style="background:var(--warn)" onclick="runConfirm()">${yesLabel||'확인'}</button></div>`);}
 function runConfirm(){const cb=_confirmCb;_confirmCb=null;closeModal();if(cb)cb();}
-const NAV=[["home","home","홈"],["sched","cal","시간표"],["close","check","오픈·마감"],["manual","book","매뉴얼"],["notice","bell","공지·발주"]];
+const NAV=[["home","home","홈"],["att","clock","근태"],["sched","cal","시간표"],["notice","bell","공지·발주"]];
 function render(){
  if(CUR&&!curUser()){ CUR=null; if(USE_FB){showAuthOverlay(true);} } // 내 계정이 사라지면 재로그인
  if(CUR){role=isAdmin(curUser())?'admin':'staff';} // 권한 항상 최신화
@@ -1255,12 +1302,13 @@ function render(){
  if(tab==="closeAdmin" && role==="admin") html=screenAdmin();
  else if(tab==="home") html=screenHome();
  else if(tab==="manual") html=screenManual();
+ else if(tab==="att") html=screenAtt();
  else if(tab==="sched") html=screenSched();
  else if(tab==="close") html=screenClose();
  else if(tab==="notice") html=screenNotice();
  $("screen").innerHTML=html;
  if(tab==="manual") renderManual($("msearch")?.value||"");
- const navTab=tab==='closeAdmin'?'close':tab;
+ const navTab=(tab==='close'||tab==='manual'||tab==='closeAdmin')?'home':tab;
  const u=CUR?unread():{n:0,o:0,sched:0};
  $("nav").innerHTML=NAV.map(n=>{
    const dot=(n[0]==='notice'&&(u.n+u.o))||(n[0]==='sched'&&u.sched);
