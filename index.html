@@ -344,7 +344,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='1.9.2'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='1.9.3'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com'];
@@ -466,9 +466,9 @@ function applyRemote(data){
   if(d.SUBMITS)SUBMITS=d.SUBMITS;
   if(d.READS)READS=d.READS;
   if(d.SCHED_TS)SCHED_TS=Math.max(SCHED_TS||0,d.SCHED_TS);
-  if(d.ORDERS){ const m={}; [...d.ORDERS,...ORDERS].forEach(o=>{const id=o.id||((o.ts||0)+'|'+o.txt);
-      if(!m[id] || (o.mt||0)>(m[id].mt||0)) m[id]=o; });
-    ORDERS=Object.values(m).filter(o=>!(ODEL||[]).includes(o.id)).sort((a,b)=>(a.ts||0)-(b.ts||0)); }
+  if(d.ORDERS){ const m={}; [...d.ORDERS,...ORDERS].forEach(o=>{const k=ordKey(o);
+      if(!m[k] || (o.mt||0)>(m[k].mt||0)) m[k]=o; });
+    ORDERS=Object.values(m).filter(o=>!(ODEL||[]).includes(ordKey(o))).sort((a,b)=>(a.ts||0)-(b.ts||0)); }
   if(d.CK){ const merged={}; Object.keys(d.CK).forEach(k=>{merged[k]=Object.assign({},d.CK[k]); if(CK[k]&&CK[k].photos)merged[k].photos=CK[k].photos;});
     Object.keys(CK).forEach(k=>{if(!merged[k])merged[k]=CK[k];}); CK=merged; }
   try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ}));}catch(e){}
@@ -1309,10 +1309,11 @@ function editOrder(i){const o=ORDERS[i];if(!o)return;
  const v=prompt('발주 내용 수정:',o.txt); if(v===null)return;
  if(!v.trim()){toast('내용을 입력하세요');return;}
  o.txt=v.trim(); o.mt=Date.now(); render(); toast('수정했습니다');}
-function deleteOrder(i){const o=ORDERS[i];if(!o)return; const id=o.id, txt=o.txt;
+function ordKey(o){ return (o&&o.id) || ((o&&o.ts||0)+'|'+(o&&o.txt||'')); }
+function deleteOrder(i){const o=ORDERS[i];if(!o)return; const k=ordKey(o), txt=o.txt;
  askConfirm(`발주 <b>"${txt}"</b> 을(를) 삭제합니다.`,'삭제',()=>{
-   if(id)ODEL=[...new Set([...(ODEL||[]),id])];
-   ORDERS=ORDERS.filter(x=> id? x.id!==id : (x.ts+'|'+x.txt)!==(o.ts+'|'+o.txt)); render(); toast('발주를 삭제했습니다');});}
+   ODEL=[...new Set([...(ODEL||[]),k])];
+   ORDERS=ORDERS.filter(x=>ordKey(x)!==k); save(); render(); toast('발주를 삭제했습니다');});}
 /* 대기 발주 복사 → 카톡 붙여넣기용 텍스트만 생성 (발주됨 체크는 별도 수동) */
 function copyOrders(){
  const wait=ORDERS.filter(o=>o.st==='wait');
