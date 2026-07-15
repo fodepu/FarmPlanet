@@ -351,7 +351,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.0.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.0.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com'];
@@ -1256,13 +1256,18 @@ function screenNotice(){
    const waitCnt=ORDERS.filter(o=>o.st==='wait').length;
    const selISO=ordDate||todayK(); const sd=new Date(selISO+'T00:00:00');
    const selMD=(sd.getMonth()+1)+'/'+sd.getDate();
-   const rel= selISO===todayK()?' · 오늘' : selISO===dk(new Date(Date.now()-864e5))?' · 어제' : '';
-   const dayItems=ORDERS.map((o,i)=>({o,i})).filter(x=>((x.o.dt||'').split(' ')[0])===selMD).sort((a,b)=>(a.o.ts||0)-(b.o.ts||0));
-   const pend=dayItems.filter(x=>x.o.st==='wait').length;
+   const isToday=selISO===todayK();
+   let dayItems=ORDERS.map((o,i)=>({o,i})).filter(x=>((x.o.dt||'').split(' ')[0])===selMD).sort((a,b)=>(a.o.ts||0)-(b.o.ts||0));
+   if(isToday){ // 지난 날짜의 대기 발주를 오늘 화면에 이월 표시(데이터는 원래 날짜 그대로)
+     const carry=ORDERS.map((o,i)=>({o,i})).filter(x=>x.o.st==='wait'&&((x.o.dt||'').split(' ')[0])!==selMD).sort((a,b)=>(a.o.ts||0)-(b.o.ts||0));
+     dayItems=carry.concat(dayItems); // 이월 먼저, 그다음 오늘분
+   }
+   const pend=dayItems.filter(x=>x.o.st==='wait').length; // 오늘 대기 + 이월 대기 합산
    const rows= dayItems.length? dayItems.map(({o,i})=>{const done=o.st==='ordered', mine=(o.who===curUser().name)||admin;
+       const oMD=(o.dt||'').split(' ')[0], carried=isToday&&oMD!==selMD;
        return `<div class="omsg"><div class="obub ${done?'done':''}">
          <div class="obx" ${admin?`onclick="toggleOrder(${i})"`:''} style="${admin?'cursor:pointer':''}">${done?'✓':''}</div>
-         <div class="otx">${o.txt}</div>
+         <div class="otx">${o.txt}${carried?`<span style="font-size:10px;font-weight:700;color:#c07d3a;background:#fdf1e3;border-radius:10px;padding:1px 6px;margin-left:5px;white-space:nowrap">↩ 이월 ${oMD}</span>`:''}</div>
          <span class="ost" style="color:${done?'#2E8C49':'#ff7d59'}">${done?'발주됨':'대기'}</span>
          ${mine?`<span class="oact" onclick="editOrder(${i})">수정</span><span class="oact del" onclick="deleteOrder(${i})">삭제</span>`:''}
        </div></div>`;}).join('')
@@ -1270,7 +1275,7 @@ function screenNotice(){
    return `<h2 class="title">${IC('cart')}공지 · 발주</h2>${seg}
      <div class="onav">
        <button class="onbtn" onclick="ordShift(-1)" aria-label="이전 날">‹</button>
-       <label class="ondate"><span>${sd.getMonth()+1}/${sd.getDate()} (${WD[sd.getDay()]})${rel}</span>${pend?`<span class="odbadge">대기 ${pend}</span>`:''}<input type="date" value="${selISO}" onchange="ordPick(this.value)"></label>
+       <label class="ondate"><span>${sd.getMonth()+1}/${sd.getDate()} (${WD[sd.getDay()]})</span>${pend?`<span class="odbadge">대기 ${pend}</span>`:''}<input type="date" value="${selISO}" onchange="ordPick(this.value)"></label>
        <button class="onbtn" onclick="ordShift(1)" aria-label="다음 날">›</button></div>
      <div class="ordday">${rows}</div>
      ${waitCnt?`<button class="btn sec" style="margin-bottom:8px" onclick="copyOrders()">${IC('copy','li sm')} 대기 발주 전체 복사 (${waitCnt}건)</button>`:''}
