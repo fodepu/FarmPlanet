@@ -364,7 +364,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.2.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.2.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com'];
@@ -875,11 +875,9 @@ function screenHome(){
  <div class="grid2" style="margin-bottom:12px">
    <div class="qbtn" onclick="go('close')">${IC('check')}오픈·마감 체크</div>
    <div class="qbtn" onclick="go('manual')">${IC('book')}매뉴얼·레시피</div>
+   <div class="qbtn" style="position:relative" onclick="go('notice')">${IC('bell')}공지·인수인계${u.n?'<span class="bdotn" style="position:absolute;top:10px;right:10px;margin:0"></span>':''}</div>
+   ${isAdmin(curUser())?`<div class="qbtn" style="position:relative" onclick="staffManage()">${IC('user')}직원 관리${pendingCount()?'<span class="bdotn" style="position:absolute;top:10px;right:10px;margin:0"></span>':''}</div>`:''}
  </div>
- ${isAdmin(curUser())?`<div class="qbtn" style="margin-bottom:12px;position:relative" onclick="staffManage()">${IC('user')}직원 관리 <span class="muted" style="font-weight:400;font-size:11px">· 대표님·매니저</span>${pendingCount()?'<span class="bdotn" style="margin-left:6px"></span>':''}</div>`:''}
- <div class="card note-card" onclick="go('notice')" style="cursor:pointer;position:relative"><h3>${IC('bell','li sm')}공지 · 인수인계${u.n?'<span class="bdotn"></span>':''}</h3>
-   <div class="muted" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${NOTICES[0]?NOTICES[0].bd:'등록된 공지가 없습니다.'}</div>
-   <div style="font-size:11.5px;margin-top:7px;color:var(--deep);font-weight:700">전체 보기 ›</div></div>
  <div class="card"><h3>${IC('tv','li sm')}매장 TV</h3>
    <div class="muted" style="margin-bottom:8px">메뉴판·포스터는 스마트플랫에서 관리합니다.</div>
    ${role==='admin'?`<button class="btn sec" onclick="window.open(SMARTFLAT_URL,'_blank')">${IC('link','li sm')} 스마트플랫 관리자 열기</button>`:''}</div>`;
@@ -1314,8 +1312,8 @@ function screenNotice(){
  }
  const nc=nextCleaning(), cToday=isCleaningDay();
  const pinned=`<div class="note" style="border-color:${cToday?'#f0c36b':'#DBE9DD'};background:${cToday?'#fdf6e3':'#EDF7F0'}">
-   <div class="nm"><span class="pill" style="background:#fdf2d8;color:#a16207">📌 고정</span>대표님</div>
-   <div class="bd">🧼 <b>식기세척기 청소</b> — 매월 1일·15일(주변 평일).${cToday?' <b style="color:#c0392b">오늘이 청소일입니다!</b>':` 다음: <b>${nc.getMonth()+1}/${nc.getDate()}(${WD[nc.getDay()]})</b>`}</div></div>`;
+   <div class="nm"><span class="pill" style="background:#fdf2d8;color:#a16207">고정</span>대표님</div>
+   <div class="bd">${IC('spark','li sm')} <b>식기세척기 청소</b> — 매월 1일·15일(주변 평일).${cToday?' <b style="color:#c0392b">오늘이 청소일입니다!</b>':` 다음: <b>${nc.getMonth()+1}/${nc.getDate()}(${WD[nc.getDay()]})</b>`}</div></div>`;
  let list=NOTICES.map((n,i)=>{
    const seen=n.seen||{}, names=Object.values(seen), mine=!!seen[CUR];
    const foot=`<div style="display:flex;align-items:center;gap:8px;margin-top:7px">
@@ -1325,7 +1323,6 @@ function screenNotice(){
    <span class="pill" style="${n.gold?'background:#fdf2d8;color:#a16207':''}">${n.tag}</span>${n.who}</div>
    <div class="dt">${n.dt}</div><div class="bd">${n.bd}</div>${foot}</div>`;}).join("");
  return `<h2 class="title">${IC('bell')}공지 · 인수인계</h2>
-   <button class="btn sec" style="margin-bottom:10px" onclick="go('home')">← 홈</button>
    ${pinned}
    <div class="card"><h3>${admin?'공지 올리기':'인수인계 남기기'}</h3>
      <textarea class="inp" id="hoText" placeholder="${admin?'전 직원에게 보이는 공지를 작성하세요':'예: 우유 1팩 남음, 3번 테이블 의자 흔들림…'}"></textarea>
