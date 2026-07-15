@@ -364,7 +364,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.1.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.2.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com'];
@@ -566,17 +566,29 @@ function getGeo(ok,err){
    navigator.geolocation.getCurrentPosition(ok, err, {enableHighAccuracy:false,timeout:20000,maximumAge:120000});
  }, {enableHighAccuracy:true,timeout:12000,maximumAge:30000});
 }
-function gpsGate(actName, ok){
+function gpsGate(actName, ok, onFail){
  if(!STORE_LOC){ ok(); return; } // 매장 위치 미설정 시 확인 없이 진행
  toast('위치 확인 중…');
  getGeo(p=>{
    const d=distM(p.coords.latitude,p.coords.longitude,STORE_LOC.lat,STORE_LOC.lng);
-   if(d>STORE_RADIUS){ toast(`매장에서 약 ${Math.round(d)}m — ${actName}할 수 없어요 (매장에서 진행)`); return; }
+   if(d>STORE_RADIUS){ const m=`매장에서 약 ${Math.round(d)}m — ${actName}할 수 없어요 (매장에서 진행)`; onFail?onFail(m):toast(m); return; }
    ok();
- }, e=>toast(geoErrMsg(e)));
+ }, e=>{ const m=geoErrMsg(e); onFail?onFail(m):toast(m); });
 }
 function clockIn(){ const a=attToday(); if(a&&a.in&&!a.out){toast('이미 출근 상태예요');return;}
- gpsGate('출근',()=>{ ATT[CUR]={date:todayK(),in:Date.now(),out:null,breaks:[]}; render(); reAtt(); toast('출근했습니다 — 좋은 하루 되세요!'); }); }
+ gpsGate('출근',()=>{ ATT[CUR]={date:todayK(),in:Date.now(),out:null,breaks:[]}; render(); reAtt(); toast('출근했습니다 — 좋은 하루 되세요!'); },
+   msg=>offerClockInReq(msg)); }
+function offerClockInReq(reason){
+ openModal(`<h3>출근이 확인되지 않았어요</h3>
+   <div class="muted" style="font-size:12px;margin-bottom:10px">${reason}<br>매장 안인데 위치가 안 잡히면, 아래로 <b>관리자에게 출근 승인을 요청</b>할 수 있어요.</div>
+   <div class="fld"><label>메모 <span class="muted">(선택)</span></label><input id="ciNote" class="tsel" placeholder="예: 매장 안인데 GPS가 안 잡혀요" autocomplete="off"></div>
+   <div class="row" style="margin-top:12px"><button class="btn sec" onclick="closeModal()">닫기</button><button class="btn" onclick="sendClockInReq()">관리자에게 출근 요청</button></div>`);
+ setTimeout(()=>{const el=$('ciNote');if(el)el.focus();},50); }
+function sendClockInReq(){
+ const note=($('ciNote')?$('ciNote').value:'').trim();
+ ATTREQ=(ATTREQ||[]).filter(r=>!(r.uid===CUR&&r.date===todayK())); // 같은 날 이전 요청은 대체
+ ATTREQ.push({id:'r'+Date.now().toString(36),uid:CUR,name:curUser().name,date:todayK(),kind:'in',in:Date.now(),out:null,note:note||'GPS 범위 밖 — 수동 출근 요청',ts:Date.now()});
+ closeModal(); save(); render(); toast('관리자에게 출근 요청을 보냈습니다'); }
 function clockOut(){ const a=attToday(); if(!a||!a.in){toast('먼저 출근하세요');return;} if(a.out){toast('이미 퇴근했어요');return;}
  gpsGate('퇴근',()=>{ const b=attOpenBreak(a); if(b)b.e=Date.now(); a.out=Date.now(); render(); reAtt(); toast('퇴근했습니다 — 수고하셨습니다!'); }); }
 function breakStart(){ const a=attToday(); if(!a||!a.in||a.out){toast('출근 상태에서만 가능해요');return;} if(attOpenBreak(a)){toast('이미 휴게 중이에요');return;}
@@ -615,7 +627,9 @@ function sendAttReq(){ const a=attToday(); if(!a)return;
  save(); go('att'); toast('관리자에게 수정 요청을 보냈습니다'); }
 function approveAttReq(id){ if(!isAdmin(curUser())){toast('승인은 대표님·매니저만 가능해요');return;}
  const r=(ATTREQ||[]).find(x=>x.id===id); if(!r)return;
- const a=ATT[r.uid]; if(a&&a.date===r.date){ a.in=r.in; a.out=r.out; if(!r.out){const b=a.breaks&&a.breaks[a.breaks.length-1]; if(b&&!b.e)b.e=null;} }
+ let a=ATT[r.uid];
+ if(!a || a.date!==r.date){ a=ATT[r.uid]={date:r.date,in:r.in,out:r.out||null,breaks:[]}; } // 기록 없음(출근 요청 등) → 새로 생성
+ else { a.in=r.in; a.out=r.out||null; if(!r.out){const b=a.breaks&&a.breaks[a.breaks.length-1]; if(b&&!b.e)b.e=null;} }
  ATTREQ=ATTREQ.filter(x=>x.id!==id); save(); render(); toast(r.name+'님 요청을 승인·반영했습니다'); }
 function rejectAttReq(id){ if(!isAdmin(curUser())){toast('대표님·매니저만 가능해요');return;}
  ATTREQ=(ATTREQ||[]).filter(x=>x.id!==id); save(); render(); toast('요청을 거절했습니다'); }
@@ -642,7 +656,7 @@ function screenAtt(){
      <div class="asum">출근 ${fmtT(a.in)} · 퇴근 ${fmtT(a.out)} · 휴게 ${a.breaks.length}회</div>`;
  }
  const editBtn = a? `<button class="btn sec" style="margin-top:14px" onclick="reqAtt()">${IC('swap','li sm')} 기록 수정 요청</button>`:'';
- const reqBox = (admin && attReqCount())? `<div class="card" style="margin-top:12px;border-color:#bcd7f0"><h3>${IC('bell','li sm')}근태 수정 요청 ${attReqCount()}건</h3>${ATTREQ.map(r=>`<div style="border-top:1px solid var(--edge);padding:8px 0"><div style="font-size:13px"><b>${r.name}</b> <span class="muted" style="font-size:11px">${r.date.slice(5)}</span></div><div class="muted" style="font-size:11.5px">출근 ${fmtT(r.in)}${r.out?' · 퇴근 '+fmtT(r.out):" · '근무 중'으로"}${r.note?' · "'+r.note+'"':''}</div><div class="row" style="gap:6px;margin-top:6px"><button class="btn sec" style="color:var(--warn);border-color:#f0d9bd" onclick="rejectAttReq('${r.id}')">거절</button><button class="btn" onclick="approveAttReq('${r.id}')">승인</button></div></div>`).join('')}</div>`:'';
+ const reqBox = (admin && attReqCount())? `<div class="card" style="margin-top:12px;border-color:#bcd7f0"><h3>${IC('bell','li sm')}근태 요청 ${attReqCount()}건</h3>${ATTREQ.map(r=>`<div style="border-top:1px solid var(--edge);padding:8px 0"><div style="font-size:13px"><b>${r.name}</b> <span class="pill" style="background:${r.kind==='in'?'#e7f0ff':'#F0F4EE'};color:${r.kind==='in'?'#2f6fd0':'var(--deep)'};font-size:10px">${r.kind==='in'?'출근 요청':'기록 수정'}</span> <span class="muted" style="font-size:11px">${r.date.slice(5)}</span></div><div class="muted" style="font-size:11.5px">출근 ${fmtT(r.in)}${r.out?' · 퇴근 '+fmtT(r.out):" · '근무 중'으로"}${r.note?' · "'+r.note+'"':''}</div><div class="row" style="gap:6px;margin-top:6px"><button class="btn sec" style="color:var(--warn);border-color:#f0d9bd" onclick="rejectAttReq('${r.id}')">거절</button><button class="btn" onclick="approveAttReq('${r.id}')">승인</button></div></div>`).join('')}</div>`:'';
  const adminBox = admin? `<div class="muted" style="font-size:11px;margin-top:14px">${STORE_LOC?'매장 위치 설정됨':'매장 위치 미설정 — GPS 확인 안 됨'} · <span class="authlink" onclick="setStoreLocMap()">${STORE_LOC?'위치 재설정':'매장 위치 설정'}</span></div>${attRoster()}`:'';
  return `<h2 class="title">${IC('clock')}근태</h2><div class="card">${body}${editBtn}</div>${reqBox}${adminBox}`;
 }
@@ -863,8 +877,9 @@ function screenHome(){
    <div class="qbtn" onclick="go('manual')">${IC('book')}매뉴얼·레시피</div>
  </div>
  ${isAdmin(curUser())?`<div class="qbtn" style="margin-bottom:12px;position:relative" onclick="staffManage()">${IC('user')}직원 관리 <span class="muted" style="font-weight:400;font-size:11px">· 대표님·매니저</span>${pendingCount()?'<span class="bdotn" style="margin-left:6px"></span>':''}</div>`:''}
- <div class="card note-card"><h3>${IC('bell','li sm')}최근 공지</h3>
-   <div class="muted">${NOTICES[0]?NOTICES[0].bd:'등록된 공지가 없습니다.'}</div></div>
+ <div class="card note-card" onclick="go('notice')" style="cursor:pointer;position:relative"><h3>${IC('bell','li sm')}공지 · 인수인계${u.n?'<span class="bdotn"></span>':''}</h3>
+   <div class="muted" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${NOTICES[0]?NOTICES[0].bd:'등록된 공지가 없습니다.'}</div>
+   <div style="font-size:11.5px;margin-top:7px;color:var(--deep);font-weight:700">전체 보기 ›</div></div>
  <div class="card"><h3>${IC('tv','li sm')}매장 TV</h3>
    <div class="muted" style="margin-bottom:8px">메뉴판·포스터는 스마트플랫에서 관리합니다.</div>
    ${role==='admin'?`<button class="btn sec" onclick="window.open(SMARTFLAT_URL,'_blank')">${IC('link','li sm')} 스마트플랫 관리자 열기</button>`:''}</div>`;
@@ -1261,11 +1276,9 @@ function confirmNote(i){const n=NOTICES[i];if(!n)return;n.seen=n.seen||{};
  n.seen[CUR]=curUser().name;save();render();toast('확인했습니다');}
 function screenNotice(){
  const admin=role==='admin';
- READS[CUR]=READS[CUR]||{}; READS[CUR][noticeView==='order'?'order':'notice']=Date.now(); // 읽음 처리
- const u=unread();
- const seg=`<div class="seg"><button class="${noticeView==='notice'?'on':''}" onclick="noticeView='notice';render()">공지 · 인수인계${u.n?'<span class="bdotn"></span>':''}</button>
-   <button class="${noticeView==='order'?'on':''}" onclick="noticeView='order';render()">발주방${u.o?'<span class="bdotn"></span>':''}</button></div>`;
- if(noticeView==='order'){
+ const view=(tab==='order')?'order':'notice';
+ READS[CUR]=READS[CUR]||{}; READS[CUR][view]=Date.now(); // 읽음 처리
+ if(view==='order'){
    const waitCnt=ORDERS.filter(o=>o.st==='wait').length;
    const selISO=ordDate||todayK(); const sd=new Date(selISO+'T00:00:00');
    const selMD=(sd.getMonth()+1)+'/'+sd.getDate();
@@ -1286,7 +1299,7 @@ function screenNotice(){
          ${mine?`<span class="oact" onclick="editOrder(${i})">수정</span><span class="oact del" onclick="deleteOrder(${i})">삭제</span>`:''}
        </div></div>`;}).join('')
      : `<p class="muted" style="text-align:center;padding:22px 2px">이 날은 발주가 없어요.</p>`;
-   return `<h2 class="title">${IC('cart')}공지 · 발주</h2>${seg}
+   return `<h2 class="title">${IC('cart')}발주</h2>
      <div class="onav">
        <button class="onbtn" onclick="ordShift(-1)" aria-label="이전 날">‹</button>
        <div class="ondate" onclick="toggleOrdCal()"><span>${sd.getMonth()+1}/${sd.getDate()} (${WD[sd.getDay()]})</span>${pend?`<span class="odbadge">대기 ${pend}</span>`:''}<span class="odcar">${ordCalOpen?'▴':'▾'}</span></div>
@@ -1311,7 +1324,8 @@ function screenNotice(){
    return `<div class="note"><div class="nm">
    <span class="pill" style="${n.gold?'background:#fdf2d8;color:#a16207':''}">${n.tag}</span>${n.who}</div>
    <div class="dt">${n.dt}</div><div class="bd">${n.bd}</div>${foot}</div>`;}).join("");
- return `<h2 class="title">${IC('bell')}공지 · 발주</h2>${seg}
+ return `<h2 class="title">${IC('bell')}공지 · 인수인계</h2>
+   <button class="btn sec" style="margin-bottom:10px" onclick="go('home')">← 홈</button>
    ${pinned}
    <div class="card"><h3>${admin?'공지 올리기':'인수인계 남기기'}</h3>
      <textarea class="inp" id="hoText" placeholder="${admin?'전 직원에게 보이는 공지를 작성하세요':'예: 우유 1팩 남음, 3번 테이블 의자 흔들림…'}"></textarea>
@@ -1395,7 +1409,7 @@ function askConfirm(msg,yesLabel,cb){ _confirmCb=cb;
    <div class="row"><button class="btn sec" onclick="closeModal()">취소</button>
      <button class="btn" style="background:var(--warn)" onclick="runConfirm()">${yesLabel||'확인'}</button></div>`);}
 function runConfirm(){const cb=_confirmCb;_confirmCb=null;closeModal();if(cb)cb();}
-const NAV=[["home","home","홈"],["att","clock","근태"],["sched","cal","시간표"],["notice","bell","공지·발주"]];
+const NAV=[["home","home","홈"],["att","clock","근태"],["sched","cal","시간표"],["order","cart","발주"]];
 function render(){
  if(CUR&&!curUser()){ CUR=null; if(USE_FB){showAuthOverlay(true);} } // 내 계정이 사라지면 재로그인
  if(CUR){role=isAdmin(curUser())?'admin':'staff';} // 권한 항상 최신화
@@ -1409,12 +1423,13 @@ function render(){
  else if(tab==="sched") html=screenSched();
  else if(tab==="close") html=screenClose();
  else if(tab==="notice") html=screenNotice();
+ else if(tab==="order") html=screenNotice();
  $("screen").innerHTML=html;
  if(tab==="manual") renderManual($("msearch")?.value||"");
- const navTab=(tab==='close'||tab==='manual'||tab==='closeAdmin')?'home':tab;
+ const navTab=(tab==='close'||tab==='manual'||tab==='closeAdmin'||tab==='notice')?'home':tab;
  const u=CUR?unread():{n:0,o:0,sched:0};
  $("nav").innerHTML=NAV.map(n=>{
-   const dot=(n[0]==='notice'&&(u.n+u.o))||(n[0]==='sched'&&u.sched)||(n[0]==='att'&&isAdmin(curUser())&&attReqCount());
+   const dot=(n[0]==='order'&&u.o)||(n[0]==='sched'&&u.sched)||(n[0]==='att'&&isAdmin(curUser())&&attReqCount());
    return `<button class="${navTab===n[0]?'on':''}" onclick="go('${n[0]}')" style="position:relative">
    ${IC(n[1],'li lg')}${n[2]}${dot?'<span class="ndot"></span>':''}</button>`;}).join("");
  save();
