@@ -99,6 +99,13 @@ input.inp{min-height:auto}
 .oday .odmeta{margin-left:auto;font-weight:400;font-size:11px}
 .oday .odchev{font-weight:700;font-size:11px;flex:none}
 .ordscroll{margin-bottom:10px}
+.onav{display:flex;align-items:center;gap:8px;margin:2px 0 12px}
+.onbtn{flex:none;width:40px;height:42px;border:1px solid var(--edge);background:#fff;border-radius:9px;font-size:22px;color:var(--deep);cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center}
+.onbtn:active{background:#F0F4EE}
+.ondate{flex:1;position:relative;display:flex;align-items:center;justify-content:center;gap:8px;height:42px;background:#F0F4EE;border:1px solid var(--edge);border-radius:9px;font-size:15px;font-weight:800;color:var(--ink);cursor:pointer}
+.ondate input[type=date]{position:absolute;inset:0;opacity:0;width:100%;height:100%;border:0;margin:0;padding:0;cursor:pointer}
+.odbadge{font-size:11px;font-weight:800;color:#fff;background:#ff7d59;border-radius:20px;padding:2px 9px}
+.ordday{min-height:60px;margin-bottom:12px}
 .ometa{font-size:10.5px;color:var(--sub);margin:0 0 3px 4px}
 .obub{background:#fff;border:1px solid var(--edge);border-radius:2px 10px 10px 10px;padding:9px 10px;display:flex;align-items:center;gap:6px;max-width:100%}
 .obx{width:19px;height:19px;border-radius:5px;border:1.6px solid #cfd8cf;flex:none;display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff}
@@ -344,7 +351,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='1.9.3'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.0.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com'];
@@ -1247,30 +1254,30 @@ function screenNotice(){
    <button class="${noticeView==='order'?'on':''}" onclick="noticeView='order';render()">발주방${u.o?'<span class="bdotn"></span>':''}</button></div>`;
  if(noticeView==='order'){
    const waitCnt=ORDERS.filter(o=>o.st==='wait').length;
-   const groups={}, days=[];
-   ORDERS.forEach((o,i)=>{ const day=(o.dt||'').split(' ')[0]||'-'; if(!groups[day]){groups[day]=[];days.push(day);} groups[day].push({o,i}); });
-   days.sort((a,b)=>{const pa=a.split('/').map(Number),pb=b.split('/').map(Number); return (pb[0]*100+(pb[1]||0))-(pa[0]*100+(pa[1]||0));}); // 최신 날짜 위로
-   const listHtml=days.map(day=>{
-     const items=groups[day], pend=items.filter(x=>x.o.st==='wait').length, allDone=pend===0, exp=ordExpanded(day,pend>0);
-     const head=exp
-       ? `<div class="oday open ${allDone?'done':''}" onclick="toggleOrdDay('${day}',${pend>0})"><span>${day}</span><span class="odmeta">${allDone?'전체 발주됨 · '+items.length+'건':'대기 '+pend+' / '+items.length+'건'}</span><span class="odchev">▾</span></div>`
-       : `<div class="oday fold" onclick="toggleOrdDay('${day}',${pend>0})"><span class="odchev">▸</span><span>${day}</span><span class="odmeta">${allDone?'전체 발주됨 · '+items.length+'건':'대기 '+pend+'건'} — 펼치기</span></div>`;
-     const rows= exp? items.map(({o,i})=>{const done=o.st==='ordered', mine=(o.who===curUser().name)||admin;
+   const selISO=ordDate||todayK(); const sd=new Date(selISO+'T00:00:00');
+   const selMD=(sd.getMonth()+1)+'/'+sd.getDate();
+   const rel= selISO===todayK()?' · 오늘' : selISO===dk(new Date(Date.now()-864e5))?' · 어제' : '';
+   const dayItems=ORDERS.map((o,i)=>({o,i})).filter(x=>((x.o.dt||'').split(' ')[0])===selMD).sort((a,b)=>(a.o.ts||0)-(b.o.ts||0));
+   const pend=dayItems.filter(x=>x.o.st==='wait').length;
+   const rows= dayItems.length? dayItems.map(({o,i})=>{const done=o.st==='ordered', mine=(o.who===curUser().name)||admin;
        return `<div class="omsg"><div class="obub ${done?'done':''}">
          <div class="obx" ${admin?`onclick="toggleOrder(${i})"`:''} style="${admin?'cursor:pointer':''}">${done?'✓':''}</div>
          <div class="otx">${o.txt}</div>
          <span class="ost" style="color:${done?'#2E8C49':'#ff7d59'}">${done?'발주됨':'대기'}</span>
          ${mine?`<span class="oact" onclick="editOrder(${i})">수정</span><span class="oact del" onclick="deleteOrder(${i})">삭제</span>`:''}
-       </div></div>`;}).join('') : '';
-     return head+rows;
-   }).join('');
+       </div></div>`;}).join('')
+     : `<p class="muted" style="text-align:center;padding:22px 2px">이 날은 발주가 없어요.</p>`;
    return `<h2 class="title">${IC('cart')}공지 · 발주</h2>${seg}
-     <div class="ordscroll">${listHtml||'<p class="muted" style="padding:10px 2px">아직 발주 요청이 없습니다. 아래에 필요한 물건을 적어 등록하세요.</p>'}</div>
-     ${waitCnt?`<button class="btn sec" style="margin-bottom:8px" onclick="copyOrders()">${IC('copy','li sm')} 대기 발주 복사 (${waitCnt}건) — 붙여넣어 전달</button>`:''}
+     <div class="onav">
+       <button class="onbtn" onclick="ordShift(-1)" aria-label="이전 날">‹</button>
+       <label class="ondate"><span>${sd.getMonth()+1}/${sd.getDate()} (${WD[sd.getDay()]})${rel}</span>${pend?`<span class="odbadge">대기 ${pend}</span>`:''}<input type="date" value="${selISO}" onchange="ordPick(this.value)"></label>
+       <button class="onbtn" onclick="ordShift(1)" aria-label="다음 날">›</button></div>
+     <div class="ordday">${rows}</div>
+     ${waitCnt?`<button class="btn sec" style="margin-bottom:8px" onclick="copyOrders()">${IC('copy','li sm')} 대기 발주 전체 복사 (${waitCnt}건)</button>`:''}
      <div class="row" style="gap:7px">
        <input class="tsel" id="odText" style="flex:1" placeholder="필요한 물건 (예: 우유 2팩)" onkeydown="if(event.key==='Enter')addOrder()">
        <button class="btn" style="width:auto;padding:0 16px" onclick="addOrder()">등록</button></div>
-     <p class="muted" style="font-size:11px;margin-top:8px;text-align:center">${admin?'날짜별로 묶여요 · 그 날 전부 발주되면 접힘(눌러 펼치기)':'대표님이 발주를 넣으면 발주됨으로 바뀝니다'}</p>`;
+     <p class="muted" style="font-size:11px;margin-top:8px;text-align:center">‹ › 또는 날짜를 눌러 다른 날 발주를 봐요 · 등록은 오늘로 추가됩니다</p>`;
  }
  const nc=nextCleaning(), cToday=isCleaningDay();
  const pinned=`<div class="note" style="border-color:${cToday?'#f0c36b':'#DBE9DD'};background:${cToday?'#fdf6e3':'#EDF7F0'}">
@@ -1291,12 +1298,13 @@ function screenNotice(){
      <button class="btn" style="margin-top:8px" onclick="addNote()">등록</button></div>
    ${list}`;
 }
-let ordOpen={}; // 사용자가 수동으로 펼침/접힘 토글한 날짜
-function ordExpanded(day,hasPending){ return (day in ordOpen)?ordOpen[day]:hasPending; }
-function toggleOrdDay(day,hasPending){ ordOpen[day]=!ordExpanded(day,hasPending); render(); }
+let ordDate=null; // 발주방에서 보고있는 날짜(ISO). null=오늘
+function ordShift(d){ const b=new Date((ordDate||todayK())+'T00:00:00'); b.setDate(b.getDate()+d); ordDate=dk(b); render(); }
+function ordPick(iso){ if(iso)ordDate=iso; render(); }
 function addOrder(){
  const v=$("odText").value.trim();if(!v){toast('물건을 입력하세요');return;}
  ORDERS.push({id:'o'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),who:curUser().name,txt:v,dt:fmtDT(),ts:Date.now(),mt:Date.now(),st:'wait'});
+ ordDate=null; // 등록은 오늘 → 오늘 날짜로 이동해 보이게
  render();toast('발주 요청이 등록되었습니다');
 }
 function toggleOrder(i){
