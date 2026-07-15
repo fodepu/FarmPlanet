@@ -376,12 +376,14 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.3.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.4.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com'];
 /* ▼ 매니저 이메일 — 로그인 시 자동으로 매니저 권한 부여 */
 const MANAGER_EMAILS=['yhyoo061117@gmail.com','kimjuham1120@gmail.com'];
+/* ▼ 일정 게시판 — 대타·시간조정을 최소 며칠 전에 올려야 하는지 (대표님 확정 후 이 숫자만 바꾸면 됨: 3/7/14 등) */
+const BOARD_LEAD_DAYS=7;
 /* ▼ Firebase 구글 로그인 — 콘솔 값으로 교체하면 활성화됩니다. (그대로 두면 기존 이름선택 로그인으로 동작) */
 const FIREBASE_CONFIG={
   apiKey:"AIzaSyDzp2hqGQ_T2RQ0dUbrGmgHjOx6nZJKugY",
@@ -400,7 +402,7 @@ const SYNC_ENABLED=FIREBASE_CONFIG.apiKey.indexOf('여기')===-1;
 let _fbAuth=null,_fbSignInCred=null,_fbSignOut=null;
 let _fsSet=null,_applyingRemote=false,_syncT=null,_lastSyncJSON='',_syncReady=false,_syncStat='연결 준비 중',_syncAt=0;
 let _pendingUser=null,_authTO=null,_authForce=false;
-let STAFF, SHIFTS, ORDERS, NOTICES, CK, SUBMITS, CUR, REFS, READS, SCHED_TS=0, DELETED=[], ODEL=[], PATTERN=null, ATT={}, STORE_LOC=null, WAGE=0, ATTREQ=[], ATTLOG={};
+let STAFF, SHIFTS, ORDERS, NOTICES, CK, SUBMITS, CUR, REFS, READS, SCHED_TS=0, DELETED=[], ODEL=[], PATTERN=null, ATT={}, STORE_LOC=null, WAGE=0, ATTREQ=[], ATTLOG={}, BOARD=[];
 function touchSched(){SCHED_TS=Date.now();} // 시간표 변경 시각 기록(신규 표시용)
 function defaults(){
  STAFF=[
@@ -418,7 +420,7 @@ function defaults(){
  SHIFTS={}; seedWeek(buildWeek(0));
  ORDERS=[]; SUBMITS=[]; CK={}; REFS={}; READS={};
  NOTICES=[{tag:"공지",gold:true,who:"대표님",dt:fmtDT(),ts:Date.now(),bd:"FarmPlanet 앱 사용을 시작합니다. 공지·발주·시간표·마감을 여기서 관리해요."}];
- CUR=null; SCHED_TS=0; DELETED=[]; ODEL=[]; PATTERN=null; ATT={}; STORE_LOC=null; WAGE=MINWAGE; ATTREQ=[]; ATTLOG={};
+ CUR=null; SCHED_TS=0; DELETED=[]; ODEL=[]; PATTERN=null; ATT={}; STORE_LOC=null; WAGE=MINWAGE; ATTREQ=[]; ATTLOG={}; BOARD=[];
 }
 /* 주간 기본 패턴 (2026-07 확정, 화면 편성 기준)
    월: 예흔08~14·미루11~14·지한12:30~16·효원16~19
@@ -438,13 +440,13 @@ function seedWeek(week){
   else if(i===5){set('gh',d,'12:00','18:00');}
   });
 }
-function save(){try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG}));}catch(e){}
+function save(){try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD}));}catch(e){}
  if(SYNC_ENABLED&&typeof pushSync==='function')pushSync();}
 /* ── 실시간 공유 (Firestore 단일 문서, 사진 제외) ── */
 function syncPayload(){
  const ckLite={};
  Object.keys(CK).forEach(k=>{const d=CK[k]||{};ckLite[k]={open:d.open||{},mid:d.mid||{},close:d.close||{}};});
- return {STAFF,SHIFTS,ORDERS,NOTICES,SUBMITS,READS,CK:ckLite,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG};
+ return {STAFF,SHIFTS,ORDERS,NOTICES,SUBMITS,READS,CK:ckLite,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD};
 }
 async function syncBoot(){
  try{
@@ -503,9 +505,12 @@ function applyRemote(data){
   if(d.ORDERS){ const m={}; [...d.ORDERS,...ORDERS].forEach(o=>{const k=ordKey(o);
       if(!m[k] || (o.mt||0)>(m[k].mt||0)) m[k]=o; });
     ORDERS=Object.values(m).filter(o=>!(ODEL||[]).includes(ordKey(o))).sort((a,b)=>(a.ts||0)-(b.ts||0)); }
+  if(d.BOARD){ const m={}; [...d.BOARD,...(BOARD||[])].forEach(b=>{const k=b&&b.id; if(!k)return; // 게시판: id 기준, 최근 수정(mt) 우선 병합
+      if(!m[k] || (b.mt||0)>(m[k].mt||0)) m[k]=b; });
+    BOARD=Object.values(m).sort((a,b)=>(b.ts||0)-(a.ts||0)); }
   if(d.CK){ const merged={}; Object.keys(d.CK).forEach(k=>{merged[k]=Object.assign({},d.CK[k]); if(CK[k]&&CK[k].photos)merged[k].photos=CK[k].photos;});
     Object.keys(CK).forEach(k=>{if(!merged[k])merged[k]=CK[k];}); CK=merged; }
-  try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG}));}catch(e){}
+  try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD}));}catch(e){}
   render();
  }finally{ _applyingRemote=false; }
  if(JSON.stringify(syncPayload())!==data.blob)pushSync(); // 병합 결과 되반영
@@ -521,8 +526,8 @@ function shareSchedule(){
 function load(){
  try{const d=JSON.parse(localStorage.getItem(SKEY));
   if(!d||!d.STAFF)throw 0;
-  ({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG}=Object.assign({ORDERS:[],NOTICES:[],CK:{},SUBMITS:[],CUR:null,REFS:{},READS:{},SCHED_TS:0,DELETED:[],ODEL:[],PATTERN:null,ATT:{},STORE_LOC:null,WAGE:MINWAGE,ATTREQ:[],ATTLOG:{}},d));
-  REFS=REFS||{}; READS=READS||{}; SCHED_TS=SCHED_TS||0; DELETED=DELETED||[]; ODEL=ODEL||[]; ATT=ATT||{}; WAGE=WAGE||MINWAGE; ATTREQ=ATTREQ||[]; ATTLOG=ATTLOG||{};
+  ({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD}=Object.assign({ORDERS:[],NOTICES:[],CK:{},SUBMITS:[],CUR:null,REFS:{},READS:{},SCHED_TS:0,DELETED:[],ODEL:[],PATTERN:null,ATT:{},STORE_LOC:null,WAGE:MINWAGE,ATTREQ:[],ATTLOG:{},BOARD:[]},d));
+  REFS=REFS||{}; READS=READS||{}; SCHED_TS=SCHED_TS||0; DELETED=DELETED||[]; ODEL=ODEL||[]; ATT=ATT||{}; WAGE=WAGE||MINWAGE; ATTREQ=ATTREQ||[]; ATTLOG=ATTLOG||{}; BOARD=BOARD||[];
   NOTICES.forEach(n=>{if(n.ts===undefined)n.ts=0;}); ORDERS.forEach(o=>{if(o.ts===undefined)o.ts=0; o.st=(o.st==='ordered'||o.st==='done'||o.done)?'ordered':'wait';});
   // 14일 지난 체크 기록(사진 포함) 정리
   const lim=new Date();lim.setDate(lim.getDate()-14);const limK=dk(lim);
@@ -685,6 +690,43 @@ function approveAttReq(id){ if(!isAdmin(curUser())){toast('승인은 대표님·
  ATTREQ=ATTREQ.filter(x=>x.id!==id); save(); render(); toast(r.name+'님 요청을 승인·반영했습니다'); }
 function rejectAttReq(id){ if(!isAdmin(curUser())){toast('대표님·매니저만 가능해요');return;}
  ATTREQ=(ATTREQ||[]).filter(x=>x.id!==id); save(); render(); toast('요청을 거절했습니다'); }
+/* ── 관리자: 직원 월별 근무 요약 ── */
+let admMonth=null; // 보고있는 달(그달 1일 ISO). null=이번달
+function admShift(d){ const b=new Date((admMonth||todayK())+'T00:00:00'); b.setMonth(b.getMonth()+d); admMonth=dk(new Date(b.getFullYear(),b.getMonth(),1)); render(); }
+function monthISOs(uid,y,mo){ const days=[]; const l=ATTLOG[uid]||{};
+ Object.keys(l).forEach(iso=>{const d=new Date(iso+'T00:00:00'); if(d.getFullYear()===y&&d.getMonth()===mo)days.push(iso);});
+ const a=ATT[uid]; if(a&&a.date){const d=new Date(a.date+'T00:00:00'); if(d.getFullYear()===y&&d.getMonth()===mo&&!days.includes(a.date))days.push(a.date);}
+ return days.sort(); }
+function staffMonthStat(uid,y,mo){ let ms=0,days=0; monthISOs(uid,y,mo).forEach(iso=>{ const r=attRecFor(uid,iso); const w=recWorkedMs(r,iso===todayK()); if(w>0){ms+=w;days++;} }); return {ms,days}; }
+function admSummaryHTML(){ if(!isAdmin(curUser()))return '';
+ const base=new Date((admMonth||todayK())+'T00:00:00'), y=base.getFullYear(), mo=base.getMonth();
+ const rows=STAFF.filter(s=>!s.pending).map(s=>({s,st:staffMonthStat(s.id,y,mo)})).filter(x=>x.st.days>0).sort((a,b)=>b.st.ms-a.st.ms);
+ const list= rows.length? rows.map(({s,st})=>{ const h=Math.floor(st.ms/3600000), m=Math.round((st.ms%3600000)/60000);
+   return `<div class="ck" style="cursor:pointer" onclick="admStaffDetail('${s.id}')">
+     <span style="width:24px;height:24px;border-radius:7px;background:${s.c};flex:none"></span>
+     <div class="tx"><b>${s.name}</b> <span class="muted" style="font-size:11px">· ${st.days}일</span></div>
+     <span class="pill" style="background:#EDF1EA;color:var(--ink)">${h}시간 ${m}분</span></div>`; }).join('')
+   : `<p class="muted" style="text-align:center;padding:16px 2px">이 달 근무 기록이 없어요.</p>`;
+ const totMs=rows.reduce((a,x)=>a+x.st.ms,0), th=Math.floor(totMs/3600000), tm=Math.round((totMs%3600000)/60000);
+ return `<div class="card" style="margin-top:12px"><h3>${IC('clock','li sm')}직원 근무 기록</h3>
+   <div class="acalhd"><button onclick="admShift(-1)">‹</button><b style="font-size:14.5px">${y}년 ${mo+1}월</b><button onclick="admShift(1)">›</button></div>
+   ${list}
+   ${rows.length?`<div class="lrow tot"><span>전체 합계</span><b>${th}시간 ${tm}분</b></div>`:''}
+   <p class="muted" style="font-size:11px;margin-top:8px;text-align:center">이름을 누르면 날짜별 상세가 열려요</p></div>`; }
+function admStaffDetail(uid){ if(!isAdmin(curUser()))return;
+ const base=new Date((admMonth||todayK())+'T00:00:00'), y=base.getFullYear(), mo=base.getMonth();
+ const s=STAFF.find(x=>x.id===uid); if(!s)return;
+ const isos=monthISOs(uid,y,mo);
+ const rows=isos.map(iso=>{ const r=attRecFor(uid,iso); if(!r||!r.in)return '';
+   const live=iso===todayK()&&!r.out, ms=recWorkedMs(r,live), min=Math.round(ms/60000);
+   const d=new Date(iso+'T00:00:00'), md=`${d.getMonth()+1}/${d.getDate()}(${WD[d.getDay()]})`, brk=(r.breaks||[]).length;
+   return `<div class="lrow"><span>${md} <span class="muted" style="font-size:11px">${fmtT(r.in)}~${r.out?fmtT(r.out):'근무중'}${brk?' · 휴게'+brk+'회':''}</span></span><b>${Math.floor(min/60)}시간 ${min%60}분${live?' +':''}</b></div>`;
+ }).filter(Boolean).join('');
+ const workedIsos=isos.filter(iso=>{const r=attRecFor(uid,iso);return r&&r.in;});
+ const totMs=workedIsos.reduce((a,iso)=>{const r=attRecFor(uid,iso);return a+recWorkedMs(r,iso===todayK()&&!(r&&r.out));},0), min=Math.round(totMs/60000);
+ openModal(`<h3>${s.name} · ${y}년 ${mo+1}월</h3>${rows||'<p class="muted" style="text-align:center;padding:14px">기록이 없어요</p>'}
+   <div class="lrow tot"><span>합계 ${workedIsos.length}일</span><b>${Math.floor(min/60)}시간 ${min%60}분</b></div>
+   <button class="btn sec" style="margin-top:12px" onclick="closeModal()">닫기</button>`); }
 function screenAtt(){
  const admin=isAdmin(curUser()), a=attToday(), st=attStatus(a);
  const td=TODAY(), shift=td?rangesLabel(CUR+'|'+td.k):'';
@@ -709,8 +751,8 @@ function screenAtt(){
  }
  const editBtn = a? `<button class="btn sec" style="margin-top:14px" onclick="reqAtt()">${IC('swap','li sm')} 기록 수정 요청</button>`:'';
  const reqBox = (admin && attReqCount())? `<div class="card" style="margin-top:12px;border-color:#bcd7f0"><h3>${IC('bell','li sm')}근태 요청 ${attReqCount()}건</h3>${ATTREQ.map(r=>`<div style="border-top:1px solid var(--edge);padding:8px 0"><div style="font-size:13px"><b>${r.name}</b> <span class="pill" style="background:${r.kind==='in'?'#e7f0ff':'#F0F4EE'};color:${r.kind==='in'?'#2f6fd0':'var(--deep)'};font-size:10px">${r.kind==='in'?'출근 요청':'기록 수정'}</span> <span class="muted" style="font-size:11px">${r.date.slice(5)}</span></div><div class="muted" style="font-size:11.5px">출근 ${fmtT(r.in)}${r.out?' · 퇴근 '+fmtT(r.out):" · '근무 중'으로"}${r.note?' · "'+r.note+'"':''}</div><div class="row" style="gap:6px;margin-top:6px"><button class="btn sec" style="color:var(--warn);border-color:#f0d9bd" onclick="rejectAttReq('${r.id}')">거절</button><button class="btn" onclick="approveAttReq('${r.id}')">승인</button></div></div>`).join('')}</div>`:'';
- const adminBox = admin? `<div class="muted" style="font-size:11px;margin-top:14px">${STORE_LOC?'매장 위치 설정됨':'매장 위치 미설정 — GPS 확인 안 됨'} · <span class="authlink" onclick="setStoreLocMap()">${STORE_LOC?'위치 재설정':'매장 위치 설정'}</span></div>${attRoster()}`:'';
- return `<h2 class="title">${IC('clock')}근태</h2><div class="card">${body}${editBtn}</div>${attHistoryHTML()}${reqBox}${adminBox}`;
+ const adminBox = admin? `<div class="muted" style="font-size:11px;margin-top:14px">${STORE_LOC?'매장 위치 설정됨':'매장 위치 미설정 — GPS 확인 안 됨'} · <span class="authlink" onclick="setStoreLocMap()">${STORE_LOC?'위치 재설정':'매장 위치 설정'}</span></div>`:'';
+ return `<h2 class="title">${IC('clock')}근태</h2><div class="card">${body}${editBtn}</div>${attHistoryHTML()}${admin?admSummaryHTML():''}${reqBox}${adminBox}`;
 }
 function setWage(){ const v=prompt('시급(원):',WAGE); if(v===null)return; const n=parseInt(String(v).replace(/[^0-9]/g,''),10); if(!n){toast('숫자를 입력하세요');return;} WAGE=n; save(); reAtt(); toast('시급을 '+won(n)+'(으)로 저장했습니다'); }
 function attView(){
@@ -729,7 +771,7 @@ function attView(){
    <div class="muted" style="font-size:11.5px;margin-top:2px">${info}</div>
    <div style="margin-top:10px">${btns}</div>
    ${workLine}
-   ${admin?`<div class="muted" style="font-size:11px;margin-top:12px">${STORE_LOC?'매장 위치 설정됨':'매장 위치 미설정 — GPS 확인 안 됨'} · <span class="authlink" onclick="setStoreLocMap()">${STORE_LOC?'위치 재설정':'매장 위치 설정'}</span></div>${attRoster()}`:''}
+   ${admin?`<div class="muted" style="font-size:11px;margin-top:12px">${STORE_LOC?'매장 위치 설정됨':'매장 위치 미설정 — GPS 확인 안 됨'} · <span class="authlink" onclick="setStoreLocMap()">${STORE_LOC?'위치 재설정':'매장 위치 설정'}</span></div>`:''}
    <button class="btn sec" style="margin-top:14px" onclick="closeModal()">닫기</button>`;
 }
 /* ── 매장 위치 지정: 무료 지도(Leaflet + OSM/위성) + 주소 검색(Nominatim), 키·심사 불필요 ── */
@@ -810,6 +852,7 @@ function attRoster(){
 function unread(){const r=READS[CUR]||{};
  return {n:NOTICES.filter(x=>(x.ts||0)>(r.notice||0)).length,
          o:ORDERS.filter(x=>(x.ts||0)>(r.order||0)).length,
+         b:(BOARD||[]).filter(x=>(x.mt||x.ts||0)>(r.board||0)).length,
          sched:(SCHED_TS||0)>(r.sched||0)?1:0};}
 
 /* ═══════════ 로그인 ═══════════ */
@@ -928,6 +971,7 @@ function screenHome(){
    <div class="qbtn" onclick="go('close')">${IC('check')}오픈·마감 체크</div>
    <div class="qbtn" onclick="go('manual')">${IC('book')}매뉴얼·레시피</div>
    <div class="qbtn" style="position:relative" onclick="go('notice')">${IC('bell')}공지·인수인계${u.n?'<span class="bdotn" style="position:absolute;top:10px;right:10px;margin:0"></span>':''}</div>
+   <div class="qbtn" style="position:relative" onclick="go('board')">${IC('swap')}일정 게시판${u.b?'<span class="bdotn" style="position:absolute;top:10px;right:10px;margin:0"></span>':''}</div>
    ${isAdmin(curUser())?`<div class="qbtn" style="position:relative" onclick="staffManage()">${IC('user')}직원 관리${pendingCount()?'<span class="bdotn" style="position:absolute;top:10px;right:10px;margin:0"></span>':''}</div>`:''}
  </div>
  <div class="card"><h3>${IC('tv','li sm')}매장 TV</h3>
@@ -1448,6 +1492,133 @@ function addNote(){
  render();toast('등록되었습니다');
 }
 
+/* ═══════════ 일정 게시판 (대타·시간조정) ═══════════ */
+let boardKind='sub'; // 새 글 종류: sub=대타 구함, adjust=시간 조정
+function setBoardKind(k){boardKind=k;render();}
+function boardId(){return 'b'+Date.now()+Math.random().toString(36).slice(2,6);}
+function boardDaysLeft(target){ if(!target)return null; const t=new Date(target+'T00:00:00'); const n=new Date(); n.setHours(0,0,0,0); return Math.round((t-n)/86400000); }
+function screenBoard(){
+ const admin=isAdmin(curUser());
+ READS[CUR]=READS[CUR]||{}; READS[CUR].board=Date.now(); // 읽음 처리
+ const items=(BOARD||[]).map((b,i)=>({b,i}));
+ const open=items.filter(x=>x.b.status==='open').sort((a,b)=>(a.b.target||'').localeCompare(b.b.target||''));
+ const closed=items.filter(x=>x.b.status!=='open').sort((a,b)=>(b.b.ts||0)-(a.b.ts||0));
+ const ordered=open.concat(closed);
+ const rows= ordered.length? ordered.map(({b,i})=>boardCard(b,i,admin)).join('')
+   : `<p class="muted" style="text-align:center;padding:22px 2px">아직 올라온 요청이 없어요.</p>`;
+ const todayISO=todayK();
+ return `<h2 class="title">${IC('swap')}일정 게시판</h2>
+   <div class="warnbox" style="margin-bottom:11px">${IC('spark','li sm')} 대타·시간 조정은 <b>최소 ${BOARD_LEAD_DAYS}일 전</b>에 올려주세요. 늦으면 대신할 사람을 구하기 어려워요.</div>
+   <div class="card"><h3>${IC('swap','li sm')}요청 올리기</h3>
+     <div class="seg">
+       <button class="${boardKind==='sub'?'on':''}" onclick="setBoardKind('sub')">대타 구함</button>
+       <button class="${boardKind==='adjust'?'on':''}" onclick="setBoardKind('adjust')">시간 조정</button></div>
+     <div class="fld"><label>대상 날짜</label>
+       <input class="tsel" type="date" id="bDate" min="${todayISO}"></div>
+     ${boardKind==='adjust'?`<div class="fld"><label>바꿀 시간 (예: 14~16 · 분할은 12~1,5~6)</label>
+       <input class="tsel" id="bTime" placeholder="14:00~16:00"></div>`:''}
+     <textarea class="inp" id="bMemo" placeholder="${boardKind==='sub'?'예: 이 날 일본 여행이라 대타 구합니다 🙏':'예: 오후 병원 예약이라 늦게 시작하고 싶어요'}"></textarea>
+     <button class="btn" style="margin-top:8px" onclick="addBoard()">등록</button></div>
+   ${rows}`;
+}
+function boardCard(b,i,admin){
+ const dleft=boardDaysLeft(b.target);
+ const td=b.target?new Date(b.target+'T00:00:00'):null;
+ const dmd=td?`${td.getMonth()+1}/${td.getDate()} (${WD[td.getDay()]})`:'';
+ const kindTxt=b.kind==='adjust'?'시간 조정':'대타 구함';
+ const mine=b.uid===CUR;
+ const vols=b.vols||{}; const volKeys=Object.keys(vols);
+ const isVol=!!vols[CUR];
+ const past=(dleft!==null&&dleft<0);
+ const late=(dleft!==null&&dleft<BOARD_LEAD_DAYS);
+ let statusBadge;
+ if(b.status==='done'){ statusBadge=`<span class="pill" style="background:#EDF7F0;color:var(--deep)">✓ ${b.kind==='adjust'?'조정 완료':'대타 확정: '+(b.pickedName||'')}</span>`; }
+ else if(b.status==='cancel'){ statusBadge=`<span class="pill" style="background:#eef0ec;color:#9aa79d">취소됨</span>`; }
+ else { statusBadge=`<span class="pill hot">구하는 중</span>`; }
+ const leadBadge=(b.status==='open'&&dleft!==null)?(late?`<span class="pill" style="background:#fdeceb;color:#b04a3f">${past?'지난 날짜':'D-'+dleft+' 임박'}</span>`:`<span class="pill">D-${dleft}</span>`):'';
+ let volArea='';
+ if(b.status==='open'){
+   const volList=volKeys.length? volKeys.map(vuid=>`<span class="pill" style="background:#EDF1EA;color:var(--ink)">${vols[vuid]}${admin?`<span onclick="pickBoard(${i},'${vuid}')" style="cursor:pointer;color:var(--deep);font-weight:800;margin-left:6px">확정</span>`:''}</span>`).join(' ')
+     : `<span class="muted" style="font-size:11.5px">아직 지원자 없음</span>`;
+   if(b.kind==='sub') volArea=`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:8px"><span class="muted" style="font-size:11.5px">지원:</span> ${volList}</div>`;
+ }
+ let actions='';
+ if(b.status==='open'){
+   const btns=[];
+   if(!mine&&b.kind==='sub') btns.push(`<button class="cam" onclick="volBoard(${i})">${isVol?'지원 취소':'제가 할게요'}</button>`);
+   if(b.kind==='adjust'&&admin) btns.push(`<span class="oact" style="color:var(--deep);border-color:#cfe0d3" onclick="pickBoard(${i},'')">조정 완료</span>`);
+   if(mine||admin) btns.push(`<span class="oact" onclick="cancelBoard(${i})">요청 취소</span>`);
+   if(btns.length) actions=`<div style="display:flex;align-items:center;gap:8px;margin-top:9px;flex-wrap:wrap">${btns.join('')}</div>`;
+ } else if(mine||admin){
+   const btns=[];
+   if(admin&&b.status==='done'&&b.snap) btns.push(`<span class="oact" style="color:var(--deep);border-color:#cfe0d3" onclick="unpickBoard(${i})">되돌리기</span>`);
+   btns.push(`<span class="oact del" onclick="delBoard(${i})">삭제</span>`);
+   actions=`<div style="display:flex;gap:8px;margin-top:9px">${btns.join('')}</div>`;
+ }
+ const wishTime=(b.kind==='adjust'&&b.newRanges&&b.newRanges.length)?`<div class="bd" style="color:var(--deep);font-weight:700">→ 희망 시간: ${b.newRanges.map(r=>cT(r.s)+'~'+cT(r.e)).join(', ')}</div>`:'';
+ return `<div class="note" style="${late&&b.status==='open'?'border-color:#f0c9bd':''}">
+   <div class="nm"><span class="pill" style="${b.kind==='adjust'?'background:#e7eefb;color:#2b5fb0':'background:#fdf2d8;color:#a16207'}">${kindTxt}</span>${b.who} ${statusBadge}</div>
+   <div class="dt">대상 <b style="color:var(--ink)">${dmd}</b> ${leadBadge} · 올린날 ${b.dt}</div>
+   ${b.memo?`<div class="bd">${b.memo}</div>`:''}${wishTime}
+   ${volArea}${actions}</div>`;
+}
+function addBoard(){
+ const dv=$("bDate").value; const memo=($("bMemo").value||'').trim();
+ if(!dv){toast('대상 날짜를 선택하세요');return;}
+ let newRanges=null;
+ if(boardKind==='adjust'){
+   const tv=(($("bTime")&&$("bTime").value)||'').trim();
+   if(!tv){toast('바꿀 시간을 입력하세요 (예: 14~16)');return;}
+   newRanges=parseRanges(tv);
+   if(!newRanges){toast('시간 형식을 확인하세요 (예: 14~16 또는 12~1,5~6)');return;}
+ }
+ const dleft=boardDaysLeft(dv);
+ const post=()=>{ BOARD.unshift({id:boardId(),who:curUser().name,uid:CUR,dt:fmtDT(),ts:Date.now(),mt:Date.now(),target:dv,kind:boardKind,memo,newRanges,status:'open',vols:{},picked:'',pickedName:'',snap:null});
+   save();render();toast('게시판에 등록되었습니다'); };
+ if(dleft!==null&&dleft<BOARD_LEAD_DAYS){
+   askConfirm(`기준(${BOARD_LEAD_DAYS}일 전)보다 늦은 요청이에요 (D-${dleft}). 그래도 올릴까요? 대신할 사람을 못 구할 수 있어요.`,'그래도 등록',post);
+ } else post();
+}
+function volBoard(i){ const b=BOARD[i]; if(!b||b.status!=='open')return; b.vols=b.vols||{};
+ if(b.vols[CUR]){delete b.vols[CUR];toast('지원을 취소했어요');}
+ else {b.vols[CUR]=curUser().name;toast('지원했어요 — 대표님 확정을 기다려요');}
+ b.mt=Date.now(); save();render(); }
+function _clone(v){return v?JSON.parse(JSON.stringify(v)):null;}
+function pickBoard(i,uid){ if(!isAdmin(curUser())){toast('확정은 대표님·매니저만 가능해요');return;}
+ const b=BOARD[i]; if(!b)return;
+ let msg='';
+ if(b.kind==='sub'&&uid){ // 대타 확정 → 요청자의 그날 근무를 지원자에게 자동 이전
+   const reqKey=b.uid+'|'+b.target, volKey=uid+'|'+b.target;
+   b.snap={reqKey, volKey, req:_clone(SHIFTS[reqKey]), vol:_clone(SHIFTS[volKey])}; // 되돌리기용 스냅샷
+   const reqRanges=getRanges(reqKey);
+   b.picked=uid; b.pickedName=(b.vols&&b.vols[uid])||'';
+   if(!reqRanges.length){ msg=`${b.pickedName} 대타 확정 — 요청자의 그날 근무가 없어 시간표는 그대로 둡니다`; }
+   else { const existVol=getRanges(volKey);
+     if(existVol.length){ setRanges(volKey, existVol.concat(reqRanges)); msg=`${b.pickedName} 확정 — 그날 이미 근무가 있어 합쳤어요, 시간표 확인!`; }
+     else { setRanges(volKey, reqRanges); msg=`${b.pickedName} 대타로 확정 — 시간표 반영 완료`; }
+     setRanges(reqKey, []); touchSched();
+   }
+ } else if(b.kind==='adjust'){ // 시간 조정 → 요청자의 그날 근무를 새 시간으로
+   const reqKey=b.uid+'|'+b.target;
+   b.snap={reqKey, req:_clone(SHIFTS[reqKey])};
+   if(b.newRanges&&b.newRanges.length){ setRanges(reqKey, b.newRanges); touchSched();
+     msg=`시간표를 ${b.newRanges.map(r=>cT(r.s)+'~'+cT(r.e)).join(', ')}(으)로 조정했습니다`; }
+   else msg='조정 완료로 처리했습니다';
+ }
+ b.status='done'; b.mt=Date.now();
+ save();render(); toast(msg||'처리했습니다'); }
+function unpickBoard(i){ if(!isAdmin(curUser())){toast('대표님·매니저만 가능해요');return;}
+ const b=BOARD[i]; if(!b)return;
+ askConfirm('확정을 되돌리고 시간표도 원래대로 복구할까요?','되돌리기',()=>{ const t=BOARD[i]; if(!t)return; const sn=t.snap;
+   if(sn){ if(sn.reqKey){ if(sn.req)SHIFTS[sn.reqKey]=sn.req; else delete SHIFTS[sn.reqKey]; }
+     if(sn.volKey){ if(sn.vol)SHIFTS[sn.volKey]=sn.vol; else delete SHIFTS[sn.volKey]; } touchSched(); }
+   t.status='open'; t.picked=''; t.pickedName=''; t.snap=null; t.mt=Date.now();
+   save();render();toast('되돌렸습니다'); }); }
+function cancelBoard(i){ const b=BOARD[i]; if(!b)return; if(!(b.uid===CUR||isAdmin(curUser()))){toast('본인·관리자만 가능해요');return;}
+ askConfirm('이 요청을 취소할까요?','요청 취소',()=>{ const t=BOARD[i]; if(!t)return; t.status='cancel'; t.mt=Date.now(); save();render();toast('요청을 취소했습니다'); }); }
+function delBoard(i){ const b=BOARD[i]; if(!b)return; if(!(b.uid===CUR||isAdmin(curUser()))){toast('본인·관리자만 가능해요');return;}
+ askConfirm('이 글을 완전히 삭제할까요?','삭제',()=>{ if(BOARD[i])BOARD.splice(i,1); save();render();toast('삭제했습니다'); }); }
+
 /* ═══════════ 모달 · 네비 · 렌더 ═══════════ */
 function openModal(h){$("mbox").innerHTML=h;$("modal").classList.add("show");}
 function closeModal(){$("modal").classList.remove("show");}
@@ -1473,9 +1644,10 @@ function render(){
  else if(tab==="close") html=screenClose();
  else if(tab==="notice") html=screenNotice();
  else if(tab==="order") html=screenNotice();
+ else if(tab==="board") html=screenBoard();
  $("screen").innerHTML=html;
  if(tab==="manual") renderManual($("msearch")?.value||"");
- const navTab=(tab==='close'||tab==='manual'||tab==='closeAdmin'||tab==='notice')?'home':tab;
+ const navTab=(tab==='close'||tab==='manual'||tab==='closeAdmin'||tab==='notice'||tab==='board')?'home':tab;
  const u=CUR?unread():{n:0,o:0,sched:0};
  $("nav").innerHTML=NAV.map(n=>{
    const dot=(n[0]==='order'&&u.o)||(n[0]==='sched'&&u.sched)||(n[0]==='att'&&isAdmin(curUser())&&attReqCount());
