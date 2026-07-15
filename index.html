@@ -105,7 +105,20 @@ input.inp{min-height:auto}
 .ondate{flex:1;position:relative;display:flex;align-items:center;justify-content:center;gap:8px;height:42px;background:#F0F4EE;border:1px solid var(--edge);border-radius:9px;font-size:15px;font-weight:800;color:var(--ink);cursor:pointer}
 .ondate input[type=date]{position:absolute;inset:0;opacity:0;width:100%;height:100%;border:0;margin:0;padding:0;cursor:pointer}
 .odbadge{font-size:11px;font-weight:800;color:#fff;background:#ff7d59;border-radius:20px;padding:2px 9px}
+.odcar{font-size:10px;color:var(--sub)}
 .ordday{min-height:60px;margin-bottom:12px}
+.ocal{background:#fff;border:1px solid var(--edge);border-radius:12px;padding:11px;margin:0 0 12px}
+.ocalhd{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px;font-weight:800;font-size:14.5px;color:var(--ink)}
+.ocalhd button{flex:none;width:32px;height:32px;border:0;background:#F0F4EE;border-radius:8px;font-size:17px;color:var(--deep);cursor:pointer;line-height:1}
+.ocalgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.ocaldow{text-align:center;font-size:10.5px;color:var(--sub);font-weight:700;padding:2px 0}
+.ocell{position:relative;aspect-ratio:1;border:0;background:transparent;border-radius:9px;font-size:13px;color:var(--ink);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+.ocell.empty{cursor:default}
+.ocell.today{outline:1.5px solid #cfe0d3;outline-offset:-1.5px}
+.ocell.pend{background:#fdf1e3}
+.ocell.sel{background:var(--deep);color:#fff;font-weight:800}
+.ocpill{position:absolute;bottom:2px;left:0;right:0;font-size:8px;font-weight:800;color:#c07d3a;line-height:1}
+.ocell.sel .ocpill{color:#e9f6ec}
 .ometa{font-size:10.5px;color:var(--sub);margin:0 0 3px 4px}
 .obub{background:#fff;border:1px solid var(--edge);border-radius:2px 10px 10px 10px;padding:9px 10px;display:flex;align-items:center;gap:6px;max-width:100%}
 .obx{width:19px;height:19px;border-radius:5px;border:1.6px solid #cfd8cf;flex:none;display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff}
@@ -351,7 +364,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.0.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.1.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com'];
@@ -1267,7 +1280,7 @@ function screenNotice(){
        const oMD=(o.dt||'').split(' ')[0], carried=isToday&&oMD!==selMD;
        return `<div class="omsg"><div class="obub ${done?'done':''}">
          <div class="obx" ${admin?`onclick="toggleOrder(${i})"`:''} style="${admin?'cursor:pointer':''}">${done?'✓':''}</div>
-         <div class="otx">${o.txt}${carried?`<span style="font-size:10px;font-weight:700;color:#c07d3a;background:#fdf1e3;border-radius:10px;padding:1px 6px;margin-left:5px;white-space:nowrap">↩ 이월 ${oMD}</span>`:''}</div>
+         <div class="otx">${o.txt}${carried?`<span style="font-size:10px;font-weight:700;color:#c07d3a;background:#fdf1e3;border-radius:10px;padding:1px 6px;margin-left:5px;white-space:nowrap">이월 ${oMD}</span>`:''}</div>
          <span class="ost" style="color:${done?'#2E8C49':'#ff7d59'}">${done?'발주됨':'대기'}</span>
          ${mine?`<span class="oact" onclick="editOrder(${i})">수정</span><span class="oact del" onclick="deleteOrder(${i})">삭제</span>`:''}
        </div></div>`;}).join('')
@@ -1275,8 +1288,9 @@ function screenNotice(){
    return `<h2 class="title">${IC('cart')}공지 · 발주</h2>${seg}
      <div class="onav">
        <button class="onbtn" onclick="ordShift(-1)" aria-label="이전 날">‹</button>
-       <label class="ondate"><span>${sd.getMonth()+1}/${sd.getDate()} (${WD[sd.getDay()]})</span>${pend?`<span class="odbadge">대기 ${pend}</span>`:''}<input type="date" value="${selISO}" onchange="ordPick(this.value)"></label>
+       <div class="ondate" onclick="toggleOrdCal()"><span>${sd.getMonth()+1}/${sd.getDate()} (${WD[sd.getDay()]})</span>${pend?`<span class="odbadge">대기 ${pend}</span>`:''}<span class="odcar">${ordCalOpen?'▴':'▾'}</span></div>
        <button class="onbtn" onclick="ordShift(1)" aria-label="다음 날">›</button></div>
+     ${ordCalOpen?ordCalHTML(selISO):''}
      <div class="ordday">${rows}</div>
      ${waitCnt?`<button class="btn sec" style="margin-bottom:8px" onclick="copyOrders()">${IC('copy','li sm')} 대기 발주 전체 복사 (${waitCnt}건)</button>`:''}
      <div class="row" style="gap:7px">
@@ -1304,8 +1318,24 @@ function screenNotice(){
    ${list}`;
 }
 let ordDate=null; // 발주방에서 보고있는 날짜(ISO). null=오늘
-function ordShift(d){ const b=new Date((ordDate||todayK())+'T00:00:00'); b.setDate(b.getDate()+d); ordDate=dk(b); render(); }
-function ordPick(iso){ if(iso)ordDate=iso; render(); }
+let ordCalOpen=false, ordCalMonth=null; // 커스텀 달력 펼침 여부·표시중인 달(그달 1일 ISO)
+function ordShift(d){ const b=new Date((ordDate||todayK())+'T00:00:00'); b.setDate(b.getDate()+d); ordDate=dk(b);
+ if(ordCalOpen){const m=new Date((ordDate)+'T00:00:00'); ordCalMonth=dk(new Date(m.getFullYear(),m.getMonth(),1));} render(); }
+function ordPick(iso){ if(iso)ordDate=iso; ordCalOpen=false; render(); }
+function toggleOrdCal(){ ordCalOpen=!ordCalOpen; if(ordCalOpen){const m=new Date((ordDate||todayK())+'T00:00:00'); ordCalMonth=dk(new Date(m.getFullYear(),m.getMonth(),1));} render(); }
+function ordCalShift(d){ const b=new Date((ordCalMonth||todayK())+'T00:00:00'); b.setMonth(b.getMonth()+d); ordCalMonth=dk(new Date(b.getFullYear(),b.getMonth(),1)); render(); }
+function ordCalHTML(selISO){
+ const base=new Date((ordCalMonth||selISO)+'T00:00:00'), y=base.getFullYear(), mo=base.getMonth();
+ const lead=new Date(y,mo,1).getDay(), ndays=new Date(y,mo+1,0).getDate(), tk=todayK();
+ const pend={}; ORDERS.forEach(o=>{ if(o.st==='wait'){const md=(o.dt||'').split(' ')[0]; pend[md]=(pend[md]||0)+1;} });
+ let cells=''; for(let i=0;i<lead;i++) cells+='<div class="ocell empty"></div>';
+ for(let d=1;d<=ndays;d++){ const iso=dk(new Date(y,mo,d)), md=(mo+1)+'/'+d, n=pend[md]||0, sel=iso===selISO, isT=iso===tk;
+   cells+=`<button class="ocell${sel?' sel':''}${isT?' today':''}${n?' pend':''}" onclick="ordPick('${iso}')"><span>${d}</span>${n?`<span class="ocpill">대기${n}</span>`:''}</button>`; }
+ const dows=WD.map(x=>`<div class="ocaldow">${x}</div>`).join('');
+ return `<div class="ocal"><div class="ocalhd"><button onclick="ordCalShift(-1)" aria-label="이전 달">‹</button><span>${y}년 ${mo+1}월</span><button onclick="ordCalShift(1)" aria-label="다음 달">›</button></div>
+   <div class="ocalgrid">${dows}${cells}</div>
+   <div class="muted" style="font-size:10.5px;text-align:center;margin-top:7px"><span style="display:inline-block;width:9px;height:9px;background:#fdf1e3;border:1px solid #e9cfa8;border-radius:3px;vertical-align:-1px;margin-right:4px"></span>발주 대기가 남은 날</div></div>`;
+}
 function addOrder(){
  const v=$("odText").value.trim();if(!v){toast('물건을 입력하세요');return;}
  ORDERS.push({id:'o'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),who:curUser().name,txt:v,dt:fmtDT(),ts:Date.now(),mt:Date.now(),st:'wait'});
