@@ -119,6 +119,18 @@ input.inp{min-height:auto}
 .ocell.sel{background:var(--deep);color:#fff;font-weight:800}
 .ocpill{position:absolute;bottom:2px;left:0;right:0;font-size:8px;font-weight:800;color:#c07d3a;line-height:1}
 .ocell.sel .ocpill{color:#e9f6ec}
+.acalhd{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;font-size:16px;color:var(--ink)}
+.acalhd button{flex:none;width:32px;height:32px;border:0;background:#F0F4EE;border-radius:8px;font-size:17px;color:var(--deep);cursor:pointer;line-height:1}
+.asumrow{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.apill{background:#EDF1EA;border-radius:20px;padding:5px 13px;font-size:13.5px;font-weight:800;color:var(--ink)}
+.acalgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.acaldow{text-align:center;font-size:10.5px;font-weight:700;padding:3px 0}
+.acell{position:relative;min-height:48px;border:0;background:transparent;border-radius:8px;cursor:default;display:flex;flex-direction:column;align-items:center;padding:4px 0 3px}
+.acell.has{cursor:pointer}
+.acell.has:active{background:#F0F4EE}
+.acell .ad{font-size:12.5px;color:var(--ink);width:23px;height:23px;display:flex;align-items:center;justify-content:center}
+.acell.today .ad{background:var(--deep);color:#fff;border-radius:50%;font-weight:800}
+.acell .aw{font-size:8.5px;font-weight:800;color:var(--deep);margin-top:2px;line-height:1.05;text-align:center}
 .ometa{font-size:10.5px;color:var(--sub);margin:0 0 3px 4px}
 .obub{background:#fff;border:1px solid var(--edge);border-radius:2px 10px 10px 10px;padding:9px 10px;display:flex;align-items:center;gap:6px;max-width:100%}
 .obx{width:19px;height:19px;border-radius:5px;border:1.6px solid #cfd8cf;flex:none;display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff}
@@ -364,7 +376,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.2.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.3.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com'];
@@ -388,7 +400,7 @@ const SYNC_ENABLED=FIREBASE_CONFIG.apiKey.indexOf('여기')===-1;
 let _fbAuth=null,_fbSignInCred=null,_fbSignOut=null;
 let _fsSet=null,_applyingRemote=false,_syncT=null,_lastSyncJSON='',_syncReady=false,_syncStat='연결 준비 중',_syncAt=0;
 let _pendingUser=null,_authTO=null,_authForce=false;
-let STAFF, SHIFTS, ORDERS, NOTICES, CK, SUBMITS, CUR, REFS, READS, SCHED_TS=0, DELETED=[], ODEL=[], PATTERN=null, ATT={}, STORE_LOC=null, WAGE=0, ATTREQ=[];
+let STAFF, SHIFTS, ORDERS, NOTICES, CK, SUBMITS, CUR, REFS, READS, SCHED_TS=0, DELETED=[], ODEL=[], PATTERN=null, ATT={}, STORE_LOC=null, WAGE=0, ATTREQ=[], ATTLOG={};
 function touchSched(){SCHED_TS=Date.now();} // 시간표 변경 시각 기록(신규 표시용)
 function defaults(){
  STAFF=[
@@ -406,7 +418,7 @@ function defaults(){
  SHIFTS={}; seedWeek(buildWeek(0));
  ORDERS=[]; SUBMITS=[]; CK={}; REFS={}; READS={};
  NOTICES=[{tag:"공지",gold:true,who:"대표님",dt:fmtDT(),ts:Date.now(),bd:"FarmPlanet 앱 사용을 시작합니다. 공지·발주·시간표·마감을 여기서 관리해요."}];
- CUR=null; SCHED_TS=0; DELETED=[]; ODEL=[]; PATTERN=null; ATT={}; STORE_LOC=null; WAGE=MINWAGE; ATTREQ=[];
+ CUR=null; SCHED_TS=0; DELETED=[]; ODEL=[]; PATTERN=null; ATT={}; STORE_LOC=null; WAGE=MINWAGE; ATTREQ=[]; ATTLOG={};
 }
 /* 주간 기본 패턴 (2026-07 확정, 화면 편성 기준)
    월: 예흔08~14·미루11~14·지한12:30~16·효원16~19
@@ -426,13 +438,13 @@ function seedWeek(week){
   else if(i===5){set('gh',d,'12:00','18:00');}
   });
 }
-function save(){try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ}));}catch(e){}
+function save(){try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG}));}catch(e){}
  if(SYNC_ENABLED&&typeof pushSync==='function')pushSync();}
 /* ── 실시간 공유 (Firestore 단일 문서, 사진 제외) ── */
 function syncPayload(){
  const ckLite={};
  Object.keys(CK).forEach(k=>{const d=CK[k]||{};ckLite[k]={open:d.open||{},mid:d.mid||{},close:d.close||{}};});
- return {STAFF,SHIFTS,ORDERS,NOTICES,SUBMITS,READS,CK:ckLite,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ};
+ return {STAFF,SHIFTS,ORDERS,NOTICES,SUBMITS,READS,CK:ckLite,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG};
 }
 async function syncBoot(){
  try{
@@ -474,6 +486,8 @@ function applyRemote(data){
   if(d.ATTREQ)ATTREQ=d.ATTREQ; // 요청 큐(최신 반영)
   if(d.ATT){ const m=Object.assign({},d.ATT); // 사용자별 최신 기록 유지
     Object.keys(ATT||{}).forEach(uid=>{const l=ATT[uid],r=m[uid]; if(!r||attStamp(l)>attStamp(r))m[uid]=l;}); ATT=m; }
+  if(d.ATTLOG){ Object.keys(d.ATTLOG).forEach(uid=>{ ATTLOG[uid]=ATTLOG[uid]||{}; // 일자별 기록 병합(날짜별 최신 반영)
+    Object.keys(d.ATTLOG[uid]).forEach(dt=>{ const rr=d.ATTLOG[uid][dt], lr=ATTLOG[uid][dt]; if(!lr||attStamp(rr)>=attStamp(lr))ATTLOG[uid][dt]=rr; }); }); }
   if(d.STAFF){ // 병합: 원격 기준 + 로컬 신규/이메일/매니저 보존, 삭제표식 제외
     const by={}; d.STAFF.forEach(s=>by[s.id]=Object.assign({},s));
     STAFF.forEach(ls=>{ const rs=by[ls.id];
@@ -491,7 +505,7 @@ function applyRemote(data){
     ORDERS=Object.values(m).filter(o=>!(ODEL||[]).includes(ordKey(o))).sort((a,b)=>(a.ts||0)-(b.ts||0)); }
   if(d.CK){ const merged={}; Object.keys(d.CK).forEach(k=>{merged[k]=Object.assign({},d.CK[k]); if(CK[k]&&CK[k].photos)merged[k].photos=CK[k].photos;});
     Object.keys(CK).forEach(k=>{if(!merged[k])merged[k]=CK[k];}); CK=merged; }
-  try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ}));}catch(e){}
+  try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG}));}catch(e){}
   render();
  }finally{ _applyingRemote=false; }
  if(JSON.stringify(syncPayload())!==data.blob)pushSync(); // 병합 결과 되반영
@@ -507,8 +521,8 @@ function shareSchedule(){
 function load(){
  try{const d=JSON.parse(localStorage.getItem(SKEY));
   if(!d||!d.STAFF)throw 0;
-  ({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ}=Object.assign({ORDERS:[],NOTICES:[],CK:{},SUBMITS:[],CUR:null,REFS:{},READS:{},SCHED_TS:0,DELETED:[],ODEL:[],PATTERN:null,ATT:{},STORE_LOC:null,WAGE:MINWAGE,ATTREQ:[]},d));
-  REFS=REFS||{}; READS=READS||{}; SCHED_TS=SCHED_TS||0; DELETED=DELETED||[]; ODEL=ODEL||[]; ATT=ATT||{}; WAGE=WAGE||MINWAGE; ATTREQ=ATTREQ||[];
+  ({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG}=Object.assign({ORDERS:[],NOTICES:[],CK:{},SUBMITS:[],CUR:null,REFS:{},READS:{},SCHED_TS:0,DELETED:[],ODEL:[],PATTERN:null,ATT:{},STORE_LOC:null,WAGE:MINWAGE,ATTREQ:[],ATTLOG:{}},d));
+  REFS=REFS||{}; READS=READS||{}; SCHED_TS=SCHED_TS||0; DELETED=DELETED||[]; ODEL=ODEL||[]; ATT=ATT||{}; WAGE=WAGE||MINWAGE; ATTREQ=ATTREQ||[]; ATTLOG=ATTLOG||{};
   NOTICES.forEach(n=>{if(n.ts===undefined)n.ts=0;}); ORDERS.forEach(o=>{if(o.ts===undefined)o.ts=0; o.st=(o.st==='ordered'||o.st==='done'||o.done)?'ordered':'wait';});
   // 14일 지난 체크 기록(사진 포함) 정리
   const lim=new Date();lim.setDate(lim.getDate()-14);const limK=dk(lim);
@@ -575,8 +589,9 @@ function gpsGate(actName, ok, onFail){
    ok();
  }, e=>{ const m=geoErrMsg(e); onFail?onFail(m):toast(m); });
 }
+function logAtt(uid){ uid=uid||CUR; const a=ATT[uid]; if(a&&a.date){ ATTLOG[uid]=ATTLOG[uid]||{}; ATTLOG[uid][a.date]={in:a.in,out:a.out,breaks:(a.breaks||[]).map(b=>({s:b.s,e:b.e}))}; } }
 function clockIn(){ const a=attToday(); if(a&&a.in&&!a.out){toast('이미 출근 상태예요');return;}
- gpsGate('출근',()=>{ ATT[CUR]={date:todayK(),in:Date.now(),out:null,breaks:[]}; render(); reAtt(); toast('출근했습니다 — 좋은 하루 되세요!'); },
+ gpsGate('출근',()=>{ ATT[CUR]={date:todayK(),in:Date.now(),out:null,breaks:[]}; logAtt(); render(); reAtt(); toast('출근했습니다 — 좋은 하루 되세요!'); },
    msg=>offerClockInReq(msg)); }
 function offerClockInReq(reason){
  openModal(`<h3>출근이 확인되지 않았어요</h3>
@@ -590,10 +605,10 @@ function sendClockInReq(){
  ATTREQ.push({id:'r'+Date.now().toString(36),uid:CUR,name:curUser().name,date:todayK(),kind:'in',in:Date.now(),out:null,note:note||'GPS 범위 밖 — 수동 출근 요청',ts:Date.now()});
  closeModal(); save(); render(); toast('관리자에게 출근 요청을 보냈습니다'); }
 function clockOut(){ const a=attToday(); if(!a||!a.in){toast('먼저 출근하세요');return;} if(a.out){toast('이미 퇴근했어요');return;}
- gpsGate('퇴근',()=>{ const b=attOpenBreak(a); if(b)b.e=Date.now(); a.out=Date.now(); render(); reAtt(); toast('퇴근했습니다 — 수고하셨습니다!'); }); }
+ gpsGate('퇴근',()=>{ const b=attOpenBreak(a); if(b)b.e=Date.now(); a.out=Date.now(); logAtt(); render(); reAtt(); toast('퇴근했습니다 — 수고하셨습니다!'); }); }
 function breakStart(){ const a=attToday(); if(!a||!a.in||a.out){toast('출근 상태에서만 가능해요');return;} if(attOpenBreak(a)){toast('이미 휴게 중이에요');return;}
- a.breaks.push({s:Date.now()}); render(); reAtt(); toast('휴게 시작 — 푹 쉬세요'); }
-function breakEnd(){ const a=attToday(); const b=a&&attOpenBreak(a); if(!b){toast('휴게 중이 아니에요');return;} b.e=Date.now(); render(); reAtt(); toast('복귀했습니다'); }
+ a.breaks.push({s:Date.now()}); logAtt(); render(); reAtt(); toast('휴게 시작 — 푹 쉬세요'); }
+function breakEnd(){ const a=attToday(); const b=a&&attOpenBreak(a); if(!b){toast('휴게 중이 아니에요');return;} b.e=Date.now(); logAtt(); render(); reAtt(); toast('복귀했습니다'); }
 /* 오늘 실제 근무(ms) = 퇴근-출근 - 휴게합, 급여·주휴수당(하우머치식) */
 function workedMs(a){ if(!a||!a.in)return 0; const end=a.out||Date.now(); let ms=end-a.in;
  (a.breaks||[]).forEach(b=>{ if(!b.s)return; const be=b.e||(a.out||Date.now()); ms-=Math.max(0,be-b.s); }); return Math.max(0,ms); }
@@ -602,6 +617,42 @@ function juhyuPay(weekH){ if(weekH<15)return 0; return Math.round((Math.min(week
 function reAtt(){ if($("modal")&&$("modal").classList.contains('show'))$("mbox").innerHTML=attView(); }
 function openAtt(){ go('att'); }
 function fmtDur(ms){ const m=Math.round(ms/60000); return `${Math.floor(m/60)}시간 ${m%60}분`; }
+function fmtDurShort(ms){ const m=Math.round(ms/60000),h=Math.floor(m/60),mm=m%60; return h?`${h}h${mm}m`:`${mm}m`; }
+/* ── 내 근무기록(월간 캘린더) ── */
+let attCalMonth=null; // 보고있는 달(그달 1일 ISO). null=이번달
+function attCalShift(d){ const b=new Date((attCalMonth||todayK())+'T00:00:00'); b.setMonth(b.getMonth()+d); attCalMonth=dk(new Date(b.getFullYear(),b.getMonth(),1)); render(); }
+function attRecFor(uid,iso){ if(iso===todayK()){ const a=ATT[uid]; if(a&&a.date===iso)return a; } const l=ATTLOG[uid]; return (l&&l[iso])||null; }
+function recBreakMs(r,end){ let ms=0; (r.breaks||[]).forEach(b=>{ if(!b.s)return; const be=b.e||end||0; ms+=Math.max(0,be-b.s); }); return ms; }
+function recWorkedMs(r,live){ if(!r||!r.in)return 0; const end=r.out||(live?Date.now():0); if(!end)return 0; return Math.max(0,end-r.in-recBreakMs(r,end)); }
+function attHistoryHTML(){
+ const uid=CUR, base=new Date((attCalMonth||todayK())+'T00:00:00'), y=base.getFullYear(), mo=base.getMonth();
+ const lead=new Date(y,mo,1).getDay(), ndays=new Date(y,mo+1,0).getDate(), tk=todayK();
+ let totW=0, totB=0, cells='';
+ for(let i=0;i<lead;i++) cells+='<div class="acell empty"></div>';
+ for(let d=1;d<=ndays;d++){ const iso=dk(new Date(y,mo,d)), isT=iso===tk, r=attRecFor(uid,iso);
+   let inner=`<span class="ad">${d}</span>`;
+   if(r&&r.in){ const live=isT&&!r.out, wms=recWorkedMs(r,live), end=r.out||(live?Date.now():0);
+     totW+=wms; totB+=recBreakMs(r,end);
+     inner+=`<span class="aw">${r.out?fmtDurShort(wms):(live?'근무중':'—')}</span>`; }
+   cells+=`<button class="acell${isT?' today':''}${r&&r.in?' has':''}" ${r&&r.in?`onclick="attDayModal('${iso}')"`:''}>${inner}</button>`; }
+ const dows=WD.map((x,i)=>`<div class="acaldow" style="color:${i===0?'#e06a6a':i===6?'#4b8fd0':'var(--sub)'}">${x}</div>`).join('');
+ return `<div class="card" style="margin-top:12px"><div class="acalhd">
+     <button onclick="attCalShift(-1)" aria-label="이전 달">‹</button>
+     <div><b>${y}. ${mo+1}</b> <span class="muted" style="font-size:12px;font-weight:600">내 근무기록</span></div>
+     <button onclick="attCalShift(1)" aria-label="다음 달">›</button></div>
+   <div class="asumrow"><span class="apill">총 ${fmtDur(totW)}</span><span class="muted" style="font-size:12px">휴게 ${fmtDur(totB)}</span></div>
+   <div class="acalgrid">${dows}${cells}</div>
+   <div class="muted" style="font-size:11px;text-align:center;margin-top:8px">날짜를 누르면 그날 출·퇴근·휴게를 볼 수 있어요</div></div>`;
+}
+function attDayModal(iso){ const r=attRecFor(CUR,iso); if(!r||!r.in){toast('기록이 없어요');return;}
+ const live=iso===todayK()&&!r.out, end=r.out||(live?Date.now():0);
+ const brk=(r.breaks||[]).filter(b=>b.s).map((b,i)=>`<div class="muted" style="font-size:12.5px;padding:2px 0">휴게 ${i+1} · ${fmtT(b.s)}${b.e?' ~ '+fmtT(b.e)+` (${fmtDur(b.e-b.s)})`:' ~ 진행 중'}</div>`).join('')||'<div class="muted" style="font-size:12.5px">휴게 없음</div>';
+ const dd=new Date(iso+'T00:00:00');
+ openModal(`<h3>${dd.getMonth()+1}월 ${dd.getDate()}일 (${WD[dd.getDay()]}) 근무</h3>
+   <div style="font-size:15px;margin:10px 0 6px"><b>출근</b> ${fmtT(r.in)} <span class="muted">·</span> <b>퇴근</b> ${r.out?fmtT(r.out):(live?'근무 중':'—')}</div>
+   <div style="margin:6px 0 10px">${brk}</div>
+   <div style="border-top:1px solid var(--edge);padding-top:9px;font-size:13.5px">근무 <b>${fmtDur(recWorkedMs(r,live))}</b> <span class="muted">·</span> 휴게 ${fmtDur(recBreakMs(r,end))}</div>
+   <button class="btn sec" style="margin-top:12px" onclick="closeModal()">닫기</button>`); }
 function fmtHMS(ms){ const s=Math.max(0,Math.floor(ms/1000)),p=n=>String(n).padStart(2,'0'); return p(Math.floor(s/3600))+':'+p(Math.floor(s%3600/60))+':'+p(s%60); }
 function attElapsed(){ const a=attToday(); if(!a)return 0; const st=attStatus(a);
  if(st==='work')return workedMs(a); if(st==='break'){const b=attOpenBreak(a);return b?Date.now()-b.s:0;} return 0; }
@@ -630,6 +681,7 @@ function approveAttReq(id){ if(!isAdmin(curUser())){toast('승인은 대표님·
  let a=ATT[r.uid];
  if(!a || a.date!==r.date){ a=ATT[r.uid]={date:r.date,in:r.in,out:r.out||null,breaks:[]}; } // 기록 없음(출근 요청 등) → 새로 생성
  else { a.in=r.in; a.out=r.out||null; if(!r.out){const b=a.breaks&&a.breaks[a.breaks.length-1]; if(b&&!b.e)b.e=null;} }
+ ATTLOG[r.uid]=ATTLOG[r.uid]||{}; ATTLOG[r.uid][r.date]={in:a.in,out:a.out,breaks:(a.breaks||[]).map(b=>({s:b.s,e:b.e}))}; // 승인 결과 일자기록 반영
  ATTREQ=ATTREQ.filter(x=>x.id!==id); save(); render(); toast(r.name+'님 요청을 승인·반영했습니다'); }
 function rejectAttReq(id){ if(!isAdmin(curUser())){toast('대표님·매니저만 가능해요');return;}
  ATTREQ=(ATTREQ||[]).filter(x=>x.id!==id); save(); render(); toast('요청을 거절했습니다'); }
@@ -658,7 +710,7 @@ function screenAtt(){
  const editBtn = a? `<button class="btn sec" style="margin-top:14px" onclick="reqAtt()">${IC('swap','li sm')} 기록 수정 요청</button>`:'';
  const reqBox = (admin && attReqCount())? `<div class="card" style="margin-top:12px;border-color:#bcd7f0"><h3>${IC('bell','li sm')}근태 요청 ${attReqCount()}건</h3>${ATTREQ.map(r=>`<div style="border-top:1px solid var(--edge);padding:8px 0"><div style="font-size:13px"><b>${r.name}</b> <span class="pill" style="background:${r.kind==='in'?'#e7f0ff':'#F0F4EE'};color:${r.kind==='in'?'#2f6fd0':'var(--deep)'};font-size:10px">${r.kind==='in'?'출근 요청':'기록 수정'}</span> <span class="muted" style="font-size:11px">${r.date.slice(5)}</span></div><div class="muted" style="font-size:11.5px">출근 ${fmtT(r.in)}${r.out?' · 퇴근 '+fmtT(r.out):" · '근무 중'으로"}${r.note?' · "'+r.note+'"':''}</div><div class="row" style="gap:6px;margin-top:6px"><button class="btn sec" style="color:var(--warn);border-color:#f0d9bd" onclick="rejectAttReq('${r.id}')">거절</button><button class="btn" onclick="approveAttReq('${r.id}')">승인</button></div></div>`).join('')}</div>`:'';
  const adminBox = admin? `<div class="muted" style="font-size:11px;margin-top:14px">${STORE_LOC?'매장 위치 설정됨':'매장 위치 미설정 — GPS 확인 안 됨'} · <span class="authlink" onclick="setStoreLocMap()">${STORE_LOC?'위치 재설정':'매장 위치 설정'}</span></div>${attRoster()}`:'';
- return `<h2 class="title">${IC('clock')}근태</h2><div class="card">${body}${editBtn}</div>${reqBox}${adminBox}`;
+ return `<h2 class="title">${IC('clock')}근태</h2><div class="card">${body}${editBtn}</div>${attHistoryHTML()}${reqBox}${adminBox}`;
 }
 function setWage(){ const v=prompt('시급(원):',WAGE); if(v===null)return; const n=parseInt(String(v).replace(/[^0-9]/g,''),10); if(!n){toast('숫자를 입력하세요');return;} WAGE=n; save(); reAtt(); toast('시급을 '+won(n)+'(으)로 저장했습니다'); }
 function attView(){
