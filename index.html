@@ -376,14 +376,14 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.5.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.5.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
 /* ▼ 매니저 이메일 — 로그인 시 자동으로 매니저 권한 부여 */
 const MANAGER_EMAILS=['yhyoo061117@gmail.com','kimjuham1120@gmail.com'];
 /* ▼ 일정 게시판 — 대타·시간조정을 최소 며칠 전에 올려야 하는지 (대표님 확정 후 이 숫자만 바꾸면 됨: 3/7/14 등) */
-const BOARD_LEAD_DAYS=7;
+const BOARD_LEAD_DAYS=14;
 /* ▼ Firebase 구글 로그인 — 콘솔 값으로 교체하면 활성화됩니다. (그대로 두면 기존 이름선택 로그인으로 동작) */
 const FIREBASE_CONFIG={
   apiKey:"AIzaSyDzp2hqGQ_T2RQ0dUbrGmgHjOx6nZJKugY",
