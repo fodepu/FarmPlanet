@@ -234,6 +234,7 @@ input.inp{min-height:auto}
  <symbol id="i-zap" viewBox="0 0 24 24"><path d="M13 3 5 13.5h5.5L11 21l8-10.5h-5.5z"/></symbol>
  <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 4v4M12 16v4M4 12h4M16 12h4M6.5 6.5l2.5 2.5M15 15l2.5 2.5M17.5 6.5 15 9M9 15l-2.5 2.5"/></symbol>
  <symbol id="i-cart" viewBox="0 0 24 24"><circle cx="9" cy="20" r="1.4"/><circle cx="17" cy="20" r="1.4"/><path d="M3 4h2.5l2.2 11h10.2l2.1-8H6"/></symbol>
+ <symbol id="i-box" viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/><path d="M4 7.5l8 4.5 8-4.5"/><path d="M12 12v9"/></symbol>
  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c1-4 4-5.5 7-5.5S18 16 19 20"/></symbol>
  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4.5 4.5 0 0 0 6.4.4l3-3a4.5 4.5 0 1 0-6.4-6.4l-1.5 1.5"/><path d="M14 10a4.5 4.5 0 0 0-6.4-.4l-3 3a4.5 4.5 0 1 0 6.4 6.4l1.5-1.5"/></symbol>
  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4.5 4.5"/></symbol>
@@ -377,7 +378,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.6.5'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.7.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -403,7 +404,7 @@ const SYNC_ENABLED=FIREBASE_CONFIG.apiKey.indexOf('여기')===-1;
 let _fbAuth=null,_fbSignInCred=null,_fbSignOut=null;
 let _fsSet=null,_applyingRemote=false,_syncT=null,_lastSyncJSON='',_syncReady=false,_syncStat='연결 준비 중',_syncAt=0;
 let _pendingUser=null,_authTO=null,_authForce=false;
-let STAFF, SHIFTS, ORDERS, NOTICES, CK, SUBMITS, CUR, REFS, READS, SCHED_TS=0, DELETED=[], ODEL=[], PATTERN=null, ATT={}, STORE_LOC=null, WAGE=0, ATTREQ=[], ATTLOG={}, BOARD=[], STORE_IP=null;
+let STAFF, SHIFTS, ORDERS, NOTICES, CK, SUBMITS, CUR, REFS, READS, SCHED_TS=0, DELETED=[], ODEL=[], PATTERN=null, ATT={}, STORE_LOC=null, WAGE=0, ATTREQ=[], ATTLOG={}, BOARD=[], STORE_IP=null, INV=[];
 function touchSched(){SCHED_TS=Date.now();} // 시간표 변경 시각 기록(신규 표시용)
 function defaults(){
  STAFF=[
@@ -421,7 +422,7 @@ function defaults(){
  SHIFTS={}; seedWeek(buildWeek(0));
  ORDERS=[]; SUBMITS=[]; CK={}; REFS={}; READS={};
  NOTICES=[{tag:"공지",gold:true,who:"대표님",dt:fmtDT(),ts:Date.now(),bd:"FarmPlanet 앱 사용을 시작합니다. 공지·발주·시간표·마감을 여기서 관리해요."}];
- CUR=null; SCHED_TS=0; DELETED=[]; ODEL=[]; PATTERN=null; ATT={}; STORE_LOC=null; WAGE=MINWAGE; ATTREQ=[]; ATTLOG={}; BOARD=[]; STORE_IP=null;
+ CUR=null; SCHED_TS=0; DELETED=[]; ODEL=[]; PATTERN=null; ATT={}; STORE_LOC=null; WAGE=MINWAGE; ATTREQ=[]; ATTLOG={}; BOARD=[]; STORE_IP=null; INV=[];
 }
 /* 주간 기본 패턴 (2026-07 확정, 화면 편성 기준)
    월: 예흔08~14·미루11~14·지한12:30~16·효원16~19
@@ -441,13 +442,13 @@ function seedWeek(week){
   else if(i===5){set('gh',d,'12:00','18:00');}
   });
 }
-function save(){try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP}));}catch(e){}
+function save(){try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,INV}));}catch(e){}
  if(SYNC_ENABLED&&typeof pushSync==='function')pushSync();}
 /* ── 실시간 공유 (Firestore 단일 문서, 사진 제외) ── */
 function syncPayload(){
  const ckLite={};
  Object.keys(CK).forEach(k=>{const d=CK[k]||{};ckLite[k]={open:d.open||{},mid:d.mid||{},close:d.close||{}};});
- return {STAFF,SHIFTS,ORDERS,NOTICES,SUBMITS,READS,CK:ckLite,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP};
+ return {STAFF,SHIFTS,ORDERS,NOTICES,SUBMITS,READS,CK:ckLite,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,INV};
 }
 async function syncBoot(){
  try{
@@ -511,9 +512,12 @@ function applyRemote(data){
   if(d.BOARD){ const m={}; [...d.BOARD,...(BOARD||[])].forEach(b=>{const k=b&&b.id; if(!k)return; // 게시판: id 기준, 최근 수정(mt) 우선 병합
       if(!m[k] || (b.mt||0)>(m[k].mt||0)) m[k]=b; });
     BOARD=Object.values(m).sort((a,b)=>(b.ts||0)-(a.ts||0)); }
+  if(d.INV){ const m={}; [...d.INV,...(INV||[])].forEach(v=>{const k=v&&v.id; if(!k)return; // 재고: id 기준, 최근 수정(mt) 우선 병합
+      if(!m[k] || (v.mt||0)>(m[k].mt||0)) m[k]=v; });
+    INV=Object.values(m).sort((a,b)=>(a.ts||0)-(b.ts||0)); }
   if(d.CK){ const merged={}; Object.keys(d.CK).forEach(k=>{merged[k]=Object.assign({},d.CK[k]); if(CK[k]&&CK[k].photos)merged[k].photos=CK[k].photos;});
     Object.keys(CK).forEach(k=>{if(!merged[k])merged[k]=CK[k];}); CK=merged; }
-  try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP}));}catch(e){}
+  try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,INV}));}catch(e){}
   const _ae=document.activeElement; // 입력 중(텍스트 칸 포커스)이면 화면 갱신 미룸 → 타이핑 안 끊김
   if(_ae && (_ae.tagName==='INPUT'||_ae.tagName==='TEXTAREA') && _ae.type!=='date'){ /* 다음 사용자 동작 때 반영 */ }
   else render();
@@ -531,7 +535,8 @@ function shareSchedule(){
 function load(){
  try{const d=JSON.parse(localStorage.getItem(SKEY));
   if(!d||!d.STAFF)throw 0;
-  ({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP}=Object.assign({ORDERS:[],NOTICES:[],CK:{},SUBMITS:[],CUR:null,REFS:{},READS:{},SCHED_TS:0,DELETED:[],ODEL:[],PATTERN:null,ATT:{},STORE_LOC:null,WAGE:MINWAGE,ATTREQ:[],ATTLOG:{},BOARD:[],STORE_IP:null},d));
+  ({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,INV}=Object.assign({ORDERS:[],NOTICES:[],CK:{},SUBMITS:[],CUR:null,REFS:{},READS:{},SCHED_TS:0,DELETED:[],ODEL:[],PATTERN:null,ATT:{},STORE_LOC:null,WAGE:MINWAGE,ATTREQ:[],ATTLOG:{},BOARD:[],STORE_IP:null,INV:[]},d));
+  INV=INV||[];
   REFS=REFS||{}; READS=READS||{}; SCHED_TS=SCHED_TS||0; DELETED=DELETED||[]; ODEL=ODEL||[]; ATT=ATT||{}; WAGE=WAGE||MINWAGE; ATTREQ=ATTREQ||[]; ATTLOG=ATTLOG||{}; BOARD=BOARD||[];
   NOTICES.forEach(n=>{if(n.ts===undefined)n.ts=0;}); ORDERS.forEach(o=>{if(o.ts===undefined)o.ts=0; o.st=(o.st==='ordered'||o.st==='done'||o.done)?'ordered':'wait';});
   // 14일 지난 체크 기록(사진 포함) 정리
@@ -987,10 +992,10 @@ function screenHome(){
    <div class="big">안녕하세요, ${hon(curUser().name)}</div>
    <div class="sh">${IC('clock','li sm')}오늘 근무 · ${todayShift||'휴무'}</div></div>
  <div class="grid2" style="margin-bottom:12px">
+   <div class="qbtn" onclick="go('inv')">${IC('box')}재고관리</div>
+   <div class="qbtn" style="position:relative" onclick="go('comm')">${IC('bell')}공지·게시판${(u.n||u.b)?'<span class="bdotn" style="position:absolute;top:10px;right:10px;margin:0"></span>':''}</div>
    <div class="qbtn" onclick="go('close')">${IC('check')}오픈·마감 체크</div>
    <div class="qbtn" onclick="go('manual')">${IC('book')}매뉴얼·레시피</div>
-   <div class="qbtn" style="position:relative" onclick="go('notice')">${IC('bell')}공지·인수인계${u.n?'<span class="bdotn" style="position:absolute;top:10px;right:10px;margin:0"></span>':''}</div>
-   <div class="qbtn" style="position:relative" onclick="go('board')">${IC('swap')}일정 게시판${u.b?'<span class="bdotn" style="position:absolute;top:10px;right:10px;margin:0"></span>':''}</div>
    ${isAdmin(curUser())?`<div class="qbtn" style="position:relative" onclick="staffManage()">${IC('user')}직원 관리${pendingCount()?'<span class="bdotn" style="position:absolute;top:10px;right:10px;margin:0"></span>':''}</div>`:''}
  </div>
  <div class="card"><h3>${IC('tv','li sm')}매장 TV</h3>
@@ -1430,6 +1435,11 @@ function screenNotice(){
        <button class="btn" style="width:auto;padding:0 16px" onclick="addOrder()">등록</button></div>
      <p class="muted" style="font-size:11px;margin-top:8px;text-align:center">‹ › 또는 날짜를 눌러 다른 날 발주를 봐요 · 등록은 오늘로 추가됩니다</p>`;
  }
+ return `<h2 class="title">${IC('bell')}공지 · 인수인계</h2>${noticeBody()}`;
+}
+function noticeBody(){
+ const admin=role==='admin';
+ READS[CUR]=READS[CUR]||{}; READS[CUR].notice=Date.now();
  const nc=nextCleaning(), cToday=isCleaningDay();
  const pinned=`<div class="note" style="border-color:${cToday?'#f0c36b':'#DBE9DD'};background:${cToday?'#fdf6e3':'#EDF7F0'}">
    <div class="nm"><span class="pill" style="background:#fdf2d8;color:#a16207">고정</span>대표님</div>
@@ -1442,8 +1452,7 @@ function screenNotice(){
    return `<div class="note"><div class="nm">
    <span class="pill" style="${n.gold?'background:#fdf2d8;color:#a16207':''}">${n.tag}</span>${n.who}</div>
    <div class="dt">${n.dt}</div><div class="bd">${n.bd}</div>${foot}</div>`;}).join("");
- return `<h2 class="title">${IC('bell')}공지 · 인수인계</h2>
-   ${pinned}
+ return `${pinned}
    <div class="card"><h3>${admin?'공지 올리기':'인수인계 남기기'}</h3>
      <textarea class="inp" id="hoText" placeholder="${admin?'전 직원에게 보이는 공지를 작성하세요':'예: 우유 1팩 남음, 3번 테이블 의자 흔들림…'}"></textarea>
      <button class="btn" style="margin-top:8px" onclick="addNote()">등록</button></div>
@@ -1574,7 +1583,18 @@ let boardKind='sub'; // 새 글 종류: sub=대타 구함, adjust=시간 조정
 function setBoardKind(k){boardKind=k;render();}
 function boardId(){return 'b'+Date.now()+Math.random().toString(36).slice(2,6);}
 function boardDaysLeft(target){ if(!target)return null; const t=new Date(target+'T00:00:00'); const n=new Date(); n.setHours(0,0,0,0); return Math.round((t-n)/86400000); }
-function screenBoard(){
+function screenBoard(){ return `<h2 class="title">${IC('swap')}일정 게시판</h2>${boardBody()}`; }
+let commSub='notice'; // 공지·게시판 하위탭: notice / board
+function setCommSub(s){ commSub=s; render(); }
+function screenComm(){
+ const u=unread();
+ const dot=`<span class="bdotn" style="position:relative;top:-1px;margin-left:4px"></span>`;
+ const seg=`<div class="seg" style="margin:6px 0 12px">
+   <button class="${commSub==='notice'?'on':''}" onclick="setCommSub('notice')">공지·인수인계${u.n?dot:''}</button>
+   <button class="${commSub==='board'?'on':''}" onclick="setCommSub('board')">일정 게시판${u.b?dot:''}</button></div>`;
+ return `<h2 class="title">${IC('bell')}공지·게시판</h2>${seg}${commSub==='board'?boardBody():noticeBody()}`;
+}
+function boardBody(){
  const admin=isAdmin(curUser());
  READS[CUR]=READS[CUR]||{}; READS[CUR].board=Date.now(); // 읽음 처리
  const items=(BOARD||[]).map((b,i)=>({b,i}));
@@ -1584,8 +1604,7 @@ function screenBoard(){
  const rows= ordered.length? ordered.map(({b,i})=>boardCard(b,i,admin)).join('')
    : `<p class="muted" style="text-align:center;padding:22px 2px">아직 올라온 요청이 없어요.</p>`;
  const todayISO=todayK();
- return `<h2 class="title">${IC('swap')}일정 게시판</h2>
-   <div class="warnbox" style="margin-bottom:11px">${IC('spark','li sm')} 대타·시간 조정은 <b>최소 ${BOARD_LEAD_DAYS}일 전</b>에 올려주세요. 늦으면 대신할 사람을 구하기 어려워요.</div>
+ return `<div class="warnbox" style="margin-bottom:11px">${IC('spark','li sm')} 대타·시간 조정은 <b>최소 ${BOARD_LEAD_DAYS}일 전</b>에 올려주세요. 늦으면 대신할 사람을 구하기 어려워요.</div>
    <div class="card"><h3>${IC('swap','li sm')}요청 올리기</h3>
      <div class="seg">
        <button class="${boardKind==='sub'?'on':''}" onclick="setBoardKind('sub')">대타 구함</button>
@@ -1706,6 +1725,61 @@ function askConfirm(msg,yesLabel,cb){ _confirmCb=cb;
    <div class="row"><button class="btn sec" onclick="closeModal()">취소</button>
      <button class="btn" style="background:var(--warn)" onclick="runConfirm()">${yesLabel||'확인'}</button></div>`);}
 function runConfirm(){const cb=_confirmCb;_confirmCb=null;closeModal();if(cb)cb();}
+
+/* ═══════════ 재고관리 (Phase 1) ═══════════ */
+function invId(){return 'v'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);}
+function invLog(v,ty,delta,to){ v.log=v.log||[]; v.log.unshift({ty,delta,to,ts:Date.now(),who:curUser().name}); if(v.log.length>30)v.log=v.log.slice(0,30); }
+function isLow(v){ return (v.onHand||0)<=(v.par||0); }
+function addInvItem(){ if(!isAdmin(curUser())){toast('품목 추가는 대표님·매니저만 가능해요');return;}
+ const name=prompt('품목 이름 (예: 우유):',''); if(name===null)return; if(!name.trim()){toast('이름을 입력하세요');return;}
+ const unit=(prompt('단위 (예: 개·팩·kg·L):','개')||'개').trim()||'개';
+ const par=parseFloat(prompt('기준재고 — 이보다 적으면 발주 알림 (숫자):','0'))||0;
+ INV.push({id:invId(),name:name.trim(),unit,par,onHand:0,ts:Date.now(),mt:Date.now(),log:[]});
+ save();render();toast(name.trim()+' 품목을 추가했습니다'); }
+function editInvItem(i){ if(!isAdmin(curUser())){toast('수정은 대표님·매니저만 가능해요');return;} const v=INV[i]; if(!v)return;
+ const name=prompt('품목 이름:',v.name); if(name===null)return; if(name.trim())v.name=name.trim();
+ const unit=prompt('단위:',v.unit); if(unit!==null&&unit.trim())v.unit=unit.trim();
+ const par=prompt('기준재고(발주 알림 기준):',v.par); if(par!==null){const n=parseFloat(par); if(!isNaN(n))v.par=n;}
+ v.mt=Date.now(); save();render();toast('수정했습니다'); }
+function delInvItem(i){ if(!isAdmin(curUser())){toast('삭제는 대표님·매니저만 가능해요');return;} const v=INV[i]; if(!v)return;
+ askConfirm(`<b>${v.name}</b> 품목을 삭제할까요?`,'삭제',()=>{ if(INV[i])INV.splice(i,1); save();render();toast('삭제했습니다'); }); }
+function invCount(i){ const v=INV[i]; if(!v)return; // 실사: 실제 센 수량으로 맞춤
+ const cur=prompt(`${v.name} — 지금 실제 수량 (${v.unit}):`, v.onHand||0); if(cur===null)return;
+ const n=parseFloat(cur); if(isNaN(n)){toast('숫자를 입력하세요');return;}
+ const delta=n-(v.onHand||0); v.onHand=n; invLog(v,'실사',delta,n); v.mt=Date.now();
+ save();render();toast(`${v.name} 재고를 ${n}${v.unit}(으)로 맞췄습니다`); }
+function invIn(i){ const v=INV[i]; if(!v)return; // 입고(+)
+ const q=prompt(`${v.name} — 입고 수량 (${v.unit}):`,''); if(q===null)return;
+ const n=parseFloat(q); if(isNaN(n)||n===0){toast('숫자를 입력하세요');return;}
+ v.onHand=(v.onHand||0)+n; invLog(v,'입고',n,v.onHand); v.mt=Date.now();
+ save();render();toast(`${v.name} ${n}${v.unit} 입고 (현재 ${v.onHand}${v.unit})`); }
+function invOrder(i){ const v=INV[i]; if(!v)return; // 발주 담기 → 발주방에 대기로 추가
+ ORDERS.push({id:'o'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),who:curUser().name,txt:v.name,dt:fmtDT(),ts:Date.now(),mt:Date.now(),st:'wait'});
+ save();render();toast(`${v.name}을(를) 발주방에 담았습니다`); }
+function screenInventory(){
+ const admin=isAdmin(curUser());
+ const low=INV.filter(isLow);
+ const sorted=INV.map((v,i)=>({v,i})).sort((a,b)=>(isLow(a.v)?0:1)-(isLow(b.v)?0:1)); // 부족 먼저
+ const rows= INV.length? sorted.map(({v,i})=>{ const lowF=isLow(v);
+   return `<div class="note" style="${lowF?'border-color:#f0c9bd;background:#fff7f4':''}">
+     <div style="display:flex;align-items:center;gap:8px">
+       <div style="flex:1"><b style="font-size:13.5px">${v.name}</b>
+         <div class="muted" style="font-size:11px">기준 ${v.par}${v.unit}${lowF?` · <b style="color:#b04a3f">발주 필요</b>`:''}</div></div>
+       <div style="text-align:right"><b style="font-size:19px;color:${lowF?'#b04a3f':'var(--deep)'}">${v.onHand||0}</b><span class="muted" style="font-size:11px"> ${v.unit}</span></div>
+     </div>
+     <div style="display:flex;gap:6px;margin-top:9px;flex-wrap:wrap">
+       <button class="cam" onclick="invCount(${i})">실사</button>
+       <button class="cam" onclick="invIn(${i})">입고 +</button>
+       ${lowF?`<button class="cam" style="color:var(--deep);border-color:#bfe0c8;font-weight:800" onclick="invOrder(${i})">발주 담기</button>`:''}
+       ${admin?`<span class="oact" onclick="editInvItem(${i})">수정</span><span class="oact del" onclick="delInvItem(${i})">삭제</span>`:''}
+     </div></div>`;
+ }).join('') : `<p class="muted" style="text-align:center;padding:22px 2px">등록된 품목이 없어요.${admin?' 아래 <b>+ 품목 추가</b>로 시작하세요.':''}</p>`;
+ return `<h2 class="title">${IC('box')}재고관리</h2>
+   ${INV.length?`<div class="muted" style="font-size:12px;margin-bottom:10px">전체 ${INV.length}개${low.length?` · <b style="color:#b04a3f">발주 필요 ${low.length}</b>`:' · 재고 여유 ✓'}</div>`:''}
+   ${rows}
+   ${admin?`<button class="btn" style="margin-top:10px" onclick="addInvItem()">+ 품목 추가</button>`:''}
+   <p class="muted" style="font-size:11px;margin-top:10px;text-align:center;line-height:1.6">실사 = 직접 센 수량 입력(재고 맞춤) · 입고 + = 들어온 수량 추가 · 기준재고보다 적으면 빨갛게 표시돼요</p>`;
+}
 const NAV=[["home","home","홈"],["att","clock","근태"],["sched","cal","시간표"],["order","cart","발주"]];
 function render(){
  if(CUR&&!curUser()){ CUR=null; if(USE_FB){showAuthOverlay(true);} } // 내 계정이 사라지면 재로그인
@@ -1722,9 +1796,11 @@ function render(){
  else if(tab==="notice") html=screenNotice();
  else if(tab==="order") html=screenNotice();
  else if(tab==="board") html=screenBoard();
+ else if(tab==="comm") html=screenComm();
+ else if(tab==="inv") html=screenInventory();
  $("screen").innerHTML=html;
  if(tab==="manual") renderManual($("msearch")?.value||"");
- const navTab=(tab==='close'||tab==='manual'||tab==='closeAdmin'||tab==='notice'||tab==='board')?'home':tab;
+ const navTab=(tab==='close'||tab==='manual'||tab==='closeAdmin'||tab==='notice'||tab==='board'||tab==='comm'||tab==='inv')?'home':tab;
  const u=CUR?unread():{n:0,o:0,sched:0};
  $("nav").innerHTML=NAV.map(n=>{
    const dot=(n[0]==='order'&&u.o)||(n[0]==='sched'&&u.sched)||(n[0]==='att'&&isAdmin(curUser())&&attReqCount());
