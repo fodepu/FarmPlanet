@@ -376,10 +376,10 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.4.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.5.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
-const ADMIN_EMAILS=['candy310r@gmail.com'];
+const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
 /* ▼ 매니저 이메일 — 로그인 시 자동으로 매니저 권한 부여 */
 const MANAGER_EMAILS=['yhyoo061117@gmail.com','kimjuham1120@gmail.com'];
 /* ▼ 일정 게시판 — 대타·시간조정을 최소 며칠 전에 올려야 하는지 (대표님 확정 후 이 숫자만 바꾸면 됨: 3/7/14 등) */
@@ -402,7 +402,7 @@ const SYNC_ENABLED=FIREBASE_CONFIG.apiKey.indexOf('여기')===-1;
 let _fbAuth=null,_fbSignInCred=null,_fbSignOut=null;
 let _fsSet=null,_applyingRemote=false,_syncT=null,_lastSyncJSON='',_syncReady=false,_syncStat='연결 준비 중',_syncAt=0;
 let _pendingUser=null,_authTO=null,_authForce=false;
-let STAFF, SHIFTS, ORDERS, NOTICES, CK, SUBMITS, CUR, REFS, READS, SCHED_TS=0, DELETED=[], ODEL=[], PATTERN=null, ATT={}, STORE_LOC=null, WAGE=0, ATTREQ=[], ATTLOG={}, BOARD=[];
+let STAFF, SHIFTS, ORDERS, NOTICES, CK, SUBMITS, CUR, REFS, READS, SCHED_TS=0, DELETED=[], ODEL=[], PATTERN=null, ATT={}, STORE_LOC=null, WAGE=0, ATTREQ=[], ATTLOG={}, BOARD=[], STORE_IP=null;
 function touchSched(){SCHED_TS=Date.now();} // 시간표 변경 시각 기록(신규 표시용)
 function defaults(){
  STAFF=[
@@ -420,7 +420,7 @@ function defaults(){
  SHIFTS={}; seedWeek(buildWeek(0));
  ORDERS=[]; SUBMITS=[]; CK={}; REFS={}; READS={};
  NOTICES=[{tag:"공지",gold:true,who:"대표님",dt:fmtDT(),ts:Date.now(),bd:"FarmPlanet 앱 사용을 시작합니다. 공지·발주·시간표·마감을 여기서 관리해요."}];
- CUR=null; SCHED_TS=0; DELETED=[]; ODEL=[]; PATTERN=null; ATT={}; STORE_LOC=null; WAGE=MINWAGE; ATTREQ=[]; ATTLOG={}; BOARD=[];
+ CUR=null; SCHED_TS=0; DELETED=[]; ODEL=[]; PATTERN=null; ATT={}; STORE_LOC=null; WAGE=MINWAGE; ATTREQ=[]; ATTLOG={}; BOARD=[]; STORE_IP=null;
 }
 /* 주간 기본 패턴 (2026-07 확정, 화면 편성 기준)
    월: 예흔08~14·미루11~14·지한12:30~16·효원16~19
@@ -440,13 +440,13 @@ function seedWeek(week){
   else if(i===5){set('gh',d,'12:00','18:00');}
   });
 }
-function save(){try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD}));}catch(e){}
+function save(){try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP}));}catch(e){}
  if(SYNC_ENABLED&&typeof pushSync==='function')pushSync();}
 /* ── 실시간 공유 (Firestore 단일 문서, 사진 제외) ── */
 function syncPayload(){
  const ckLite={};
  Object.keys(CK).forEach(k=>{const d=CK[k]||{};ckLite[k]={open:d.open||{},mid:d.mid||{},close:d.close||{}};});
- return {STAFF,SHIFTS,ORDERS,NOTICES,SUBMITS,READS,CK:ckLite,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD};
+ return {STAFF,SHIFTS,ORDERS,NOTICES,SUBMITS,READS,CK:ckLite,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP};
 }
 async function syncBoot(){
  try{
@@ -484,6 +484,7 @@ function applyRemote(data){
   if(d.ODEL)ODEL=[...new Set([...(ODEL||[]),...d.ODEL])];
   if(d.PATTERN!==undefined && d.PATTERN)PATTERN=d.PATTERN;
   if(d.STORE_LOC)STORE_LOC=d.STORE_LOC;
+  if(d.STORE_IP!==undefined)STORE_IP=d.STORE_IP;
   if(d.WAGE)WAGE=d.WAGE;
   if(d.ATTREQ)ATTREQ=d.ATTREQ; // 요청 큐(최신 반영)
   if(d.ATT){ const m=Object.assign({},d.ATT); // 사용자별 최신 기록 유지
@@ -510,7 +511,7 @@ function applyRemote(data){
     BOARD=Object.values(m).sort((a,b)=>(b.ts||0)-(a.ts||0)); }
   if(d.CK){ const merged={}; Object.keys(d.CK).forEach(k=>{merged[k]=Object.assign({},d.CK[k]); if(CK[k]&&CK[k].photos)merged[k].photos=CK[k].photos;});
     Object.keys(CK).forEach(k=>{if(!merged[k])merged[k]=CK[k];}); CK=merged; }
-  try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD}));}catch(e){}
+  try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP}));}catch(e){}
   render();
  }finally{ _applyingRemote=false; }
  if(JSON.stringify(syncPayload())!==data.blob)pushSync(); // 병합 결과 되반영
@@ -526,7 +527,7 @@ function shareSchedule(){
 function load(){
  try{const d=JSON.parse(localStorage.getItem(SKEY));
   if(!d||!d.STAFF)throw 0;
-  ({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD}=Object.assign({ORDERS:[],NOTICES:[],CK:{},SUBMITS:[],CUR:null,REFS:{},READS:{},SCHED_TS:0,DELETED:[],ODEL:[],PATTERN:null,ATT:{},STORE_LOC:null,WAGE:MINWAGE,ATTREQ:[],ATTLOG:{},BOARD:[]},d));
+  ({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP}=Object.assign({ORDERS:[],NOTICES:[],CK:{},SUBMITS:[],CUR:null,REFS:{},READS:{},SCHED_TS:0,DELETED:[],ODEL:[],PATTERN:null,ATT:{},STORE_LOC:null,WAGE:MINWAGE,ATTREQ:[],ATTLOG:{},BOARD:[],STORE_IP:null},d));
   REFS=REFS||{}; READS=READS||{}; SCHED_TS=SCHED_TS||0; DELETED=DELETED||[]; ODEL=ODEL||[]; ATT=ATT||{}; WAGE=WAGE||MINWAGE; ATTREQ=ATTREQ||[]; ATTLOG=ATTLOG||{}; BOARD=BOARD||[];
   NOTICES.forEach(n=>{if(n.ts===undefined)n.ts=0;}); ORDERS.forEach(o=>{if(o.ts===undefined)o.ts=0; o.st=(o.st==='ordered'||o.st==='done'||o.done)?'ordered':'wait';});
   // 14일 지난 체크 기록(사진 포함) 정리
@@ -566,7 +567,7 @@ function screenPending(cu){
 function ckToday(){const k=todayK();CK[k]=CK[k]||{open:{},mid:{},close:{}};if(!CK[k].mid)CK[k].mid={};return CK[k];}
 function modeName(m){return m==='close'?'마감':m==='mid'?'미들':'오픈';}
 function ckLists(m){return m==='close'?CLOSE_LIST:m==='mid'?MID_LIST:OPEN_LIST;}
-/* ═══════════ 출퇴근 · 휴게 (GPS) ═══════════ */
+/* ═══════════ 출퇴근 · 휴게 (와이파이=공인 IP) ═══════════ */
 const STORE_RADIUS=60; // m — 이 반경 안에서만 출퇴근 (멀리서 방지 + 실내 오차 감안)
 function attStamp(a){ if(!a)return 0; let m=Math.max(a.in||0,a.out||0); (a.breaks||[]).forEach(b=>{m=Math.max(m,b.s||0,b.e||0);}); return m; }
 function attToday(){ const a=ATT[CUR]; return (a&&a.date===todayK())?a:null; }
@@ -585,32 +586,45 @@ function getGeo(ok,err){
    navigator.geolocation.getCurrentPosition(ok, err, {enableHighAccuracy:false,timeout:20000,maximumAge:120000});
  }, {enableHighAccuracy:true,timeout:12000,maximumAge:30000});
 }
-function gpsGate(actName, ok, onFail){
- if(!STORE_LOC){ ok(); return; } // 매장 위치 미설정 시 확인 없이 진행
- toast('위치 확인 중…');
- getGeo(p=>{
-   const d=distM(p.coords.latitude,p.coords.longitude,STORE_LOC.lat,STORE_LOC.lng);
-   if(d>STORE_RADIUS){ const m=`매장에서 약 ${Math.round(d)}m — ${actName}할 수 없어요 (매장에서 진행)`; onFail?onFail(m):toast(m); return; }
-   ok();
- }, e=>{ const m=geoErrMsg(e); onFail?onFail(m):toast(m); });
+/* 공인 IP 조회 — 같은 와이파이면 같은 공인 IP. IPv4 전용 엔드포인트(api.ipify.org) 우선, 실패 시 폴백 */
+function getPublicIP(ok,err){
+ fetch('https://api.ipify.org?format=json',{cache:'no-store'})
+  .then(r=>r.json()).then(d=>{ if(d&&d.ip)ok(String(d.ip).trim()); else throw 0; })
+  .catch(()=>{ fetch('https://ipv4.icanhazip.com',{cache:'no-store'})
+    .then(r=>r.text()).then(t=>{ const ip=(t||'').trim(); if(ip)ok(ip); else (err&&err()); })
+    .catch(()=>err&&err()); });
 }
+/* 와이파이 게이트 — 현재 공인 IP가 매장 IP와 같아야 통과 */
+function wifiGate(actName, ok, onFail){
+ if(!STORE_IP){ ok(); return; } // 매장 와이파이 미등록 시 확인 없이 진행
+ toast('와이파이 확인 중…');
+ getPublicIP(ip=>{ if(ip===STORE_IP){ ok(); }
+   else { const m=`매장 와이파이가 아니에요 — ${actName}은 매장 와이파이에 연결하고 해주세요`; onFail?onFail(m):toast(m); } },
+   ()=>{ const m='네트워크 확인 실패 — 인터넷 연결을 확인해 주세요'; onFail?onFail(m):toast(m); });
+}
+/* 관리자: 현재 접속한 와이파이(공인 IP)를 매장으로 등록 */
+function registerStoreWifi(){
+ if(!isAdmin(curUser())){toast('매장 와이파이 등록은 대표님·매니저만 가능해요');return;}
+ toast('현재 와이파이 확인 중…');
+ getPublicIP(ip=>{ STORE_IP=ip; save(); render(); reAtt(); toast('현재 와이파이를 매장으로 등록했습니다 ✓'); },
+   ()=>toast('IP 확인 실패 — 인터넷 연결을 확인해 주세요')); }
 function logAtt(uid){ uid=uid||CUR; const a=ATT[uid]; if(a&&a.date){ ATTLOG[uid]=ATTLOG[uid]||{}; ATTLOG[uid][a.date]={in:a.in,out:a.out,breaks:(a.breaks||[]).map(b=>({s:b.s,e:b.e}))}; } }
 function clockIn(){ const a=attToday(); if(a&&a.in&&!a.out){toast('이미 출근 상태예요');return;}
- gpsGate('출근',()=>{ ATT[CUR]={date:todayK(),in:Date.now(),out:null,breaks:[]}; logAtt(); render(); reAtt(); toast('출근했습니다 — 좋은 하루 되세요!'); },
+ wifiGate('출근',()=>{ ATT[CUR]={date:todayK(),in:Date.now(),out:null,breaks:[]}; logAtt(); render(); reAtt(); toast('출근했습니다 — 좋은 하루 되세요!'); },
    msg=>offerClockInReq(msg)); }
 function offerClockInReq(reason){
  openModal(`<h3>출근이 확인되지 않았어요</h3>
-   <div class="muted" style="font-size:12px;margin-bottom:10px">${reason}<br>매장 안인데 위치가 안 잡히면, 아래로 <b>관리자에게 출근 승인을 요청</b>할 수 있어요.</div>
-   <div class="fld"><label>메모 <span class="muted">(선택)</span></label><input id="ciNote" class="tsel" placeholder="예: 매장 안인데 GPS가 안 잡혀요" autocomplete="off"></div>
+   <div class="muted" style="font-size:12px;margin-bottom:10px">${reason}<br>매장 와이파이인데 확인이 안 되면, 아래로 <b>관리자에게 출근 승인을 요청</b>할 수 있어요.</div>
+   <div class="fld"><label>메모 <span class="muted">(선택)</span></label><input id="ciNote" class="tsel" placeholder="예: 매장 와이파이인데 확인이 안 돼요" autocomplete="off"></div>
    <div class="row" style="margin-top:12px"><button class="btn sec" onclick="closeModal()">닫기</button><button class="btn" onclick="sendClockInReq()">관리자에게 출근 요청</button></div>`);
  setTimeout(()=>{const el=$('ciNote');if(el)el.focus();},50); }
 function sendClockInReq(){
  const note=($('ciNote')?$('ciNote').value:'').trim();
  ATTREQ=(ATTREQ||[]).filter(r=>!(r.uid===CUR&&r.date===todayK())); // 같은 날 이전 요청은 대체
- ATTREQ.push({id:'r'+Date.now().toString(36),uid:CUR,name:curUser().name,date:todayK(),kind:'in',in:Date.now(),out:null,note:note||'GPS 범위 밖 — 수동 출근 요청',ts:Date.now()});
+ ATTREQ.push({id:'r'+Date.now().toString(36),uid:CUR,name:curUser().name,date:todayK(),kind:'in',in:Date.now(),out:null,note:note||'매장 와이파이 아님 — 수동 출근 요청',ts:Date.now()});
  closeModal(); save(); render(); toast('관리자에게 출근 요청을 보냈습니다'); }
 function clockOut(){ const a=attToday(); if(!a||!a.in){toast('먼저 출근하세요');return;} if(a.out){toast('이미 퇴근했어요');return;}
- gpsGate('퇴근',()=>{ const b=attOpenBreak(a); if(b)b.e=Date.now(); a.out=Date.now(); logAtt(); render(); reAtt(); toast('퇴근했습니다 — 수고하셨습니다!'); }); }
+ wifiGate('퇴근',()=>{ const b=attOpenBreak(a); if(b)b.e=Date.now(); a.out=Date.now(); logAtt(); render(); reAtt(); toast('퇴근했습니다 — 수고하셨습니다!'); }); }
 function breakStart(){ const a=attToday(); if(!a||!a.in||a.out){toast('출근 상태에서만 가능해요');return;} if(attOpenBreak(a)){toast('이미 휴게 중이에요');return;}
  a.breaks.push({s:Date.now()}); logAtt(); render(); reAtt(); toast('휴게 시작 — 푹 쉬세요'); }
 function breakEnd(){ const a=attToday(); const b=a&&attOpenBreak(a); if(!b){toast('휴게 중이 아니에요');return;} b.e=Date.now(); logAtt(); render(); reAtt(); toast('복귀했습니다'); }
@@ -751,7 +765,7 @@ function screenAtt(){
  }
  const editBtn = a? `<button class="btn sec" style="margin-top:14px" onclick="reqAtt()">${IC('swap','li sm')} 기록 수정 요청</button>`:'';
  const reqBox = (admin && attReqCount())? `<div class="card" style="margin-top:12px;border-color:#bcd7f0"><h3>${IC('bell','li sm')}근태 요청 ${attReqCount()}건</h3>${ATTREQ.map(r=>`<div style="border-top:1px solid var(--edge);padding:8px 0"><div style="font-size:13px"><b>${r.name}</b> <span class="pill" style="background:${r.kind==='in'?'#e7f0ff':'#F0F4EE'};color:${r.kind==='in'?'#2f6fd0':'var(--deep)'};font-size:10px">${r.kind==='in'?'출근 요청':'기록 수정'}</span> <span class="muted" style="font-size:11px">${r.date.slice(5)}</span></div><div class="muted" style="font-size:11.5px">출근 ${fmtT(r.in)}${r.out?' · 퇴근 '+fmtT(r.out):" · '근무 중'으로"}${r.note?' · "'+r.note+'"':''}</div><div class="row" style="gap:6px;margin-top:6px"><button class="btn sec" style="color:var(--warn);border-color:#f0d9bd" onclick="rejectAttReq('${r.id}')">거절</button><button class="btn" onclick="approveAttReq('${r.id}')">승인</button></div></div>`).join('')}</div>`:'';
- const adminBox = admin? `<div class="muted" style="font-size:11px;margin-top:14px">${STORE_LOC?'매장 위치 설정됨':'매장 위치 미설정 — GPS 확인 안 됨'} · <span class="authlink" onclick="setStoreLocMap()">${STORE_LOC?'위치 재설정':'매장 위치 설정'}</span></div>`:'';
+ const adminBox = admin? `<div class="muted" style="font-size:11px;margin-top:14px">${STORE_IP?'매장 와이파이 등록됨':'매장 와이파이 미등록 — 출퇴근 확인 안 함'} · <span class="authlink" onclick="registerStoreWifi()">${STORE_IP?'와이파이 재등록':'매장 와이파이 등록'}</span></div>`:'';
  return `<h2 class="title">${IC('clock')}근태</h2><div class="card">${body}${editBtn}</div>${attHistoryHTML()}${admin?admSummaryHTML():''}${reqBox}${adminBox}`;
 }
 function setWage(){ const v=prompt('시급(원):',WAGE); if(v===null)return; const n=parseInt(String(v).replace(/[^0-9]/g,''),10); if(!n){toast('숫자를 입력하세요');return;} WAGE=n; save(); reAtt(); toast('시급을 '+won(n)+'(으)로 저장했습니다'); }
@@ -771,7 +785,7 @@ function attView(){
    <div class="muted" style="font-size:11.5px;margin-top:2px">${info}</div>
    <div style="margin-top:10px">${btns}</div>
    ${workLine}
-   ${admin?`<div class="muted" style="font-size:11px;margin-top:12px">${STORE_LOC?'매장 위치 설정됨':'매장 위치 미설정 — GPS 확인 안 됨'} · <span class="authlink" onclick="setStoreLocMap()">${STORE_LOC?'위치 재설정':'매장 위치 설정'}</span></div>`:''}
+   ${admin?`<div class="muted" style="font-size:11px;margin-top:12px">${STORE_IP?'매장 와이파이 등록됨':'매장 와이파이 미등록 — 출퇴근 확인 안 함'} · <span class="authlink" onclick="registerStoreWifi()">${STORE_IP?'와이파이 재등록':'매장 와이파이 등록'}</span></div>`:''}
    <button class="btn sec" style="margin-top:14px" onclick="closeModal()">닫기</button>`;
 }
 /* ── 매장 위치 지정: 무료 지도(Leaflet + OSM/위성) + 주소 검색(Nominatim), 키·심사 불필요 ── */
