@@ -377,7 +377,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.6.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.6.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -1476,7 +1476,7 @@ function toggleOrder(i){
  if(role!=='admin'){toast('발주 체크는 대표님·매니저만 할 수 있어요');return;}
  const o=ORDERS[i];
  o.st = o.st==='ordered' ? 'wait' : 'ordered'; o.mt=Date.now();
- if(o.st==='ordered') o.od=fmtDT(); else { delete o.od; o.rcv=false; o.bad=false; o.badnote=''; o.rcvts=null; } // 대기로 되돌리면 배송상태도 초기화
+ if(o.st==='ordered') o.od=fmtDT(); else { delete o.od; o.rcv=false; o.bad=false; o.dvqty=''; o.rcvts=null; } // 대기로 되돌리면 배송상태도 초기화
  render();toast(o.st==='ordered'?'발주됨 처리했습니다':'대기로 되돌렸습니다');
 }
 function editOrder(i){const o=ORDERS[i];if(!o)return;
@@ -1491,34 +1491,31 @@ function deleteOrder(i){const o=ORDERS[i];if(!o)return; const k=ordKey(o), txt=o
 /* ── 배송(입고 확인) 하위탭 ── */
 let ordTab='order'; // 발주 하위탭: order(발주) / deliver(배송)
 function setOrdTab(t){ ordTab=t; render(); }
-function receiveOrder(i){ const o=ORDERS[i]; if(!o||o.st!=='ordered')return;
- o.rcv=!o.rcv; if(o.rcv){ o.bad=false; o.badnote=''; o.rcvts=Date.now(); } else { o.rcvts=null; }
- o.mt=Date.now(); save(); render(); toast(o.rcv?'배송완료 처리했습니다':'배송중으로 되돌렸습니다'); }
-function wrongOrder(i){ const o=ORDERS[i]; if(!o||o.st!=='ordered')return;
- if(o.bad){ o.bad=false; o.badnote=''; o.mt=Date.now(); save(); render(); toast('잘못배송 표시를 해제했습니다'); return; }
- const note=prompt('무엇이 잘못됐나요? (예: 우유 2팩 요청인데 1팩만 옴 · 다른 제품)',''); if(note===null)return;
- o.bad=true; o.rcv=false; o.rcvts=null; o.badnote=(note||'').trim(); o.mt=Date.now();
- save(); render(); toast('잘못배송으로 기록했습니다'); }
+function escAttr(s){ return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+function setDelivered(i,val){ const o=ORDERS[i]; if(!o||o.st!=='ordered')return;
+ o.dvqty=(val||'').trim(); o.rcv=!!o.dvqty; o.rcvts=o.dvqty?Date.now():null; o.bad=/오배송/.test(o.dvqty);
+ o.mt=Date.now(); save(); render(); toast(o.dvqty?'배송 내용을 저장했습니다':'배송중으로 되돌렸습니다'); }
 function deliverBody(){
  const items=ORDERS.map((o,i)=>({o,i})).filter(x=>x.o.st==='ordered');
  const lim=Date.now()-14*86400000;
- const vis=items.filter(x=> !x.o.rcv || x.o.bad || (x.o.rcvts||0)>=lim ); // 배송중·잘못배송은 항상, 완료는 최근 14일
- const rank=x=> x.o.bad?0 : (!x.o.rcv?1:2);
- vis.sort((a,b)=> rank(a)-rank(b) || (b.o.od?1:0)-(a.o.od?1:0) || (b.o.ts||0)-(a.o.ts||0));
- const shipN=items.filter(x=>!x.o.rcv&&!x.o.bad).length;
+ const vis=items.filter(x=> !x.o.dvqty || (x.o.rcvts||0)>=lim ); // 배송중(미입력)은 항상, 완료는 최근 14일
+ const rank=x=> !x.o.dvqty?0 : (/오배송/.test(x.o.dvqty)?1:2); // 배송중 먼저, 오배송, 배송완료
+ vis.sort((a,b)=> rank(a)-rank(b) || (b.o.ts||0)-(a.o.ts||0));
+ const shipN=items.filter(x=>!x.o.dvqty).length;
  const rows= vis.length? vis.map(({o,i})=>{
-   const st=o.rcv?'done':(o.bad?'bad':'ship');
-   const lbl=st==='done'?'배송완료':st==='bad'?'잘못배송':'배송중';
-   const col=st==='done'?'#2E8C49':st==='bad'?'#b04a3f':'#ff7d59';
+   const done=!!o.dvqty, bad=/오배송/.test(o.dvqty||'');
+   const lbl=done?(bad?'오배송':'배송완료'):'배송중';
+   const col=done?(bad?'#b04a3f':'#2E8C49'):'#ff7d59';
    const odMD=o.od?(''+o.od).split(' ')[0]:'';
-   return `<div class="omsg"><div class="obub ${o.rcv?'done':''}" style="${o.bad?'border-color:#f0c9bd':''}">
-     <div class="obx" onclick="receiveOrder(${i})" style="cursor:pointer;${o.bad?'border-color:#e0a99b':''}">${o.rcv?'✓':''}</div>
+   return `<div class="omsg"><div class="obub ${done&&!bad?'done':''}" style="${bad?'border-color:#f0c9bd':''}">
+     <div class="obx" style="${done?(bad?'background:#b04a3f;border-color:#b04a3f':'background:var(--btn);border-color:var(--btn)'):''}">${done?(bad?'!':'✓'):''}</div>
      <div class="otx">${o.txt}${odMD?`<span style="font-size:9.5px;color:var(--sub);margin-left:5px">${odMD} 발주</span>`:''}</div>
      <span class="ost" style="color:${col};white-space:nowrap">${lbl}</span>
-     <span class="oact ${o.bad?'del':''}" onclick="wrongOrder(${i})">${o.bad?'해제':'잘못배송'}</span>
-   </div>${o.bad&&o.badnote?`<div class="warnbox" style="margin:3px 0 8px;padding:7px 10px;font-size:11.5px">⚠ ${o.badnote}</div>`:''}</div>`;
+   </div>
+   <div style="margin:4px 0 9px 6px"><input class="tsel" style="width:100%;padding:8px 10px;font-size:12.5px${bad?';border-color:#e0a99b':''}" value="${escAttr(o.dvqty)}" placeholder="실제 배송된 수량 (예: 10팩 · 문제 시 '오배송')" onchange="setDelivered(${i},this.value)"></div>
+   </div>`;
  }).join('') : `<p class="muted" style="text-align:center;padding:22px 2px">발주된(배송 대기) 물건이 없어요.</p>`;
- return `<div class="muted" style="font-size:11.5px;margin:2px 0 10px;line-height:1.6">발주된 물건이 도착하면 <b>체크</b>로 배송완료 표시 · 수량·제품이 다르면 <b>잘못배송</b>으로 기록하세요.${shipN?` · 배송중 <b style="color:#ff7d59">${shipN}</b>건`:''}</div><div class="ordday">${rows}</div>`; }
+ return `<div class="muted" style="font-size:11.5px;margin:2px 0 10px;line-height:1.6">물건이 도착하면 아래 칸에 <b>실제 배송된 수량</b>을 적으세요. 적으면 배송완료로 표시돼요 · 문제가 있으면 <b>'오배송'</b>이라고 적으면 빨갛게 표시됩니다.${shipN?` · 배송중 <b style="color:#ff7d59">${shipN}</b>건`:''}</div><div class="ordday">${rows}</div>`; }
 /* 대기 발주 복사 → 카톡 붙여넣기용 텍스트만 생성 (발주됨 체크는 별도 수동) */
 function copyOrders(){
  const wait=ORDERS.filter(o=>o.st==='wait');
