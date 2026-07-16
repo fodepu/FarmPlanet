@@ -377,7 +377,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.6.2'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.6.3'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -1496,7 +1496,11 @@ function setOrdTab(t){ ordTab=t; render(); }
 function escAttr(s){ return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 function setDelivered(i,val){ const o=ORDERS[i]; if(!o||o.st!=='ordered')return;
  o.dvqty=(val||'').trim(); o.rcv=!!o.dvqty; o.rcvts=o.dvqty?Date.now():null; o.bad=/오배송/.test(o.dvqty);
- o.mt=Date.now(); save(); render(); toast(o.dvqty?'배송 내용을 저장했습니다':'배송중으로 되돌렸습니다'); }
+ o.mt=Date.now();
+ try{ const ae=document.activeElement; if(ae&&ae.blur)ae.blur(); }catch(e){} // 입력칸 blur → iOS 스크롤 잠김 방지
+ save(); render(); toast(o.dvqty?'배송 내용을 저장했습니다':'배송중으로 되돌렸습니다'); }
+function editDelivered(i){ const o=ORDERS[i]; if(!o)return;
+ const v=prompt('실제 배송 수량 수정 (문제 시 "오배송"):', o.dvqty||''); if(v===null)return; setDelivered(i,v); }
 let dvDate=null; // 배송 탭에서 보는 날짜(ISO), null=오늘
 function dvShift(d){ const b=new Date((dvDate||todayK())+'T00:00:00'); b.setDate(b.getDate()+d); dvDate=dk(b); render(); }
 function dvPick(iso){ if(iso)dvDate=iso; render(); }
@@ -1510,18 +1514,26 @@ function deliverBody(){
  const list=pend.concat(dayItems), shipN=pend.length;
  let hintShown=false;
  const rows= list.length? list.map(({o,i})=>{
-   const done=!!o.dvqty, bad=/오배송/.test(o.dvqty||'');
-   const lbl=done?(bad?'오배송':'배송완료'):'배송중';
-   const col=done?(bad?'#b04a3f':'#2E8C49'):'#ff7d59';
+   const bad=/오배송/.test(o.dvqty||''), done=!!o.dvqty;
    const odMD=o.od?(''+o.od).split(' ')[0]:'';
-   const carried=isToday && !done && odMD && odMD!==selMD;
-   let ph=''; if(!done && !hintShown){ ph="실제 배송된 수량 (예: 10팩 · 문제 시 '오배송')"; hintShown=true; }
-   return `<div class="omsg"><div class="obub ${done&&!bad?'done':''}" style="${bad?'border-color:#f0c9bd':''}">
-     <div class="obx" style="${done?(bad?'background:#b04a3f;border-color:#b04a3f':'background:var(--btn);border-color:var(--btn)'):''}">${done?(bad?'!':'✓'):''}</div>
-     <div class="otx">${o.txt}${carried?`<span style="font-size:10px;font-weight:700;color:#c07d3a;background:#fdf1e3;border-radius:10px;padding:1px 6px;margin-left:5px;white-space:nowrap">이월 ${odMD}</span>`:(odMD&&!done?`<span style="font-size:9.5px;color:var(--sub);margin-left:5px">${odMD} 발주</span>`:'')}</div>
-     <span class="ost" style="color:${col};white-space:nowrap">${lbl}</span>
+   if(done){ // 배송완료/오배송 → 입력칸 없이 한 줄로 접힘
+     const lbl=bad?'오배송':'배송완료', col=bad?'#b04a3f':'#2E8C49';
+     const txtStyle=bad?'color:#b04a3f;font-weight:600':'text-decoration:line-through;color:#a9bfae';
+     return `<div class="omsg"><div class="obub ${bad?'':'done'}" style="${bad?'border-color:#f0c9bd':''}">
+       <div class="obx" onclick="setDelivered(${i},'')" style="cursor:pointer;${bad?'background:#b04a3f;border-color:#b04a3f':'background:var(--btn);border-color:var(--btn)'}">${bad?'!':'✓'}</div>
+       <div class="otx" style="${txtStyle}">${o.txt} · ${escAttr(o.dvqty)}</div>
+       <span class="ost" style="color:${col};white-space:nowrap">${lbl}</span>
+       <span class="oact" onclick="editDelivered(${i})">수정</span>
+     </div></div>`;
+   }
+   const carried=isToday && odMD && odMD!==selMD;
+   let ph=''; if(!hintShown){ ph="실제 배송된 수량 (예: 24개 · 문제 시 '오배송')"; hintShown=true; }
+   return `<div class="omsg"><div class="obub">
+     <div class="obx"></div>
+     <div class="otx">${o.txt}${carried?`<span style="font-size:10px;font-weight:700;color:#c07d3a;background:#fdf1e3;border-radius:10px;padding:1px 6px;margin-left:5px;white-space:nowrap">이월 ${odMD}</span>`:(odMD?`<span style="font-size:9.5px;color:var(--sub);margin-left:5px">${odMD} 발주</span>`:'')}</div>
+     <span class="ost" style="color:#ff7d59;white-space:nowrap">배송중</span>
    </div>
-   <div style="margin:4px 0 9px 6px"><input class="tsel" style="width:100%;padding:8px 10px;font-size:12.5px${bad?';border-color:#e0a99b':''}" value="${escAttr(o.dvqty)}" placeholder="${ph}" autocomplete="off" inputmode="text" onchange="setDelivered(${i},this.value)"></div>
+   <div style="margin:4px 0 9px 6px"><input class="tsel" style="width:100%;padding:8px 10px;font-size:12.5px" value="" placeholder="${ph}" autocomplete="off" inputmode="text" onchange="setDelivered(${i},this.value)"></div>
    </div>`;
  }).join('') : `<p class="muted" style="text-align:center;padding:22px 2px">${isToday?'배송중이거나 오늘 배송된 물건이 없어요.':'이 날 배송된 물건이 없어요.'}</p>`;
  const nav=`<div class="onav">
