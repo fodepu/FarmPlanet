@@ -377,7 +377,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.6.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.6.2'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -514,7 +514,9 @@ function applyRemote(data){
   if(d.CK){ const merged={}; Object.keys(d.CK).forEach(k=>{merged[k]=Object.assign({},d.CK[k]); if(CK[k]&&CK[k].photos)merged[k].photos=CK[k].photos;});
     Object.keys(CK).forEach(k=>{if(!merged[k])merged[k]=CK[k];}); CK=merged; }
   try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP}));}catch(e){}
-  render();
+  const _ae=document.activeElement; // 입력 중(텍스트 칸 포커스)이면 화면 갱신 미룸 → 타이핑 안 끊김
+  if(_ae && (_ae.tagName==='INPUT'||_ae.tagName==='TEXTAREA') && _ae.type!=='date'){ /* 다음 사용자 동작 때 반영 */ }
+  else render();
  }finally{ _applyingRemote=false; }
  if(JSON.stringify(syncPayload())!==data.blob)pushSync(); // 병합 결과 되반영
 }
@@ -1390,7 +1392,7 @@ function screenNotice(){
  const view=(tab==='order')?'order':'notice';
  READS[CUR]=READS[CUR]||{}; READS[CUR][view]=Date.now(); // 읽음 처리
  if(view==='order'){
-   const shipN=ORDERS.filter(o=>o.st==='ordered'&&!o.rcv&&!o.bad).length;
+   const shipN=ORDERS.filter(o=>o.st==='ordered'&&!o.dvqty).length;
    const seg=`<div class="seg" style="margin:6px 0 11px">
      <button class="${ordTab==='order'?'on':''}" onclick="setOrdTab('order')">발주</button>
      <button class="${ordTab==='deliver'?'on':''}" onclick="setOrdTab('deliver')">배송${shipN?` <span style="background:#ff7d59;color:#fff;border-radius:10px;padding:0 6px;font-size:10px;margin-left:4px">${shipN}</span>`:''}</button></div>`;
@@ -1495,27 +1497,38 @@ function escAttr(s){ return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&q
 function setDelivered(i,val){ const o=ORDERS[i]; if(!o||o.st!=='ordered')return;
  o.dvqty=(val||'').trim(); o.rcv=!!o.dvqty; o.rcvts=o.dvqty?Date.now():null; o.bad=/오배송/.test(o.dvqty);
  o.mt=Date.now(); save(); render(); toast(o.dvqty?'배송 내용을 저장했습니다':'배송중으로 되돌렸습니다'); }
+let dvDate=null; // 배송 탭에서 보는 날짜(ISO), null=오늘
+function dvShift(d){ const b=new Date((dvDate||todayK())+'T00:00:00'); b.setDate(b.getDate()+d); dvDate=dk(b); render(); }
+function dvPick(iso){ if(iso)dvDate=iso; render(); }
+function rcvKey(o){ return o.rcvts? dk(new Date(o.rcvts)) : ''; } // 배송(입력)된 날짜 ISO
 function deliverBody(){
- const items=ORDERS.map((o,i)=>({o,i})).filter(x=>x.o.st==='ordered');
- const lim=Date.now()-14*86400000;
- const vis=items.filter(x=> !x.o.dvqty || (x.o.rcvts||0)>=lim ); // 배송중(미입력)은 항상, 완료는 최근 14일
- const rank=x=> !x.o.dvqty?0 : (/오배송/.test(x.o.dvqty)?1:2); // 배송중 먼저, 오배송, 배송완료
- vis.sort((a,b)=> rank(a)-rank(b) || (b.o.ts||0)-(a.o.ts||0));
- const shipN=items.filter(x=>!x.o.dvqty).length;
- const rows= vis.length? vis.map(({o,i})=>{
+ const selISO=dvDate||todayK(), sd=new Date(selISO+'T00:00:00'), isToday=selISO===todayK();
+ const selMD=(sd.getMonth()+1)+'/'+sd.getDate();
+ const all=ORDERS.map((o,i)=>({o,i})).filter(x=>x.o.st==='ordered');
+ const dayItems=all.filter(x=>x.o.dvqty && rcvKey(x.o)===selISO).sort((a,b)=>(b.o.rcvts||0)-(a.o.rcvts||0)); // 그 날 배송된 것
+ const pend= isToday? all.filter(x=>!x.o.dvqty).sort((a,b)=>(a.o.ts||0)-(b.o.ts||0)) : []; // 배송중은 오늘로 이월
+ const list=pend.concat(dayItems), shipN=pend.length;
+ let hintShown=false;
+ const rows= list.length? list.map(({o,i})=>{
    const done=!!o.dvqty, bad=/오배송/.test(o.dvqty||'');
    const lbl=done?(bad?'오배송':'배송완료'):'배송중';
    const col=done?(bad?'#b04a3f':'#2E8C49'):'#ff7d59';
    const odMD=o.od?(''+o.od).split(' ')[0]:'';
+   const carried=isToday && !done && odMD && odMD!==selMD;
+   let ph=''; if(!done && !hintShown){ ph="실제 배송된 수량 (예: 10팩 · 문제 시 '오배송')"; hintShown=true; }
    return `<div class="omsg"><div class="obub ${done&&!bad?'done':''}" style="${bad?'border-color:#f0c9bd':''}">
      <div class="obx" style="${done?(bad?'background:#b04a3f;border-color:#b04a3f':'background:var(--btn);border-color:var(--btn)'):''}">${done?(bad?'!':'✓'):''}</div>
-     <div class="otx">${o.txt}${odMD?`<span style="font-size:9.5px;color:var(--sub);margin-left:5px">${odMD} 발주</span>`:''}</div>
+     <div class="otx">${o.txt}${carried?`<span style="font-size:10px;font-weight:700;color:#c07d3a;background:#fdf1e3;border-radius:10px;padding:1px 6px;margin-left:5px;white-space:nowrap">이월 ${odMD}</span>`:(odMD&&!done?`<span style="font-size:9.5px;color:var(--sub);margin-left:5px">${odMD} 발주</span>`:'')}</div>
      <span class="ost" style="color:${col};white-space:nowrap">${lbl}</span>
    </div>
-   <div style="margin:4px 0 9px 6px"><input class="tsel" style="width:100%;padding:8px 10px;font-size:12.5px${bad?';border-color:#e0a99b':''}" value="${escAttr(o.dvqty)}" placeholder="실제 배송된 수량 (예: 10팩 · 문제 시 '오배송')" onchange="setDelivered(${i},this.value)"></div>
+   <div style="margin:4px 0 9px 6px"><input class="tsel" style="width:100%;padding:8px 10px;font-size:12.5px${bad?';border-color:#e0a99b':''}" value="${escAttr(o.dvqty)}" placeholder="${ph}" autocomplete="off" inputmode="text" onchange="setDelivered(${i},this.value)"></div>
    </div>`;
- }).join('') : `<p class="muted" style="text-align:center;padding:22px 2px">발주된(배송 대기) 물건이 없어요.</p>`;
- return `<div class="muted" style="font-size:11.5px;margin:2px 0 10px;line-height:1.6">물건이 도착하면 아래 칸에 <b>실제 배송된 수량</b>을 적으세요. 적으면 배송완료로 표시돼요 · 문제가 있으면 <b>'오배송'</b>이라고 적으면 빨갛게 표시됩니다.${shipN?` · 배송중 <b style="color:#ff7d59">${shipN}</b>건`:''}</div><div class="ordday">${rows}</div>`; }
+ }).join('') : `<p class="muted" style="text-align:center;padding:22px 2px">${isToday?'배송중이거나 오늘 배송된 물건이 없어요.':'이 날 배송된 물건이 없어요.'}</p>`;
+ const nav=`<div class="onav">
+   <button class="onbtn" onclick="dvShift(-1)" aria-label="이전 날">‹</button>
+   <div class="ondate"><span>${selMD} (${WD[sd.getDay()]})</span>${shipN?`<span class="odbadge">배송중 ${shipN}</span>`:''}<input type="date" value="${selISO}" onchange="dvPick(this.value)"></div>
+   <button class="onbtn" onclick="dvShift(1)" aria-label="다음 날">›</button></div>`;
+ return `${nav}<p class="muted" style="font-size:11px;margin:0 0 10px;text-align:center">물건이 오면 칸에 실제 배송 수량 입력 → 배송완료 · 문제 시 '오배송' · 배송중은 오늘로 이월돼요</p><div class="ordday">${rows}</div>`; }
 /* 대기 발주 복사 → 카톡 붙여넣기용 텍스트만 생성 (발주됨 체크는 별도 수동) */
 function copyOrders(){
  const wait=ORDERS.filter(o=>o.st==='wait');
