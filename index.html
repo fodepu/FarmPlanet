@@ -377,7 +377,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.5.2'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.5.3'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -934,10 +934,11 @@ function onFbLogin(email){
    const gb=$('gsiButton'); if(gb)gb.style.display='none';
    showAuthOverlay(true);
    authMsg(`<div style="font-weight:800;color:var(--ink);font-size:13px;margin-bottom:3px">${email}</div>
-     처음 오셨네요! <b>이름(성 포함)</b>을 입력하세요. 예: 김주함, 유예흔
-     <div style="margin-top:10px;display:flex;gap:6px">
-       <input id="signName" class="tsel" style="flex:1" placeholder="성 포함 이름 (예: 김주함)" autocomplete="off" onkeydown="if(event.key==='Enter')finishSignup()">
-       <button class="btn" style="width:auto;padding:0 18px" onclick="finishSignup()">시작</button></div>
+     처음 오셨네요! <b>이름(성 포함)</b>을 입력하고 가입 요청을 보내세요. 예: 김주함, 유예흔
+     <div style="font-size:11.5px;color:var(--sub);margin-top:6px">대표님·매니저가 승인하면 이용할 수 있어요.</div>
+     <div style="margin-top:10px;display:flex;flex-direction:column;gap:8px">
+       <input id="signName" class="tsel" placeholder="성 포함 이름 (예: 김주함)" autocomplete="off" onkeydown="if(event.key==='Enter')finishSignup()">
+       <button class="btn" onclick="finishSignup()">가입 요청 보내기</button></div>
      <div style="margin-top:10px"><span class="authlink" onclick="fbRelogin()">다른 계정으로</span></div>`);
    setTimeout(()=>{const i=$('signName'); if(i)i.focus();},60); }
 }
@@ -965,7 +966,7 @@ function finishSignup(){
  CUR=s.id; role=isAdmin(s)?'admin':'staff'; tab='home';
  const b=$("userBtn"); b.style.display=''; b.textContent=s.name+' ⏻';
  const gb=$('gsiButton'); if(gb)gb.style.display='';
- showAuthOverlay(false); save(); render(); toast(hon(s.name)+', 환영합니다!');
+ showAuthOverlay(false); save(); render(); toast(s.pending?'가입 요청을 보냈어요 — 승인을 기다려 주세요':hon(s.name)+', 환영합니다!');
 }
 function onFbLogout(){ CUR=null; role='staff'; onlyMine=false; $("userBtn").style.display='none';
  const gb=$('gsiButton'); if(gb)gb.style.display=''; showAuthOverlay(true); authMsg(''); render(); }
