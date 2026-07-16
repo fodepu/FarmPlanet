@@ -377,7 +377,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.6.3'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.6.4'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -1494,6 +1494,7 @@ function deleteOrder(i){const o=ORDERS[i];if(!o)return; const k=ordKey(o), txt=o
 let ordTab='order'; // 발주 하위탭: order(발주) / deliver(배송)
 function setOrdTab(t){ ordTab=t; render(); }
 function escAttr(s){ return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+function productName(t){ const s=String(t||'').replace(/\s*\d+(\.\d+)?\s*[가-힣a-zA-Z]*\s*$/,'').trim(); return s || String(t||'').trim(); } // 끝의 재고수량(숫자+단위) 제거 → 제품명만
 function setDelivered(i,val){ const o=ORDERS[i]; if(!o||o.st!=='ordered')return;
  o.dvqty=(val||'').trim(); o.rcv=!!o.dvqty; o.rcvts=o.dvqty?Date.now():null; o.bad=/오배송/.test(o.dvqty);
  o.mt=Date.now();
@@ -1521,7 +1522,7 @@ function deliverBody(){
      const txtStyle=bad?'color:#b04a3f;font-weight:600':'text-decoration:line-through;color:#a9bfae';
      return `<div class="omsg"><div class="obub ${bad?'':'done'}" style="${bad?'border-color:#f0c9bd':''}">
        <div class="obx" onclick="setDelivered(${i},'')" style="cursor:pointer;${bad?'background:#b04a3f;border-color:#b04a3f':'background:var(--btn);border-color:var(--btn)'}">${bad?'!':'✓'}</div>
-       <div class="otx" style="${txtStyle}">${o.txt} · ${escAttr(o.dvqty)}</div>
+       <div class="otx" style="${txtStyle}">${productName(o.txt)} ${escAttr(o.dvqty)}</div>
        <span class="ost" style="color:${col};white-space:nowrap">${lbl}</span>
        <span class="oact" onclick="editDelivered(${i})">수정</span>
      </div></div>`;
