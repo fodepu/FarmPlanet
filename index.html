@@ -378,7 +378,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.8.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.8.2'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -514,7 +514,7 @@ function applyRemote(data){
     BOARD=Object.values(m).sort((a,b)=>(b.ts||0)-(a.ts||0)); }
   if(d.INV){ const m={}; [...d.INV,...(INV||[])].forEach(v=>{const k=v&&v.id; if(!k)return; // 재고: id 기준, 최근 수정(mt) 우선 병합
       if(!m[k] || (v.mt||0)>(m[k].mt||0)) m[k]=v; });
-    INV=Object.values(m).sort((a,b)=>(a.ts||0)-(b.ts||0)); }
+    INV=Object.values(m).sort((a,b)=>((a.ord||0)-(b.ord||0))||((a.ts||0)-(b.ts||0))); } // 수동 순서 유지
   if(d.CATS){ CATS=[...new Set([...(d.CATS||[]),...(CATS||[])])]; } // 분류: 합집합
   if(d.CK){ const merged={}; Object.keys(d.CK).forEach(k=>{merged[k]=Object.assign({},d.CK[k]); if(CK[k]&&CK[k].photos)merged[k].photos=CK[k].photos;});
     Object.keys(CK).forEach(k=>{if(!merged[k])merged[k]=CK[k];}); CK=merged; }
@@ -1744,6 +1744,13 @@ function isLow(v){ return (v.onHand||0)<=(v.par||0); }
 function catOf(v){ return (v.cat||'').trim()||'미분류'; }
 function jq(s){ return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
 function catList(){ const set=[...CATS]; INV.forEach(v=>{const c=(v.cat||'').trim(); if(c&&!set.includes(c))set.push(c);}); if(INV.some(v=>!(v.cat||'').trim()))set.push('미분류'); return set; }
+function invSortedIdx(){ return INV.map((v,i)=>({v,i})).sort((a,b)=>((a.v.ord||0)-(b.v.ord||0))||((a.v.ts||0)-(b.v.ts||0))); } // 수동 순서(ord) 기준, 없으면 등록순
+function moveInv(id,dir){ if(!isAdmin(curUser()))return;
+ invSortedIdx().forEach(({v},k)=>{v.ord=k+1;}); // 현재 표시순으로 ord 정규화
+ const sorted=INV.slice().sort((a,b)=>(a.ord||0)-(b.ord||0));
+ const pos=sorted.findIndex(v=>v.id===id), np=pos+dir; if(pos<0||np<0||np>=sorted.length)return;
+ const a=sorted[pos], b=sorted[np], t=a.ord; a.ord=b.ord; b.ord=t; a.mt=b.mt=Date.now();
+ save(); render(); }
 let invDate=null, invCat='', invQ=''; // 보는 날짜(null=오늘), 분류 필터, 검색어
 function setInvCat(c){ invCat=c; render(); }
 function filterInv(q){ invQ=q; const el=$('invList'); if(el)el.innerHTML=invListHTML(isAdmin(curUser())); }
@@ -1768,7 +1775,9 @@ function saveItemForm(i){
  const par=parseFloat($('ivPar')?$('ivPar').value:'0')||0;
  const cat=$('ivCat')?$('ivCat').value:'';
  if(i>=0){ const v=INV[i]; if(!v)return; v.name=name; v.unit=unit; v.par=par; v.cat=cat; v.mt=Date.now(); }
- else INV.push({id:invId(),name,unit,par,cat,onHand:0,ts:Date.now(),mt:Date.now(),log:[]});
+ else { if(INV.some(v=>(v.name||'').trim().toLowerCase()===name.toLowerCase())){toast('이미 있는 품목이에요');return;} // 중복 방지
+   const maxOrd=INV.reduce((m,x)=>Math.max(m,x.ord||0),0);
+   INV.push({id:invId(),name,unit,par,cat,onHand:0,ord:maxOrd+1,ts:Date.now(),mt:Date.now(),log:[]}); }
  save(); closeModal(); render(); toast(i>=0?'수정했습니다':name+' 추가했습니다'); }
 function delInvItem(i){ if(!isAdmin(curUser())){toast('삭제는 대표님·매니저만 가능해요');return;} const v=INV[i]; if(!v)return;
  askConfirm(`<b>${v.name}</b> 품목을 삭제할까요?`,'삭제',()=>{ if(INV[i])INV.splice(i,1); save();render();toast('삭제했습니다'); }); }
@@ -1814,8 +1823,12 @@ function applyAssign(c){
    else if((v.cat||'')===c){ v.cat=''; v.mt=Date.now(); } });
  save(); closeModal(); render(); toast(`${c}에 ${n}개 품목을 담았습니다`); }
 function invItemCard(v,i,admin){ const lowF=isLow(v);
+ const canOrder = admin && !invCat && !(invQ||'').trim(); // 전체·검색없음일 때만 순서 조작
  return `<div class="note" style="${lowF?'border-color:#f0c9bd;background:#fff7f4':''}">
    <div style="display:flex;align-items:center;gap:8px">
+     ${canOrder?`<div style="display:flex;flex-direction:column;gap:2px;flex:none">
+       <button class="cam" style="padding:1px 6px;line-height:1.1" onclick="moveInv('${v.id}',-1)" aria-label="위로">▲</button>
+       <button class="cam" style="padding:1px 6px;line-height:1.1" onclick="moveInv('${v.id}',1)" aria-label="아래로">▼</button></div>`:''}
      <div style="flex:1"><b style="font-size:13.5px">${v.name}</b>
        <div class="muted" style="font-size:11px">기준 ${v.par}${v.unit}${lowF?` · <b style="color:#b04a3f">발주 필요</b>`:''}</div></div>
      <div style="text-align:right"><b style="font-size:19px;color:${lowF?'#b04a3f':'var(--deep)'}">${v.onHand||0}</b><span class="muted" style="font-size:11px"> ${v.unit}</span></div>
@@ -1836,18 +1849,15 @@ function screenInventory(){
    <button class="onbtn" onclick="invDateShift(1)" aria-label="다음 날" ${isToday?'disabled style="opacity:.35"':''}>›</button></div>`;
  return `<h2 class="title">${IC('box')}재고관리</h2>${nav}${isToday?invStockBody():invLogBody()}`;
 }
-function invListHTML(admin){ // 검색어 우선, 없으면 분류필터/그룹
- const sortLow=(a,b)=>(isLow(a.v)?0:1)-(isLow(b.v)?0:1);
+function invListHTML(admin){ // 수동 순서 평면 목록 (검색·분류필터 반영, 그룹 헤더 없음)
  if(!INV.length) return `<p class="muted" style="text-align:center;padding:22px 2px">등록된 품목이 없어요.${admin?' 아래 <b>+ 품목 추가</b>로 시작하세요.':''}</p>`;
  const q=(invQ||'').trim().toLowerCase();
- if(q){ const list=INV.map((v,i)=>({v,i})).filter(x=>(x.v.name||'').toLowerCase().includes(q)||catOf(x.v).toLowerCase().includes(q)).sort(sortLow);
+ let list=invSortedIdx();
+ if(q){ list=list.filter(x=>(x.v.name||'').toLowerCase().includes(q)||catOf(x.v).toLowerCase().includes(q));
    return list.length? list.map(({v,i})=>invItemCard(v,i,admin)).join('') : `<p class="muted" style="text-align:center;padding:18px 2px">'${escAttr(invQ)}' 검색 결과가 없어요.</p>`; }
- if(invCat){ const list=INV.map((v,i)=>({v,i})).filter(x=>catOf(x.v)===invCat).sort(sortLow);
+ if(invCat){ list=list.filter(x=>catOf(x.v)===invCat);
    return list.length? list.map(({v,i})=>invItemCard(v,i,admin)).join('') : `<p class="muted" style="text-align:center;padding:18px 2px">이 분류에 품목이 없어요.${admin?' 분류 관리 → 품목 담기로 채워보세요.':''}</p>`; }
- return catList().map(c=>{ const list=INV.map((v,i)=>({v,i})).filter(x=>catOf(x.v)===c).sort(sortLow); if(!list.length)return '';
-   const lowN=list.filter(x=>isLow(x.v)).length;
-   return `<div class="grp">${c}${lowN?` <span style="color:#b04a3f;font-weight:800">· 발주 ${lowN}</span>`:''}</div>${list.map(({v,i})=>invItemCard(v,i,admin)).join('')}`;
- }).join('');
+ return list.map(({v,i})=>invItemCard(v,i,admin)).join(''); // 전체: 평면(분류 그룹 없음)
 }
 function invStockBody(){
  const admin=isAdmin(curUser());
