@@ -361,7 +361,7 @@ const CLOSE_LIST = [
 const CLOSE_WARN = "⚠️ 머신 밑 천은 식기세척기 금지 — 손세척 후 건조";
 
 /* ═══════════ 날짜 · 주간 ═══════════ */
-const OPEN_H=8, CLOSE_H=19, PEAK_S=12.5, PEAK_E=13.5, PEAK_MIN=1; // 피크 최소 1명(혼자도 충분)
+const OPEN_H=8, CLOSE_H=19, PEAK_S=12.5, PEAK_E=13.5, PEAK_MIN=2; // 평일 피크 최소 2명(주말·공휴일은 coverage에서 경고 제외 → 1명 OK)
 /* 2026 대한민국 공휴일·대체공휴일(빨간날). 일요일·수동 휴무는 코드에서 별도 처리 */
 const KR_HOLIDAYS=new Set(['2026-01-01','2026-02-16','2026-02-17','2026-02-18','2026-03-01','2026-03-02','2026-05-05','2026-05-24','2026-05-25','2026-06-06','2026-08-15','2026-08-17','2026-09-24','2026-09-25','2026-09-26','2026-09-28','2026-10-03','2026-10-05','2026-10-09','2026-12-25']);
 const MINWAGE=10320;
@@ -384,7 +384,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.9.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.9.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
