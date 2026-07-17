@@ -382,7 +382,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.8.3'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.8.4'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -1748,7 +1748,7 @@ function isLow(v){ return (v.onHand||0)<=(v.par||0); }
 function catOf(v){ return (v.cat||'').trim()||'미분류'; }
 function jq(s){ return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
 function catList(){ const set=[...CATS]; INV.forEach(v=>{const c=(v.cat||'').trim(); if(c&&!set.includes(c))set.push(c);}); if(INV.some(v=>!(v.cat||'').trim()))set.push('미분류'); return set; }
-function invSortedIdx(){ return INV.map((v,i)=>({v,i})).sort((a,b)=>((a.v.ord||0)-(b.v.ord||0))||((a.v.ts||0)-(b.v.ts||0))); } // 수동 순서(ord) 기준, 없으면 등록순
+function invSortedIdx(){ return INV.map((v,i)=>({v,i})).sort((a,b)=> ((isLow(a.v)?0:1)-(isLow(b.v)?0:1)) || ((a.v.ord||0)-(b.v.ord||0)) || ((a.v.ts||0)-(b.v.ts||0)) ); } // 발주 필요(부족) 먼저 → 수동 순서(ord) → 등록순
 let _invSortable=null;
 function initInvSort(){ const el=$('invList'); if(!el||!window.Sortable)return;
  if(!isAdmin(curUser())||invCat||(invQ||'').trim()){ try{if(_invSortable){_invSortable.destroy();_invSortable=null;}}catch(e){} return; }
