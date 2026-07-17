@@ -378,7 +378,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.7.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.7.2'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -1756,7 +1756,17 @@ function invIn(i){ const v=INV[i]; if(!v)return; // 입고(+)
 function invOrder(i){ const v=INV[i]; if(!v)return; // 발주 담기 → 발주방에 대기로 추가
  ORDERS.push({id:'o'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),who:curUser().name,txt:v.name,dt:fmtDT(),ts:Date.now(),mt:Date.now(),st:'wait'});
  save();render();toast(`${v.name}을(를) 발주방에 담았습니다`); }
+let invSub='stock', invDate=null; // 재고 하위탭 stock/log, 기록 날짜
+function setInvSub(s){ invSub=s; render(); }
+function invDateShift(d){ const b=new Date((invDate||todayK())+'T00:00:00'); b.setDate(b.getDate()+d); invDate=dk(b); render(); }
+function invDatePick(iso){ if(iso)invDate=iso; render(); }
 function screenInventory(){
+ const seg=`<div class="seg" style="margin:6px 0 12px">
+   <button class="${invSub!=='log'?'on':''}" onclick="setInvSub('stock')">재고</button>
+   <button class="${invSub==='log'?'on':''}" onclick="setInvSub('log')">기록</button></div>`;
+ return `<h2 class="title">${IC('box')}재고관리</h2>${seg}${invSub==='log'?invLogBody():invStockBody()}`;
+}
+function invStockBody(){
  const admin=isAdmin(curUser());
  const low=INV.filter(isLow);
  const sorted=INV.map((v,i)=>({v,i})).sort((a,b)=>(isLow(a.v)?0:1)-(isLow(b.v)?0:1)); // 부족 먼저
@@ -1774,11 +1784,29 @@ function screenInventory(){
        ${admin?`<span class="oact" onclick="editInvItem(${i})">수정</span><span class="oact del" onclick="delInvItem(${i})">삭제</span>`:''}
      </div></div>`;
  }).join('') : `<p class="muted" style="text-align:center;padding:22px 2px">등록된 품목이 없어요.${admin?' 아래 <b>+ 품목 추가</b>로 시작하세요.':''}</p>`;
- return `<h2 class="title">${IC('box')}재고관리</h2>
-   ${INV.length?`<div class="muted" style="font-size:12px;margin-bottom:10px">전체 ${INV.length}개${low.length?` · <b style="color:#b04a3f">발주 필요 ${low.length}</b>`:' · 재고 여유 ✓'}</div>`:''}
+ return `${INV.length?`<div class="muted" style="font-size:12px;margin-bottom:10px">전체 ${INV.length}개${low.length?` · <b style="color:#b04a3f">발주 필요 ${low.length}</b>`:' · 재고 여유 ✓'}</div>`:''}
    ${rows}
    ${admin?`<button class="btn" style="margin-top:10px" onclick="addInvItem()">+ 품목 추가</button>`:''}
    <p class="muted" style="font-size:11px;margin-top:10px;text-align:center;line-height:1.6">실사 = 직접 센 수량 입력(재고 맞춤) · 입고 + = 들어온 수량 추가 · 기준재고보다 적으면 빨갛게 표시돼요</p>`;
+}
+function invLogBody(){
+ const selISO=invDate||todayK(), sd=new Date(selISO+'T00:00:00'), selMD=(sd.getMonth()+1)+'/'+sd.getDate();
+ const entries=[];
+ INV.forEach(v=>{ (v.log||[]).forEach(l=>{ if(l.ts && dk(new Date(l.ts))===selISO) entries.push(Object.assign({name:v.name,unit:v.unit},l)); }); });
+ entries.sort((a,b)=>(b.ts||0)-(a.ts||0));
+ const rows= entries.length? entries.map(e=>{ const isIn=e.ty==='입고';
+   const badge=`<span class="pill" style="background:${isIn?'#EDF7F0':'#e7eefb'};color:${isIn?'var(--deep)':'#2b5fb0'}">${e.ty}</span>`;
+   const amt= isIn? `<b style="color:var(--deep)">+${e.delta}${e.unit}</b>` : `→ <b>${e.to}${e.unit}</b> <span class="muted" style="font-size:10.5px">(조정 ${e.delta>=0?'+':''}${e.delta})</span>`;
+   const t=new Date(e.ts), tstr=String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0');
+   return `<div class="note" style="padding:10px 12px"><div style="display:flex;align-items:center;gap:8px">
+     ${badge}<b style="font-size:13px;flex:1">${e.name}</b><div style="text-align:right;font-size:12.5px;white-space:nowrap">${amt}</div></div>
+     <div class="muted" style="font-size:10.5px;margin-top:4px">${e.who||''} · ${tstr}</div></div>`;
+ }).join('') : `<p class="muted" style="text-align:center;padding:22px 2px">이 날은 실사·입고 기록이 없어요.</p>`;
+ const nav=`<div class="onav">
+   <button class="onbtn" onclick="invDateShift(-1)" aria-label="이전 날">‹</button>
+   <div class="ondate"><span>${selMD} (${WD[sd.getDay()]})</span><input type="date" value="${selISO}" onchange="invDatePick(this.value)"></div>
+   <button class="onbtn" onclick="invDateShift(1)" aria-label="다음 날">›</button></div>`;
+ return `${nav}<p class="muted" style="font-size:11px;margin:0 0 10px;text-align:center">그날의 실사·입고 내역 · ‹ › 또는 날짜를 눌러 이동</p>${rows}`;
 }
 const NAV=[["home","home","홈"],["att","clock","근태"],["sched","cal","시간표"],["order","cart","발주"]];
 function render(){
