@@ -378,7 +378,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.8.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.8.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -1744,8 +1744,9 @@ function isLow(v){ return (v.onHand||0)<=(v.par||0); }
 function catOf(v){ return (v.cat||'').trim()||'미분류'; }
 function jq(s){ return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
 function catList(){ const set=[...CATS]; INV.forEach(v=>{const c=(v.cat||'').trim(); if(c&&!set.includes(c))set.push(c);}); if(INV.some(v=>!(v.cat||'').trim()))set.push('미분류'); return set; }
-let invDate=null, invCat=''; // 보는 날짜(null=오늘), 분류 필터
+let invDate=null, invCat='', invQ=''; // 보는 날짜(null=오늘), 분류 필터, 검색어
 function setInvCat(c){ invCat=c; render(); }
+function filterInv(q){ invQ=q; const el=$('invList'); if(el)el.innerHTML=invListHTML(isAdmin(curUser())); }
 function invDateShift(d){ const b=new Date((invDate||todayK())+'T00:00:00'); b.setDate(b.getDate()+d); const iso=dk(b); if(iso>todayK())return; invDate=iso; render(); }
 function invDatePick(iso){ if(iso&&iso<=todayK())invDate=iso; render(); }
 /* 품목 추가·수정 (앱 모달 폼) */
@@ -1835,6 +1836,19 @@ function screenInventory(){
    <button class="onbtn" onclick="invDateShift(1)" aria-label="다음 날" ${isToday?'disabled style="opacity:.35"':''}>›</button></div>`;
  return `<h2 class="title">${IC('box')}재고관리</h2>${nav}${isToday?invStockBody():invLogBody()}`;
 }
+function invListHTML(admin){ // 검색어 우선, 없으면 분류필터/그룹
+ const sortLow=(a,b)=>(isLow(a.v)?0:1)-(isLow(b.v)?0:1);
+ if(!INV.length) return `<p class="muted" style="text-align:center;padding:22px 2px">등록된 품목이 없어요.${admin?' 아래 <b>+ 품목 추가</b>로 시작하세요.':''}</p>`;
+ const q=(invQ||'').trim().toLowerCase();
+ if(q){ const list=INV.map((v,i)=>({v,i})).filter(x=>(x.v.name||'').toLowerCase().includes(q)||catOf(x.v).toLowerCase().includes(q)).sort(sortLow);
+   return list.length? list.map(({v,i})=>invItemCard(v,i,admin)).join('') : `<p class="muted" style="text-align:center;padding:18px 2px">'${escAttr(invQ)}' 검색 결과가 없어요.</p>`; }
+ if(invCat){ const list=INV.map((v,i)=>({v,i})).filter(x=>catOf(x.v)===invCat).sort(sortLow);
+   return list.length? list.map(({v,i})=>invItemCard(v,i,admin)).join('') : `<p class="muted" style="text-align:center;padding:18px 2px">이 분류에 품목이 없어요.${admin?' 분류 관리 → 품목 담기로 채워보세요.':''}</p>`; }
+ return catList().map(c=>{ const list=INV.map((v,i)=>({v,i})).filter(x=>catOf(x.v)===c).sort(sortLow); if(!list.length)return '';
+   const lowN=list.filter(x=>isLow(x.v)).length;
+   return `<div class="grp">${c}${lowN?` <span style="color:#b04a3f;font-weight:800">· 발주 ${lowN}</span>`:''}</div>${list.map(({v,i})=>invItemCard(v,i,admin)).join('')}`;
+ }).join('');
+}
 function invStockBody(){
  const admin=isAdmin(curUser());
  const low=INV.filter(isLow);
@@ -1843,18 +1857,10 @@ function invStockBody(){
    <button class="dchip ${invCat===''?'on':''}" onclick="setInvCat('')">전체</button>
    ${cats.map(c=>{const n=INV.filter(v=>catOf(v)===c).length; return `<button class="dchip ${invCat===c?'on':''}" onclick="setInvCat('${jq(c)}')">${c} ${n}</button>`;}).join('')}
    ${admin?`<button class="dchip" style="border-style:dashed;color:var(--deep)" onclick="openCatMgr()">＋ 분류 관리</button>`:''}</div>`;
- const sortLow=(a,b)=>(isLow(a.v)?0:1)-(isLow(b.v)?0:1);
- let body;
- if(!INV.length){ body=`<p class="muted" style="text-align:center;padding:22px 2px">등록된 품목이 없어요.${admin?' 아래 <b>+ 품목 추가</b>로 시작하세요.':''}</p>`; }
- else if(invCat){ const list=INV.map((v,i)=>({v,i})).filter(x=>catOf(x.v)===invCat).sort(sortLow);
-   body= list.length? list.map(({v,i})=>invItemCard(v,i,admin)).join('') : `<p class="muted" style="text-align:center;padding:18px 2px">이 분류에 품목이 없어요.${admin?' 분류 관리 → 품목 담기로 채워보세요.':''}</p>`; }
- else { body= cats.map(c=>{ const list=INV.map((v,i)=>({v,i})).filter(x=>catOf(x.v)===c).sort(sortLow); if(!list.length)return '';
-     const lowN=list.filter(x=>isLow(x.v)).length;
-     return `<div class="grp">${c}${lowN?` <span style="color:#b04a3f;font-weight:800">· 발주 ${lowN}</span>`:''}</div>${list.map(({v,i})=>invItemCard(v,i,admin)).join('')}`;
-   }).join(''); }
  return `<div class="muted" style="font-size:12px;margin:2px 0 8px">${INV.length?`전체 ${INV.length}개${low.length?` · <b style="color:#b04a3f">발주 필요 ${low.length}</b>`:' · 재고 여유 ✓'}`:''}</div>
-   ${chips}
-   ${body}
+   ${INV.length?`<input class="search" id="invSearch" placeholder="품목 검색…" value="${escAttr(invQ)}" oninput="filterInv(this.value)" autocomplete="off">`:''}
+   ${INV.length?chips:''}
+   <div id="invList">${invListHTML(admin)}</div>
    ${admin?`<button class="btn" style="margin-top:12px" onclick="invForm(-1)">+ 품목 추가</button>`:''}
    <p class="muted" style="font-size:11px;margin-top:10px;text-align:center;line-height:1.6">실사 = 직접 센 수량 · 입고 + = 들어온 수량 · ‹ M/D › 날짜로 지난 기록 보기</p>`;
 }
