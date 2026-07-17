@@ -378,7 +378,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.7.2'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.7.3'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -1734,12 +1734,14 @@ function addInvItem(){ if(!isAdmin(curUser())){toast('품목 추가는 대표님
  const name=prompt('품목 이름 (예: 우유):',''); if(name===null)return; if(!name.trim()){toast('이름을 입력하세요');return;}
  const unit=(prompt('단위 (예: 개·팩·kg·L):','개')||'개').trim()||'개';
  const par=parseFloat(prompt('기준재고 — 이보다 적으면 발주 알림 (숫자):','0'))||0;
- INV.push({id:invId(),name:name.trim(),unit,par,onHand:0,ts:Date.now(),mt:Date.now(),log:[]});
+ const cat=(prompt('분류 (예: 유제품·원두·채소·비품 · 비우면 미분류):', invCat||'')||'').trim();
+ INV.push({id:invId(),name:name.trim(),unit,par,cat,onHand:0,ts:Date.now(),mt:Date.now(),log:[]});
  save();render();toast(name.trim()+' 품목을 추가했습니다'); }
 function editInvItem(i){ if(!isAdmin(curUser())){toast('수정은 대표님·매니저만 가능해요');return;} const v=INV[i]; if(!v)return;
  const name=prompt('품목 이름:',v.name); if(name===null)return; if(name.trim())v.name=name.trim();
  const unit=prompt('단위:',v.unit); if(unit!==null&&unit.trim())v.unit=unit.trim();
  const par=prompt('기준재고(발주 알림 기준):',v.par); if(par!==null){const n=parseFloat(par); if(!isNaN(n))v.par=n;}
+ const cat=prompt('분류 (비우면 미분류):',v.cat||''); if(cat!==null)v.cat=cat.trim();
  v.mt=Date.now(); save();render();toast('수정했습니다'); }
 function delInvItem(i){ if(!isAdmin(curUser())){toast('삭제는 대표님·매니저만 가능해요');return;} const v=INV[i]; if(!v)return;
  askConfirm(`<b>${v.name}</b> 품목을 삭제할까요?`,'삭제',()=>{ if(INV[i])INV.splice(i,1); save();render();toast('삭제했습니다'); }); }
@@ -1756,8 +1758,9 @@ function invIn(i){ const v=INV[i]; if(!v)return; // 입고(+)
 function invOrder(i){ const v=INV[i]; if(!v)return; // 발주 담기 → 발주방에 대기로 추가
  ORDERS.push({id:'o'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),who:curUser().name,txt:v.name,dt:fmtDT(),ts:Date.now(),mt:Date.now(),st:'wait'});
  save();render();toast(`${v.name}을(를) 발주방에 담았습니다`); }
-let invSub='stock', invDate=null; // 재고 하위탭 stock/log, 기록 날짜
+let invSub='stock', invDate=null, invCat=''; // 재고 하위탭 stock/log, 기록 날짜, 분류 필터
 function setInvSub(s){ invSub=s; render(); }
+function setInvCat(c){ invCat=c; render(); }
 function invDateShift(d){ const b=new Date((invDate||todayK())+'T00:00:00'); b.setDate(b.getDate()+d); invDate=dk(b); render(); }
 function invDatePick(iso){ if(iso)invDate=iso; render(); }
 function screenInventory(){
@@ -1766,28 +1769,46 @@ function screenInventory(){
    <button class="${invSub==='log'?'on':''}" onclick="setInvSub('log')">기록</button></div>`;
  return `<h2 class="title">${IC('box')}재고관리</h2>${seg}${invSub==='log'?invLogBody():invStockBody()}`;
 }
+function catOf(v){ return (v.cat||'').trim()||'미분류'; }
+function invItemCard(v,i,admin){ const lowF=isLow(v);
+ return `<div class="note" style="${lowF?'border-color:#f0c9bd;background:#fff7f4':''}">
+   <div style="display:flex;align-items:center;gap:8px">
+     <div style="flex:1"><b style="font-size:13.5px">${v.name}</b>
+       <div class="muted" style="font-size:11px">기준 ${v.par}${v.unit}${lowF?` · <b style="color:#b04a3f">발주 필요</b>`:''}</div></div>
+     <div style="text-align:right"><b style="font-size:19px;color:${lowF?'#b04a3f':'var(--deep)'}">${v.onHand||0}</b><span class="muted" style="font-size:11px"> ${v.unit}</span></div>
+   </div>
+   <div style="display:flex;gap:6px;margin-top:9px;flex-wrap:wrap">
+     <button class="cam" onclick="invCount(${i})">실사</button>
+     <button class="cam" onclick="invIn(${i})">입고 +</button>
+     ${lowF?`<button class="cam" style="color:var(--deep);border-color:#bfe0c8;font-weight:800" onclick="invOrder(${i})">발주 담기</button>`:''}
+     ${admin?`<span class="oact" onclick="editInvItem(${i})">수정</span><span class="oact del" onclick="delInvItem(${i})">삭제</span>`:''}
+   </div></div>`;
+}
 function invStockBody(){
  const admin=isAdmin(curUser());
  const low=INV.filter(isLow);
- const sorted=INV.map((v,i)=>({v,i})).sort((a,b)=>(isLow(a.v)?0:1)-(isLow(b.v)?0:1)); // 부족 먼저
- const rows= INV.length? sorted.map(({v,i})=>{ const lowF=isLow(v);
-   return `<div class="note" style="${lowF?'border-color:#f0c9bd;background:#fff7f4':''}">
-     <div style="display:flex;align-items:center;gap:8px">
-       <div style="flex:1"><b style="font-size:13.5px">${v.name}</b>
-         <div class="muted" style="font-size:11px">기준 ${v.par}${v.unit}${lowF?` · <b style="color:#b04a3f">발주 필요</b>`:''}</div></div>
-       <div style="text-align:right"><b style="font-size:19px;color:${lowF?'#b04a3f':'var(--deep)'}">${v.onHand||0}</b><span class="muted" style="font-size:11px"> ${v.unit}</span></div>
-     </div>
-     <div style="display:flex;gap:6px;margin-top:9px;flex-wrap:wrap">
-       <button class="cam" onclick="invCount(${i})">실사</button>
-       <button class="cam" onclick="invIn(${i})">입고 +</button>
-       ${lowF?`<button class="cam" style="color:var(--deep);border-color:#bfe0c8;font-weight:800" onclick="invOrder(${i})">발주 담기</button>`:''}
-       ${admin?`<span class="oact" onclick="editInvItem(${i})">수정</span><span class="oact del" onclick="delInvItem(${i})">삭제</span>`:''}
-     </div></div>`;
- }).join('') : `<p class="muted" style="text-align:center;padding:22px 2px">등록된 품목이 없어요.${admin?' 아래 <b>+ 품목 추가</b>로 시작하세요.':''}</p>`;
- return `${INV.length?`<div class="muted" style="font-size:12px;margin-bottom:10px">전체 ${INV.length}개${low.length?` · <b style="color:#b04a3f">발주 필요 ${low.length}</b>`:' · 재고 여유 ✓'}</div>`:''}
-   ${rows}
+ if(!INV.length) return `<p class="muted" style="text-align:center;padding:22px 2px">등록된 품목이 없어요.${admin?' 아래 <b>+ 품목 추가</b>로 시작하세요.':''}</p>
+   ${admin?`<button class="btn" style="margin-top:10px" onclick="addInvItem()">+ 품목 추가</button>`:''}`;
+ const cats=[...new Set(INV.map(catOf))].sort((a,b)=> a==='미분류'?1:b==='미분류'?-1:a.localeCompare(b));
+ const chips= cats.length>1? `<div class="dsel">
+   <button class="dchip ${invCat===''?'on':''}" onclick="setInvCat('')">전체</button>
+   ${cats.map(c=>{const n=INV.filter(v=>catOf(v)===c).length; return `<button class="dchip ${invCat===c?'on':''}" onclick="setInvCat('${c.replace(/'/g,"\\'")}')">${c} ${n}</button>`;}).join('')}</div>` : '';
+ const sortLow=(a,b)=>(isLow(a.v)?0:1)-(isLow(b.v)?0:1);
+ let body;
+ if(invCat){ // 특정 분류만
+   const list=INV.map((v,i)=>({v,i})).filter(x=>catOf(x.v)===invCat).sort(sortLow);
+   body= list.length? list.map(({v,i})=>invItemCard(v,i,admin)).join('') : `<p class="muted" style="text-align:center;padding:18px 2px">이 분류에 품목이 없어요.</p>`;
+ } else { // 전체 → 분류별 그룹
+   body= cats.map(c=>{ const list=INV.map((v,i)=>({v,i})).filter(x=>catOf(x.v)===c).sort(sortLow);
+     const lowN=list.filter(x=>isLow(x.v)).length;
+     return `<div class="grp">${c}${lowN?` <span style="color:#b04a3f;font-weight:800">· 발주 ${lowN}</span>`:''}</div>${list.map(({v,i})=>invItemCard(v,i,admin)).join('')}`;
+   }).join('');
+ }
+ return `<div class="muted" style="font-size:12px;margin-bottom:8px">전체 ${INV.length}개${low.length?` · <b style="color:#b04a3f">발주 필요 ${low.length}</b>`:' · 재고 여유 ✓'}</div>
+   ${chips}
+   ${body}
    ${admin?`<button class="btn" style="margin-top:10px" onclick="addInvItem()">+ 품목 추가</button>`:''}
-   <p class="muted" style="font-size:11px;margin-top:10px;text-align:center;line-height:1.6">실사 = 직접 센 수량 입력(재고 맞춤) · 입고 + = 들어온 수량 추가 · 기준재고보다 적으면 빨갛게 표시돼요</p>`;
+   <p class="muted" style="font-size:11px;margin-top:10px;text-align:center;line-height:1.6">실사 = 직접 센 수량 입력 · 입고 + = 들어온 수량 · 분류별로 묶여 표시돼요</p>`;
 }
 function invLogBody(){
  const selISO=invDate||todayK(), sd=new Date(selISO+'T00:00:00'), selMD=(sd.getMonth()+1)+'/'+sd.getDate();
