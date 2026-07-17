@@ -378,7 +378,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.7.3'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.7.4'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -633,7 +633,8 @@ function sendClockInReq(){
  ATTREQ.push({id:'r'+Date.now().toString(36),uid:CUR,name:curUser().name,date:todayK(),kind:'in',in:Date.now(),out:null,note:note||'매장 와이파이 아님 — 수동 출근 요청',ts:Date.now()});
  closeModal(); save(); render(); toast('관리자에게 출근 요청을 보냈습니다'); }
 function clockOut(){ const a=attToday(); if(!a||!a.in){toast('먼저 출근하세요');return;} if(a.out){toast('이미 퇴근했어요');return;}
- wifiGate('퇴근',()=>{ const b=attOpenBreak(a); if(b)b.e=Date.now(); a.out=Date.now(); logAtt(); render(); reAtt(); toast('퇴근했습니다 — 수고하셨습니다!'); }); }
+ // 퇴근은 와이파이 게이트 없음 — 어디서든 가능(깜빡한 퇴근 등). 시각이 다르면 '기록 수정 요청'
+ const b=attOpenBreak(a); if(b)b.e=Date.now(); a.out=Date.now(); logAtt(); render(); reAtt(); toast('퇴근했습니다 — 시각이 다르면 기록 수정 요청하세요'); }
 function breakStart(){ const a=attToday(); if(!a||!a.in||a.out){toast('출근 상태에서만 가능해요');return;} if(attOpenBreak(a)){toast('이미 휴게 중이에요');return;}
  a.breaks.push({s:Date.now()}); logAtt(); render(); reAtt(); toast('휴게 시작 — 푹 쉬세요'); }
 function breakEnd(){ const a=attToday(); const b=a&&attOpenBreak(a); if(!b){toast('휴게 중이 아니에요');return;} b.e=Date.now(); logAtt(); render(); reAtt(); toast('복귀했습니다'); }
@@ -687,19 +688,28 @@ function attElapsed(){ const a=attToday(); if(!a)return 0; const st=attStatus(a)
 function tickAtt(){ if(tab!=='att'||!CUR)return; const el=$('aClock'); if(!el)return; const st=attStatus(attToday()); if(st==='work'||st==='break')el.textContent=fmtHMS(attElapsed()); }
 setInterval(tickAtt,1000);
 function confirmClockOut(){ askConfirm('퇴근하시겠어요? 오늘 근무를 종료합니다.','퇴근',()=>clockOut()); }
-function parseTs(v){ const m=String(v).trim().match(/^(\d{1,2}):?(\d{2})$/); if(!m)return null; const h=+m[1],mm=+m[2]; if(h>23||mm>59)return null; const d=new Date(); d.setHours(h,mm,0,0); return d.getTime(); }
+function parseTs(v){ // "14:00" "14" "2"(→오후2시) "230"(2:30) 등 유연 파싱
+ v=String(v||'').trim().replace(/[시분]/g,'').replace(/\s/g,''); if(!v)return null;
+ let h,mm=0,bare=false,m;
+ if(m=v.match(/^(\d{1,2}):(\d{1,2})$/)){ h=+m[1]; mm=+m[2]; }            // H:MM (정확 입력 → 그대로)
+ else if(m=v.match(/^(\d{1,2})$/)){ h=+m[1]; bare=true; }               // H (분 없음)
+ else if(m=v.match(/^(\d{3,4})$/)){ h=+m[1].slice(0,-2); mm=+m[1].slice(-2); } // HMM/HHMM
+ else return null;
+ if(bare && h<OPEN_H) h+=12; // 카페 영업시간 기준: 분 없는 이른 시각은 오후로(2→14)
+ if(h>23||mm>59)return null;
+ const d=new Date(); d.setHours(h,mm,0,0); return d.getTime(); }
 function attReqCount(){ return (ATTREQ||[]).length; }
 function reqAtt(){ const a=attToday(); if(!a){toast('오늘 출근 기록이 없어요');return;}
  openModal(`<h3>근태 수정 요청 · ${curUser().name}</h3>
    <div class="muted" style="font-size:11.5px;margin-bottom:10px">고칠 시각을 입력해 관리자에게 요청하세요. <b>승인되면 반영</b>됩니다.</div>
-   <div class="fld"><label>출근 시각</label><input id="atIn" class="tsel" value="${fmtT(a.in)}" placeholder="12:30" autocomplete="off"></div>
-   <div class="fld" style="margin-top:8px"><label>퇴근 시각 <span class="muted">(비우면 '근무 중'으로 요청)</span></label><input id="atOut" class="tsel" value="${a.out?fmtT(a.out):''}" placeholder="16:00" autocomplete="off"></div>
+   <div class="fld"><label>출근 시각 <span class="muted">(예: 9 또는 9:30)</span></label><input id="atIn" class="tsel" value="${fmtT(a.in)}" placeholder="9:00" autocomplete="off" inputmode="numeric"></div>
+   <div class="fld" style="margin-top:8px"><label>퇴근 시각 <span class="muted">(예: 2 → 오후 2시 · 비우면 '근무 중')</span></label><input id="atOut" class="tsel" value="${a.out?fmtT(a.out):''}" placeholder="14:00" autocomplete="off" inputmode="numeric"></div>
    <div class="fld" style="margin-top:8px"><label>메모 <span class="muted">(선택)</span></label><input id="atNote" class="tsel" placeholder="예: 실수로 퇴근을 눌렀어요" autocomplete="off"></div>
    <div class="row" style="margin-top:12px"><button class="btn sec" onclick="go('att')">취소</button><button class="btn" onclick="sendAttReq()">관리자에게 요청 보내기</button></div>`);
  setTimeout(()=>{const el=$('atIn');if(el)el.focus();},50); }
 function sendAttReq(){ const a=attToday(); if(!a)return;
- const ti=parseTs($('atIn').value); if(!ti){toast('출근 시각 형식 확인 (예: 12:30)');return;}
- const ov=($('atOut')?$('atOut').value:'').trim(); let to=null; if(ov){to=parseTs(ov); if(!to){toast('퇴근 시각 형식 확인');return;}}
+ const ti=parseTs($('atIn').value); if(!ti){toast('출근 시각 형식 확인 (예: 9 · 9:30)');return;}
+ const ov=($('atOut')?$('atOut').value:'').trim(); let to=null; if(ov){to=parseTs(ov); if(!to){toast('퇴근 시각 형식 확인 (예: 2 · 14:00)');return;}}
  const note=($('atNote')?$('atNote').value:'').trim();
  ATTREQ=(ATTREQ||[]).filter(r=>!(r.uid===CUR&&r.date===todayK())); // 같은 날 이전 요청은 대체
  ATTREQ.push({id:'r'+Date.now().toString(36),uid:CUR,name:curUser().name,date:todayK(),in:ti,out:to,note,ts:Date.now()});
