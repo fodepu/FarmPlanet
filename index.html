@@ -384,7 +384,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.9.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.9.2'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -1765,12 +1765,15 @@ function catList(){ const set=[...CATS]; INV.forEach(v=>{const c=(v.cat||'').tri
 function invSortedIdx(){ return INV.map((v,i)=>({v,i})).sort((a,b)=> ((isLow(a.v)?0:1)-(isLow(b.v)?0:1)) || ((a.v.ord||0)-(b.v.ord||0)) || ((a.v.ts||0)-(b.v.ts||0)) ); } // 발주 필요(부족) 먼저 → 수동 순서(ord) → 등록순
 let _invSortable=null;
 function initInvSort(){ const el=$('invList'); if(!el||!window.Sortable)return;
- if(!isAdmin(curUser())||invCat||(invQ||'').trim()){ try{if(_invSortable){_invSortable.destroy();_invSortable=null;}}catch(e){} return; }
+ if(!isAdmin(curUser())||(invQ||'').trim()){ try{if(_invSortable){_invSortable.destroy();_invSortable=null;}}catch(e){} return; } // 검색 중만 비활성(전체·분류 모두 드래그)
  try{if(_invSortable)_invSortable.destroy();}catch(e){}
  _invSortable=Sortable.create(el,{handle:'.invdrag',animation:150,ghostClass:'inv-ghost',chosenClass:'inv-chosen',onEnd:onInvSortEnd}); }
 function onInvSortEnd(){ const el=$('invList'); if(!el)return;
- const ids=[...el.children].map(c=>c.getAttribute('data-id')).filter(Boolean);
- ids.forEach((id,k)=>{ const v=INV.find(x=>x.id===id); if(v){v.ord=k+1;v.mt=Date.now();} });
+ const domIds=[...el.children].map(c=>c.getAttribute('data-id')).filter(Boolean);
+ // 뷰에 보이는 항목의 '슬롯'(전체 표시순 위치)에 새 순서를 채워넣어 다른 분류 순서는 보존
+ const fullOrder=invSortedIdx().map(x=>x.v.id), visible=new Set(domIds);
+ let di=0; const newFull=fullOrder.map(id=> visible.has(id)? domIds[di++] : id );
+ newFull.forEach((id,k)=>{ const v=INV.find(x=>x.id===id); if(v){v.ord=k+1;v.mt=Date.now();} });
  save(); toast('순서를 저장했습니다'); } // DOM은 이미 이동됨 — 전체 재렌더 불필요
 let invDate=null, invCat='', invQ=''; // 보는 날짜(null=오늘), 분류 필터, 검색어
 function setInvCat(c){ invCat=c; render(); }
@@ -1844,7 +1847,7 @@ function applyAssign(c){
    else if((v.cat||'')===c){ v.cat=''; v.mt=Date.now(); } });
  save(); closeModal(); render(); toast(`${c}에 ${n}개 품목을 담았습니다`); }
 function invItemCard(v,i,admin){ const lowF=isLow(v);
- const canOrder = admin && !invCat && !(invQ||'').trim(); // 전체·검색없음일 때만 순서 조작(드래그)
+ const canOrder = admin && !(invQ||'').trim(); // 검색 중이 아니면 순서 조작(드래그) — 전체·분류 모두
  return `<div class="note" data-id="${v.id}" style="${lowF?'border-color:#f0c9bd;background:#fff7f4':''}">
    <div style="display:flex;align-items:center;gap:8px">
      ${canOrder?`<span class="invdrag" aria-label="드래그로 순서 변경">≡</span>`:''}
