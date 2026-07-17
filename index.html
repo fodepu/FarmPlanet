@@ -69,6 +69,9 @@ input.inp{min-height:auto}
 .prog i{display:block;height:6px;border-radius:4px;background:linear-gradient(90deg,#43AB60,#2E8C49)}
 .warnbox{background:#fdf3e7;border:1px solid #f0d9bd;color:#8a5a1f;border-radius:7px;padding:10px 12px;font-size:12px;line-height:1.6}
 .cam{border:1px solid var(--edge);background:#fff;color:var(--deep);border-radius:6px;padding:6px 10px;font-size:11px;font-weight:800;cursor:pointer;flex:none}
+.invdrag{cursor:grab;color:#b7c2ba;font-size:19px;line-height:1;padding:4px 8px;flex:none;touch-action:none;user-select:none;-webkit-user-select:none}
+.invdrag:active{cursor:grabbing}
+.inv-ghost{opacity:.4} .inv-chosen{background:#f0f6f1}
 /* 매뉴얼 */
 .acc{background:#fff;border:1px solid var(--edge);border-radius:8px;margin-bottom:8px;overflow:hidden}
 .acc .h{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;font-size:13px;font-weight:800;cursor:pointer}
@@ -218,6 +221,7 @@ input.inp{min-height:auto}
 .asum{text-align:center;font-size:12px;color:var(--sub);margin-top:12px;padding-top:10px;border-top:1px solid var(--edge)}
 </style>
 <script src="https://accounts.google.com/gsi/client" async></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.6/Sortable.min.js" defer></script>
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute">
@@ -378,7 +382,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.8.2'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.8.3'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -1745,15 +1749,18 @@ function catOf(v){ return (v.cat||'').trim()||'미분류'; }
 function jq(s){ return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
 function catList(){ const set=[...CATS]; INV.forEach(v=>{const c=(v.cat||'').trim(); if(c&&!set.includes(c))set.push(c);}); if(INV.some(v=>!(v.cat||'').trim()))set.push('미분류'); return set; }
 function invSortedIdx(){ return INV.map((v,i)=>({v,i})).sort((a,b)=>((a.v.ord||0)-(b.v.ord||0))||((a.v.ts||0)-(b.v.ts||0))); } // 수동 순서(ord) 기준, 없으면 등록순
-function moveInv(id,dir){ if(!isAdmin(curUser()))return;
- invSortedIdx().forEach(({v},k)=>{v.ord=k+1;}); // 현재 표시순으로 ord 정규화
- const sorted=INV.slice().sort((a,b)=>(a.ord||0)-(b.ord||0));
- const pos=sorted.findIndex(v=>v.id===id), np=pos+dir; if(pos<0||np<0||np>=sorted.length)return;
- const a=sorted[pos], b=sorted[np], t=a.ord; a.ord=b.ord; b.ord=t; a.mt=b.mt=Date.now();
- save(); render(); }
+let _invSortable=null;
+function initInvSort(){ const el=$('invList'); if(!el||!window.Sortable)return;
+ if(!isAdmin(curUser())||invCat||(invQ||'').trim()){ try{if(_invSortable){_invSortable.destroy();_invSortable=null;}}catch(e){} return; }
+ try{if(_invSortable)_invSortable.destroy();}catch(e){}
+ _invSortable=Sortable.create(el,{handle:'.invdrag',animation:150,ghostClass:'inv-ghost',chosenClass:'inv-chosen',onEnd:onInvSortEnd}); }
+function onInvSortEnd(){ const el=$('invList'); if(!el)return;
+ const ids=[...el.children].map(c=>c.getAttribute('data-id')).filter(Boolean);
+ ids.forEach((id,k)=>{ const v=INV.find(x=>x.id===id); if(v){v.ord=k+1;v.mt=Date.now();} });
+ save(); toast('순서를 저장했습니다'); } // DOM은 이미 이동됨 — 전체 재렌더 불필요
 let invDate=null, invCat='', invQ=''; // 보는 날짜(null=오늘), 분류 필터, 검색어
 function setInvCat(c){ invCat=c; render(); }
-function filterInv(q){ invQ=q; const el=$('invList'); if(el)el.innerHTML=invListHTML(isAdmin(curUser())); }
+function filterInv(q){ invQ=q; const el=$('invList'); if(el)el.innerHTML=invListHTML(isAdmin(curUser())); initInvSort(); }
 function invDateShift(d){ const b=new Date((invDate||todayK())+'T00:00:00'); b.setDate(b.getDate()+d); const iso=dk(b); if(iso>todayK())return; invDate=iso; render(); }
 function invDatePick(iso){ if(iso&&iso<=todayK())invDate=iso; render(); }
 /* 품목 추가·수정 (앱 모달 폼) */
@@ -1823,12 +1830,10 @@ function applyAssign(c){
    else if((v.cat||'')===c){ v.cat=''; v.mt=Date.now(); } });
  save(); closeModal(); render(); toast(`${c}에 ${n}개 품목을 담았습니다`); }
 function invItemCard(v,i,admin){ const lowF=isLow(v);
- const canOrder = admin && !invCat && !(invQ||'').trim(); // 전체·검색없음일 때만 순서 조작
- return `<div class="note" style="${lowF?'border-color:#f0c9bd;background:#fff7f4':''}">
+ const canOrder = admin && !invCat && !(invQ||'').trim(); // 전체·검색없음일 때만 순서 조작(드래그)
+ return `<div class="note" data-id="${v.id}" style="${lowF?'border-color:#f0c9bd;background:#fff7f4':''}">
    <div style="display:flex;align-items:center;gap:8px">
-     ${canOrder?`<div style="display:flex;flex-direction:column;gap:2px;flex:none">
-       <button class="cam" style="padding:1px 6px;line-height:1.1" onclick="moveInv('${v.id}',-1)" aria-label="위로">▲</button>
-       <button class="cam" style="padding:1px 6px;line-height:1.1" onclick="moveInv('${v.id}',1)" aria-label="아래로">▼</button></div>`:''}
+     ${canOrder?`<span class="invdrag" aria-label="드래그로 순서 변경">≡</span>`:''}
      <div style="flex:1"><b style="font-size:13.5px">${v.name}</b>
        <div class="muted" style="font-size:11px">기준 ${v.par}${v.unit}${lowF?` · <b style="color:#b04a3f">발주 필요</b>`:''}</div></div>
      <div style="text-align:right"><b style="font-size:19px;color:${lowF?'#b04a3f':'var(--deep)'}">${v.onHand||0}</b><span class="muted" style="font-size:11px"> ${v.unit}</span></div>
@@ -1872,7 +1877,7 @@ function invStockBody(){
    ${INV.length?chips:''}
    <div id="invList">${invListHTML(admin)}</div>
    ${admin?`<button class="btn" style="margin-top:12px" onclick="invForm(-1)">+ 품목 추가</button>`:''}
-   <p class="muted" style="font-size:11px;margin-top:10px;text-align:center;line-height:1.6">실사 = 직접 센 수량 · 입고 + = 들어온 수량 · ‹ M/D › 날짜로 지난 기록 보기</p>`;
+   <p class="muted" style="font-size:11px;margin-top:10px;text-align:center;line-height:1.6">실사 = 직접 센 수량 · 입고 + = 들어온 수량 · <b>≡</b> 끌어서 순서 변경 · ‹ M/D › 날짜로 지난 기록</p>`;
 }
 function invLogBody(){
  const selISO=invDate||todayK();
@@ -1909,6 +1914,7 @@ function render(){
  else if(tab==="inv") html=screenInventory();
  $("screen").innerHTML=html;
  if(tab==="manual") renderManual($("msearch")?.value||"");
+ if(tab==="inv") setTimeout(initInvSort,0);
  const navTab=(tab==='close'||tab==='manual'||tab==='closeAdmin'||tab==='notice'||tab==='board'||tab==='comm'||tab==='inv')?'home':tab;
  const u=CUR?unread():{n:0,o:0,sched:0};
  $("nav").innerHTML=NAV.map(n=>{
