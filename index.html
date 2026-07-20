@@ -389,7 +389,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.15.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.15.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -2148,10 +2148,17 @@ function screenChat(){
    <div id="chatList" style="flex:1;min-height:0;overflow-y:auto;background:#F1F4F0;padding:8px 12px 14px">${chatListHTML()}</div>
    <div style="flex:none;background:#fff;border-top:1px solid var(--edge);padding:8px 12px">
      <div style="display:flex;gap:8px;align-items:center">
-       <input class="tsel" id="chatText" style="flex:1;border-radius:20px;padding:10px 14px" placeholder="메시지 입력" autocomplete="off" maxlength="1000" onkeydown="if(event.key==='Enter'){event.preventDefault();sendChat();}">
-       <button class="btn" style="width:40px;height:40px;padding:0;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center" onclick="sendChat()" aria-label="전송">${IC('up','li lg')}</button></div>
+       <input class="tsel" id="chatText" style="flex:1;border-radius:20px;padding:10px 14px" placeholder="메시지 입력" autocomplete="off" maxlength="1000" enterkeyhint="send" onkeydown="if(event.key==='Enter'&&!event.isComposing){event.preventDefault();sendChatTap(event);}">
+       <button class="btn" style="width:40px;height:40px;padding:0;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;touch-action:manipulation" onpointerdown="sendChatTap(event)" onclick="sendChatTap(event)" aria-label="전송">${IC('up','li lg')}</button></div>
    </div>`; }
 
+/* 전송 탭 — 버튼이 입력창 포커스를 뺏으면 iOS에서 첫 탭이 삼켜지므로
+   pointerdown에서 기본동작을 막고 바로 보낸다. click과 중복 실행은 시간차로 차단. */
+let _sendGuard=0;
+function sendChatTap(e){
+ if(e&&e.preventDefault)e.preventDefault();
+ const now=Date.now(); if(now-_sendGuard<400)return; _sendGuard=now;
+ sendChat(); }
 function sendChat(){
  const el=$('chatText'), txt=(el?el.value:'').trim(); if(!txt)return;
  if(!chatRoom){toast('채팅방을 먼저 선택하세요');return;}
