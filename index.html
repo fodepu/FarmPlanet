@@ -231,6 +231,7 @@ input.inp{min-height:auto}
  <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 9.5h17M8 3v3.5M16 3v3.5"/></symbol>
  <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="m8.5 12.2 2.4 2.4 4.6-5"/></symbol>
  <symbol id="i-book" viewBox="0 0 24 24"><path d="M12 6.5C10.5 5 8.5 4.5 3.5 4.5v14c5 0 7 .5 8.5 2 1.5-1.5 3.5-2 8.5-2v-14c-5 0-7 .5-8.5 2z"/><path d="M12 6.5v14"/></symbol>
+ <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></symbol>
  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 10a6 6 0 0 1 12 0c0 4 1.5 5.5 1.5 5.5h-15S6 14 6 10z"/><path d="M10.3 19a2 2 0 0 0 3.4 0"/></symbol>
  <symbol id="i-tv" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="12.5" rx="2"/><path d="M9 21h6"/></symbol>
  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
@@ -388,7 +389,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.14.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.15.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -416,8 +417,9 @@ let _fsSet=null,_applyingRemote=false,_syncT=null,_lastSyncJSON='',_syncReady=fa
 let _pendingUser=null,_authTO=null,_authForce=false;
 /* 채팅: 상태문서와 분리된 messages 컬렉션(1MB 한도·동시전송 유실 회피). CHAT은 메모리에만 둔다 */
 const CHAT_LIMIT=200;
-let _fsDb=null,_chatApi=null,_chatUnsub=null,_chatErr='',_fbUid=null,CHAT=[];
-let STAFF, SHIFTS, ORDERS, NOTICES, CK, SUBMITS, CUR, REFS, READS, SCHED_TS=0, DELETED=[], ODEL=[], PATTERN=null, ATT={}, STORE_LOC=null, WAGE=0, ATTREQ=[], ATTLOG={}, BOARD=[], STORE_IP=null, INV=[], CATS=[], HOL=[], WIFILOCK=false;
+let _fsDb=null,_chatApi=null,_chatErr='',_fbUid=null;
+let CHATR={},_roomUnsub={},chatRoom=null;   // 방별 메시지 / 방별 구독 / 열려있는 방
+let STAFF, SHIFTS, ORDERS, NOTICES, CK, SUBMITS, CUR, REFS, READS, SCHED_TS=0, DELETED=[], ODEL=[], PATTERN=null, ATT={}, STORE_LOC=null, WAGE=0, ATTREQ=[], ATTLOG={}, BOARD=[], STORE_IP=null, INV=[], CATS=[], HOL=[], WIFILOCK=false, ROOMS=[];
 function touchSched(){SCHED_TS=Date.now();} // 시간표 변경 시각 기록(신규 표시용)
 function defaults(){
  STAFF=[
@@ -435,7 +437,7 @@ function defaults(){
  SHIFTS={}; seedWeek(buildWeek(0));
  ORDERS=[]; SUBMITS=[]; CK={}; REFS={}; READS={};
  NOTICES=[{tag:"공지",gold:true,who:"대표님",dt:fmtDT(),ts:Date.now(),bd:"FarmPlanet 앱 사용을 시작합니다. 공지·발주·시간표·마감을 여기서 관리해요."}];
- CUR=null; SCHED_TS=0; DELETED=[]; ODEL=[]; PATTERN=null; ATT={}; STORE_LOC=null; WAGE=MINWAGE; ATTREQ=[]; ATTLOG={}; BOARD=[]; STORE_IP=null; INV=[]; CATS=[]; HOL=[]; WIFILOCK=false;
+ CUR=null; SCHED_TS=0; DELETED=[]; ODEL=[]; PATTERN=null; ATT={}; STORE_LOC=null; WAGE=MINWAGE; ATTREQ=[]; ATTLOG={}; BOARD=[]; STORE_IP=null; INV=[]; CATS=[]; HOL=[]; WIFILOCK=false; ROOMS=defaultRooms();
 }
 /* 주간 기본 패턴 (2026-07 확정, 화면 편성 기준)
    월: 예흔08~14·미루11~14·지한12:30~16·효원16~19
@@ -455,21 +457,21 @@ function seedWeek(week){
   else if(i===5){set('gh',d,'12:00','18:00');}
   });
 }
-function save(){try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,INV,CATS,HOL,WIFILOCK}));}catch(e){}
+function save(){try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,INV,CATS,HOL,WIFILOCK,ROOMS}));}catch(e){}
  if(SYNC_ENABLED&&typeof pushSync==='function')pushSync();}
 /* ── 실시간 공유 (Firestore 단일 문서, 사진 제외) ── */
 function syncPayload(){
  const ckLite={};
  Object.keys(CK).forEach(k=>{const d=CK[k]||{};ckLite[k]={open:d.open||{},mid:d.mid||{},close:d.close||{}};});
- return {STAFF,SHIFTS,ORDERS,NOTICES,SUBMITS,READS,CK:ckLite,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,INV,CATS,HOL,WIFILOCK};
+ return {STAFF,SHIFTS,ORDERS,NOTICES,SUBMITS,READS,CK:ckLite,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,INV,CATS,HOL,WIFILOCK,ROOMS};
 }
 async function syncBoot(){
  try{
   const {initializeApp,getApps}=await import('https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js');
-  const {getFirestore,doc,onSnapshot,setDoc,collection,addDoc,query,orderBy,limit,serverTimestamp}=await import('https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js');
+  const {getFirestore,doc,onSnapshot,setDoc,updateDoc,collection,addDoc,query,orderBy,limit,serverTimestamp}=await import('https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js');
   const app=getApps().length?getApps()[0]:initializeApp(FIREBASE_CONFIG);
   const db=getFirestore(app);
-  _fsDb=db; _chatApi={collection,addDoc,query,orderBy,limit,onSnapshot,serverTimestamp}; maybeChatSubscribe();
+  _fsDb=db; _chatApi={collection,addDoc,query,orderBy,limit,onSnapshot,serverTimestamp,doc,updateDoc}; maybeChatSubscribe();
   const ref=doc(db,'shared','state');
   _fsSet=(data)=>setDoc(ref,data);
   onSnapshot(ref,(snap)=>{ const first=!_syncReady; _syncReady=true; _syncStat='연결됨'; _syncAt=Date.now();
@@ -502,6 +504,7 @@ function applyRemote(data){
   if(d.STORE_LOC)STORE_LOC=d.STORE_LOC;
   if(d.STORE_IP!==undefined)STORE_IP=d.STORE_IP;
   if(d.WIFILOCK!==undefined)WIFILOCK=d.WIFILOCK;
+  if(Array.isArray(d.ROOMS))ROOMS=d.ROOMS;
   if(d.WAGE)WAGE=d.WAGE;
   if(d.ATTREQ)ATTREQ=d.ATTREQ; // 요청 큐(최신 반영)
   if(d.ATT){ const m=Object.assign({},d.ATT); // 사용자별 최신 기록 유지
@@ -534,7 +537,7 @@ function applyRemote(data){
   if(d.HOL){ HOL=[...new Set([...(d.HOL||[]),...(HOL||[])])]; } // 수동 휴무일: 합집합
   if(d.CK){ const merged={}; Object.keys(d.CK).forEach(k=>{merged[k]=Object.assign({},d.CK[k]); if(CK[k]&&CK[k].photos)merged[k].photos=CK[k].photos;});
     Object.keys(CK).forEach(k=>{if(!merged[k])merged[k]=CK[k];}); CK=merged; }
-  try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,INV,CATS,HOL,WIFILOCK}));}catch(e){}
+  try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,INV,CATS,HOL,WIFILOCK,ROOMS}));}catch(e){}
   const _ae=document.activeElement; // 입력 중(텍스트 칸 포커스)이면 화면 갱신 미룸 → 타이핑 안 끊김
   if(_ae && (_ae.tagName==='INPUT'||_ae.tagName==='TEXTAREA') && _ae.type!=='date'){ /* 다음 사용자 동작 때 반영 */ }
   else render();
@@ -552,7 +555,7 @@ function shareSchedule(){
 function load(){
  try{const d=JSON.parse(localStorage.getItem(SKEY));
   if(!d||!d.STAFF)throw 0;
-  ({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,INV,CATS,HOL,WIFILOCK}=Object.assign({ORDERS:[],NOTICES:[],CK:{},SUBMITS:[],CUR:null,REFS:{},READS:{},SCHED_TS:0,DELETED:[],ODEL:[],PATTERN:null,ATT:{},STORE_LOC:null,WAGE:MINWAGE,ATTREQ:[],ATTLOG:{},BOARD:[],STORE_IP:null,INV:[],CATS:[],HOL:[],WIFILOCK:false},d));
+  ({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,INV,CATS,HOL,WIFILOCK,ROOMS}=Object.assign({ORDERS:[],NOTICES:[],CK:{},SUBMITS:[],CUR:null,REFS:{},READS:{},SCHED_TS:0,DELETED:[],ODEL:[],PATTERN:null,ATT:{},STORE_LOC:null,WAGE:MINWAGE,ATTREQ:[],ATTLOG:{},BOARD:[],STORE_IP:null,INV:[],CATS:[],HOL:[],WIFILOCK:false,ROOMS:defaultRooms()},d));
   INV=INV||[]; CATS=CATS||[]; HOL=HOL||[];
   REFS=REFS||{}; READS=READS||{}; SCHED_TS=SCHED_TS||0; DELETED=DELETED||[]; ODEL=ODEL||[]; ATT=ATT||{}; WAGE=WAGE||MINWAGE; ATTREQ=ATTREQ||[]; ATTLOG=ATTLOG||{}; BOARD=BOARD||[];
   NOTICES.forEach(n=>{if(n.ts===undefined)n.ts=0;}); ORDERS.forEach(o=>{if(o.ts===undefined)o.ts=0; o.st=(o.st==='ordered'||o.st==='done'||o.done)?'ordered':'wait';});
@@ -917,7 +920,7 @@ function unread(){const r=READS[CUR]||{};
  return {n:NOTICES.filter(x=>(x.ts||0)>(r.notice||0)).length,
          o:ORDERS.filter(x=>(x.ts||0)>(r.order||0)).length,
          b:(BOARD||[]).filter(x=>(x.mt||x.ts||0)>(r.board||0)).length,
-         c:(CHAT||[]).filter(m=>(m.cts||0)>(r.chat||0)&&m.uid!==CUR).length,
+         c:chatUnreadTotal(),
          sched:(SCHED_TS||0)>(r.sched||0)?1:0};}
 
 /* ═══════════ 로그인 ═══════════ */
@@ -1017,7 +1020,7 @@ function finishSignup(){
  const gb=$('gsiButton'); if(gb)gb.style.display='';
  showAuthOverlay(false); save(); render(); toast(s.pending?'가입 요청을 보냈어요 — 승인을 기다려 주세요':hon(s.name)+', 환영합니다!');
 }
-function onFbLogout(){ CUR=null; role='staff'; onlyMine=false; $("userBtn").style.display='none';
+function onFbLogout(){ chatUnsubAll(); chatRoom=null; CUR=null; role='staff'; onlyMine=false; $("userBtn").style.display='none';
  const gb=$('gsiButton'); if(gb)gb.style.display=''; showAuthOverlay(true); authMsg(''); render(); }
 function fbRelogin(){ if(_fbSignOut)_fbSignOut(); }
 function fbFallbackBoot(){ showAuthOverlay(false);
@@ -1939,73 +1942,241 @@ function invLogBody(){
  }).join('') : `<p class="muted" style="text-align:center;padding:22px 2px">이 날은 실사·입고 기록이 없어요.</p>`;
  return `<p class="muted" style="font-size:11px;margin:2px 0 10px;text-align:center">그날의 실사·입고 내역 (읽기 전용) · ‹ › 로 날짜 이동</p>${rows}`;
 }
-/* ═══════════ 채팅 (messages 컬렉션 — 상태문서와 분리) ═══════════ */
-function maybeChatSubscribe(){
- if(!_fsDb||!_chatApi||_chatUnsub||!CUR)return;
- const {collection,query,orderBy,limit,onSnapshot}=_chatApi;
- try{
-  _chatUnsub=onSnapshot(query(collection(_fsDb,'messages'),orderBy('cts','desc'),limit(CHAT_LIMIT)),
-   (snap)=>{ _chatErr='';
-     const arr=[]; snap.forEach(d=>{const v=d.data()||{}; arr.push({id:d.id,uid:v.uid,name:v.name||'',text:v.text||'',cts:v.cts||0});});
-     CHAT=arr.reverse(); // 최신순으로 받아 시간순으로 뒤집음
-     if(tab==='chat'){ const el=$('chatList'); if(el){ el.innerHTML=chatListHTML(); chatMarkRead(); chatScroll(); } }
-     else { const ae=document.activeElement; if(!(ae&&(ae.tagName==='INPUT'||ae.tagName==='TEXTAREA')))render(); } // 배지 갱신(입력 중이면 미룸)
-   },
-   (err)=>{ _chatErr=(err&&(err.code||err.message))||String(err); console.warn('chat 오류',err); if(tab==='chat')render(); });
- }catch(e){ _chatErr=(e&&e.message)||String(e); } }
-function chatMarkRead(){ if(!CUR||!CHAT.length)return; const last=CHAT[CHAT.length-1].cts||0;
- READS[CUR]=READS[CUR]||{}; if((READS[CUR].chat||0)<last){ READS[CUR].chat=last; save(); } }
+/* ═══════════ 채팅 (방 구조 · rooms/{방}/messages 서브컬렉션) ═══════════ */
 function chatScroll(){ const el=$('chatList'); if(el)el.scrollTop=el.scrollHeight; }
 function chatAfterRender(){ chatMarkRead(); chatScroll(); }
+function defaultRooms(){ return [{id:'all',name:'전체',all:true,ts:0,ord:0}]; }
+function roomList(){ // 내가 볼 수 있는 방
+ if(!Array.isArray(ROOMS)||!ROOMS.length) ROOMS=defaultRooms();
+ if(!ROOMS.some(r=>r.id==='all')) ROOMS.unshift(defaultRooms()[0]);
+ return ROOMS.filter(r=>r.all||isAdmin(curUser())||(r.members||[]).indexOf(CUR)!==-1)
+             .sort((a,b)=>(a.all?-1:b.all?1:0)||((a.ord||0)-(b.ord||0))||((a.ts||0)-(b.ts||0))); }
+function roomById(id){ return (ROOMS||[]).find(r=>r.id===id); }
+function roomMembers(r){ // 전체방은 승인된 직원 전원
+ if(!r)return [];
+ if(r.all) return (STAFF||[]).filter(s=>!s.pending).map(s=>s.id);
+ return (r.members||[]).filter(id=>(STAFF||[]).some(s=>s.id===id)); }
+function canMakeRoom(){ const u=curUser(); return !!(u&&(isAdmin(u)||u.mgr)); }
+function roomId(){ return 'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,5); }
+
+/* ── 색상: 시간표와 동일한 직원 색. 흰 배경에서 읽히도록 어둡게 보정 ── */
+function chatStaff(uid){ return (STAFF||[]).find(s=>s.id===uid); }
+function shade(hex,amt){ // amt 0~1 (클수록 어두움)
+ try{ const h=String(hex||'').replace('#',''); if(h.length!==6)return '#5d6b60';
+   const n=parseInt(h,16), r=(n>>16)&255, g=(n>>8)&255, b=n&255, k=1-(amt||0.45);
+   return '#'+[r*k,g*k,b*k].map(v=>Math.round(v).toString(16).padStart(2,'0')).join(''); }
+ catch(e){ return '#5d6b60'; } }
+function nameColor(uid){ const st=chatStaff(uid); return shade(st&&st.c?st.c:'#B7C0B8',0.45); }
+
+/* ── 읽음 / 안읽음 (방별) ── */
+function roomRead(uid,rid){ const r=READS[uid]; if(!r)return 0;
+ if(r.rooms&&r.rooms[rid]!==undefined)return r.rooms[rid];
+ return (rid==='all'&&r.chat)?r.chat:0; }   // 구버전(단일 채팅) 읽음값 승계
+function roomMsgs(rid){ return CHATR[rid]||[]; }
+function roomUnread(rid){ const last=roomRead(CUR,rid);
+ return roomMsgs(rid).filter(m=>(m.cts||0)>last && m.uid!==CUR).length; }
+function chatUnreadTotal(){ return roomList().reduce((n,r)=>n+roomUnread(r.id),0); }
+function chatMarkRead(){ if(!CUR||!chatRoom)return; const ms=roomMsgs(chatRoom); if(!ms.length)return;
+ const last=ms[ms.length-1].cts||0;
+ READS[CUR]=READS[CUR]||{}; READS[CUR].rooms=READS[CUR].rooms||{};
+ if((READS[CUR].rooms[chatRoom]||0)<last){ READS[CUR].rooms[chatRoom]=last; save(); } }
+function msgUnreadCnt(m,rid){ const mem=roomMembers(roomById(rid)); let n=0;
+ mem.forEach(id=>{ if(id===m.uid)return; if(roomRead(id,rid)<(m.cts||0))n++; }); return n; }
+
+/* ── Firestore 구독: 내가 속한 방들을 각각 구독(뱃지를 실시간으로) ── */
+function maybeChatSubscribe(){
+ if(!_fsDb||!_chatApi||!CUR)return;
+ const {collection,query,orderBy,limit,onSnapshot}=_chatApi;
+ const want=roomList().map(r=>r.id);
+ Object.keys(_roomUnsub).forEach(id=>{ if(want.indexOf(id)===-1){ try{_roomUnsub[id]();}catch(e){} delete _roomUnsub[id]; delete CHATR[id]; } });
+ want.slice(0,12).forEach(rid=>{
+  if(_roomUnsub[rid])return;
+  try{
+   _roomUnsub[rid]=onSnapshot(query(collection(_fsDb,'rooms',rid,'messages'),orderBy('cts','desc'),limit(CHAT_LIMIT)),
+    (snap)=>{ _chatErr='';
+      const arr=[]; snap.forEach(d=>{const v=d.data()||{};
+        arr.push({id:d.id,uid:v.uid,name:v.name||'',text:v.text||'',cts:v.cts||0,nep:v.nep||{}});});
+      CHATR[rid]=arr.reverse();
+      if(tab==='chat'&&chatRoom===rid){ const el=$('chatList'); if(el){ el.innerHTML=chatListHTML(); chatMarkRead(); chatScroll(); } }
+      else { const ae=document.activeElement; if(!(ae&&(ae.tagName==='INPUT'||ae.tagName==='TEXTAREA')))render(); }
+    },
+    (err)=>{ _chatErr=(err&&(err.code||err.message))||String(err); console.warn('채팅 오류',err); if(tab==='chat')render(); });
+  }catch(e){ _chatErr=(e&&e.message)||String(e); }
+ });
+}
+function chatUnsubAll(){ Object.keys(_roomUnsub).forEach(id=>{try{_roomUnsub[id]();}catch(e){}}); _roomUnsub={}; CHATR={}; }
+
+/* ═══════════ 방 목록 화면 ═══════════ */
+function screenChatRooms(){
+ const rooms=roomList();
+ let out=`<h2 class="title">${IC('chat')}채팅</h2>`;
+ if(_chatErr) out+=`<div class="warnbox" style="margin:0 0 10px">채팅을 불러오지 못했어요 — ${escAttr(_chatErr)}<br>보안 규칙에 <b>rooms</b> 권한이 없으면 이 오류가 납니다.</div>`;
+ out+=rooms.map(r=>{
+   const ms=roomMsgs(r.id), last=ms[ms.length-1], un=roomUnread(r.id);
+   const mem=roomMembers(r).length;
+   const prev=last?`${escAttr(last.name||'')}: ${escAttr((last.text||'').slice(0,26))}`:'아직 대화가 없어요';
+   const when=last?chatWhenShort(last.cts):'';
+   return `<div class="card" style="padding:12px 13px;margin-bottom:8px;cursor:pointer" onclick="openRoom('${r.id}')">
+     <div style="display:flex;align-items:center;gap:10px">
+       <div style="width:40px;height:40px;border-radius:13px;flex:none;background:${r.all?'#DCF0E1':'#EDF1EA'};display:flex;align-items:center;justify-content:center">${IC(r.all?'bell':'chat','li sm')}</div>
+       <div style="flex:1;min-width:0">
+         <div style="display:flex;align-items:center;gap:6px">
+           <b style="font-size:14px;color:var(--ink)">${escAttr(r.name)}</b>
+           <span class="muted" style="font-size:10.5px">${mem}명</span></div>
+         <div class="muted" style="font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px">${prev}</div></div>
+       <div style="flex:none;text-align:right">
+         <div class="muted" style="font-size:10px">${when}</div>
+         ${un?`<span style="display:inline-block;margin-top:4px;background:#e0913a;color:#fff;font-size:10px;font-weight:800;border-radius:20px;padding:1px 7px">${un}</span>`:''}</div>
+     </div></div>`; }).join('');
+ if(canMakeRoom()) out+=`<button class="btn sec" style="width:100%;margin-top:6px" onclick="newRoomModal()">${IC('plus','li sm')} 채팅방 만들기</button>`;
+ return out; }
+function chatWhenShort(ts){ if(!ts)return ''; const d=new Date(ts);
+ if(dk(d)===todayK())return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+ return `${d.getMonth()+1}/${d.getDate()}`; }
+
+function openRoom(id){ chatRoom=id; render(); }
+function closeRoom(){ chatRoom=null; render(); }
+
+/* ── 방 만들기 / 초대 (관리자·매니저) ── */
+function newRoomModal(){
+ if(!canMakeRoom()){toast('관리자·매니저만 만들 수 있어요');return;}
+ const opts=(STAFF||[]).filter(s=>!s.pending&&s.id!==CUR).map(s=>
+   `<label style="display:flex;align-items:center;gap:8px;padding:6px 2px;font-size:13px">
+     <input type="checkbox" class="nrMem" value="${s.id}" style="width:17px;height:17px">
+     <span style="width:10px;height:10px;border-radius:4px;background:${s.c||'#dfe6dd'};flex:none"></span>${escAttr(s.name)}</label>`).join('');
+ openModal(`<h3 style="color:var(--ink)">채팅방 만들기</h3>
+   <input class="tsel" id="nrName" placeholder="방 이름 (예: 주말팀)" maxlength="20" style="width:100%;margin:10px 0 4px">
+   <div class="muted" style="font-size:11.5px;margin-bottom:6px">초대할 사람</div>
+   <div style="max-height:210px;overflow-y:auto;border:1px solid var(--edge);border-radius:12px;padding:6px 10px">${opts||'<div class="muted" style="font-size:12px;padding:6px">직원이 없어요</div>'}</div>
+   <div class="row" style="margin-top:14px"><button class="btn sec" onclick="closeModal()">취소</button>
+     <button class="btn" onclick="createRoom()">만들기</button></div>`);
+}
+function createRoom(){
+ const nm=(($('nrName')&&$('nrName').value)||'').trim();
+ if(!nm){toast('방 이름을 입력하세요');return;}
+ if((ROOMS||[]).some(r=>r.name===nm)){toast('같은 이름의 방이 있어요');return;}
+ const mem=[...document.querySelectorAll('.nrMem:checked')].map(e=>e.value);
+ ROOMS.push({id:roomId(),name:nm.slice(0,20),members:[CUR,...mem],by:CUR,ts:Date.now(),ord:ROOMS.length});
+ closeModal(); save(); maybeChatSubscribe(); render(); toast('채팅방을 만들었어요'); }
+
+function roomInfoModal(){
+ const r=roomById(chatRoom); if(!r)return;
+ const mem=roomMembers(r);
+ const list=mem.map(id=>{ const s=chatStaff(id)||{name:id};
+   return `<div style="display:flex;align-items:center;gap:8px;padding:5px 2px;font-size:13px">
+     <span style="width:10px;height:10px;border-radius:4px;background:${s.c||'#dfe6dd'};flex:none"></span>
+     <span style="flex:1">${escAttr(s.name)}</span>
+     ${(!r.all&&canMakeRoom()&&id!==r.by)?`<span class="authlink" style="font-size:11px" onclick="kickMember('${id}')">내보내기</span>`:''}</div>`; }).join('');
+ const invitable=(STAFF||[]).filter(s=>!s.pending&&mem.indexOf(s.id)===-1);
+ const inv=(!r.all&&canMakeRoom()&&invitable.length)?
+   `<div class="muted" style="font-size:11.5px;margin:12px 0 4px">초대하기</div>
+    <div style="max-height:150px;overflow-y:auto;border:1px solid var(--edge);border-radius:12px;padding:6px 10px">
+      ${invitable.map(s=>`<label style="display:flex;align-items:center;gap:8px;padding:5px 2px;font-size:13px">
+        <input type="checkbox" class="invMem" value="${s.id}" style="width:17px;height:17px">
+        <span style="width:10px;height:10px;border-radius:4px;background:${s.c||'#dfe6dd'};flex:none"></span>${escAttr(s.name)}</label>`).join('')}</div>
+    <button class="btn sec" style="width:100%;margin-top:8px" onclick="inviteMembers()">선택한 사람 초대</button>`:'';
+ openModal(`<h3 style="color:var(--ink)">${escAttr(r.name)}</h3>
+   <div class="muted" style="font-size:11.5px;margin:6px 0 8px">${r.all?'승인된 직원 전원이 자동으로 참여합니다':'참여 중인 사람 '+mem.length+'명'}</div>
+   <div style="max-height:230px;overflow-y:auto">${list}</div>${inv}
+   <div class="row" style="margin-top:14px">
+     ${(!r.all&&isAdmin(curUser()))?`<button class="btn sec" style="color:var(--warn)" onclick="deleteRoom()">방 삭제</button>`:''}
+     <button class="btn sec" onclick="closeModal()">닫기</button></div>`);
+}
+function inviteMembers(){
+ const r=roomById(chatRoom); if(!r||r.all)return;
+ const add=[...document.querySelectorAll('.invMem:checked')].map(e=>e.value);
+ if(!add.length){toast('초대할 사람을 선택하세요');return;}
+ r.members=[...new Set([...(r.members||[]),...add])];
+ closeModal(); save(); render(); toast(add.length+'명을 초대했어요'); }
+function kickMember(id){
+ const r=roomById(chatRoom); if(!r||r.all)return;
+ r.members=(r.members||[]).filter(x=>x!==id);
+ save(); roomInfoModal(); toast('내보냈어요'); }
+function deleteRoom(){
+ const r=roomById(chatRoom); if(!r||r.all)return;
+ closeModal();
+ askConfirm(`"${r.name}" 방을 삭제할까요?\n대화 내용은 복구할 수 없어요.`,'삭제',()=>{
+   ROOMS=ROOMS.filter(x=>x.id!==r.id);
+   if(_roomUnsub[r.id]){try{_roomUnsub[r.id]();}catch(e){} delete _roomUnsub[r.id];}
+   delete CHATR[r.id]; chatRoom=null; save(); render(); toast('삭제했어요'); }); }
+
+/* ═══════════ 방 안(대화) ═══════════ */
 function chatDayLabel(ts){ const d=new Date(ts), k=dk(d);
  if(k===todayK())return '오늘';
  if(k===dk(new Date(Date.now()-86400000)))return '어제';
  return `${d.getMonth()+1}월 ${d.getDate()}일 (${WD[d.getDay()]})`; }
-function chatStaff(uid){ return STAFF.find(s=>s.id===uid); }
-function chatUnreadCnt(m){ let n=0; (STAFF||[]).forEach(s=>{ if(s.pending||s.id===m.uid)return;
- const r=(READS[s.id]&&READS[s.id].chat)||0; if(r<(m.cts||0))n++; }); return n; }
+
 function chatListHTML(){
- if(_chatErr) return `<div class="warnbox" style="margin:8px 0">채팅을 불러오지 못했어요 — ${escAttr(_chatErr)}<br>보안 규칙에 <b>messages</b> 권한이 없으면 이 오류가 납니다.</div>`;
- if(!CHAT.length) return `<p class="muted" style="text-align:center;padding:40px 2px">아직 대화가 없어요.<br>첫 메시지를 남겨보세요.</p>`;
+ if(_chatErr) return `<div class="warnbox" style="margin:8px 0">채팅을 불러오지 못했어요 — ${escAttr(_chatErr)}<br>보안 규칙에 <b>rooms</b> 권한이 없으면 이 오류가 납니다.</div>`;
+ const MS=roomMsgs(chatRoom);
+ if(!MS.length) return `<p class="muted" style="text-align:center;padding:40px 2px">아직 대화가 없어요.<br>첫 메시지를 남겨보세요.</p>`;
  let out='', lastDay='';
- CHAT.forEach((m,i)=>{
-   const day=dk(new Date(m.cts)), prev=CHAT[i-1], next=CHAT[i+1];
+ MS.forEach((m,i)=>{
+   const day=dk(new Date(m.cts)), prev=MS[i-1], next=MS[i+1];
    if(day!==lastDay){ out+=`<div style="text-align:center;margin:14px 0 10px"><span style="background:#dfe6dd;color:#5d6b60;font-size:10.5px;font-weight:700;border-radius:20px;padding:3px 11px">${chatDayLabel(m.cts)}</span></div>`; lastDay=day; }
    const grpPrev = prev && prev.uid===m.uid && dk(new Date(prev.cts))===day && (m.cts-prev.cts)<300000;
    const grpNext = next && next.uid===m.uid && dk(new Date(next.cts))===day && (next.cts-m.cts)<300000;
    const mine=m.uid===CUR, st=chatStaff(m.uid), t=new Date(m.cts);
    const tm=String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0');
-   const un=chatUnreadCnt(m);
+   const un=msgUnreadCnt(m,chatRoom);
    const rad = mine ? (grpPrev?'14px':'14px 4px 14px 14px') : (grpPrev?'14px':'4px 14px 14px 14px');
+   const neps=Object.keys(m.nep||{}).filter(k=>m.nep[k]);
+   const iNep=neps.indexOf(CUR)!==-1;
+   const nepNames=neps.map(id=>{const s=chatStaff(id);return s?s.name:id;}).join(', ');
+   const nepChip=neps.length?`<div style="margin-top:3px"><span title="${escAttr(nepNames)}" onclick="toggleNep('${m.id}')" style="display:inline-block;cursor:pointer;background:${iNep?'#DCF0E1':'#fff'};border:1px solid ${iNep?'#8FD1A6':'#E5EAE3'};border-radius:20px;padding:1px 8px;font-size:10.5px;font-weight:700;color:${iNep?'#3c6b4a':'#7d8a80'}">넵 ${neps.length}</span></div>`:'';
    const meta = grpNext? '' : `<div style="display:flex;flex-direction:column;align-items:${mine?'flex-end':'flex-start'};flex:none;line-height:1.25">
        ${un?`<span style="font-size:10px;font-weight:800;color:#e0913a">${un}</span>`:''}
        <span style="font-size:9.5px;color:#9AA79D">${tm}</span></div>`;
    out+=`<div style="display:flex;gap:7px;margin-top:${grpPrev?'2px':'10px'};${mine?'flex-direction:row-reverse':''}">
      ${mine?'':`<div style="width:32px;flex:none">${grpPrev?'':`<div style="width:32px;height:32px;border-radius:11px;background:${st&&st.c?st.c:'#dfe6dd'};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#3c4a40">${escAttr((m.name||'?').charAt(0))}</div>`}</div>`}
      <div style="max-width:74%;display:flex;flex-direction:column;align-items:${mine?'flex-end':'flex-start'}">
-       ${(!mine&&!grpPrev)?`<div style="font-size:11px;color:#6c7a70;margin:1px 0 4px 2px">${escAttr(m.name)}</div>`:''}
+       ${(!mine&&!grpPrev)?`<div style="font-size:11px;font-weight:700;color:${nameColor(m.uid)};margin:1px 0 4px 2px">${escAttr(m.name)}</div>`:''}
        <div style="display:flex;align-items:flex-end;gap:4px;${mine?'flex-direction:row-reverse':''}">
-         <div style="background:${mine?'#DCF0E1':'#fff'};border:1px solid ${mine?'#c6e5cf':'#E5EAE3'};border-radius:${rad};padding:8px 11px;font-size:13.5px;line-height:1.45;color:var(--ink);white-space:pre-wrap;word-break:break-word">${escAttr(m.text)}</div>
-         ${meta}</div></div></div>`; });
+         <div ondblclick="toggleNep('${m.id}')" style="background:${mine?'#DCF0E1':'#fff'};border:1px solid ${mine?'#c6e5cf':'#E5EAE3'};border-radius:${rad};padding:8px 11px;font-size:13.5px;line-height:1.45;color:var(--ink);white-space:pre-wrap;word-break:break-word">${escAttr(m.text)}</div>
+         ${meta}
+         ${neps.length?'':`<span onclick="toggleNep('${m.id}')" style="flex:none;cursor:pointer;font-size:10px;color:#c3ccc5;padding:2px 4px">넵</span>`}</div>
+       ${nepChip}</div></div>`; });
  return out; }
-function screenChat(){ // .screen.chatmode 안에서 목록이 자체 스크롤, 입력바는 바닥 고정
- maybeChatSubscribe();
- return `<div id="chatList" style="flex:1;min-height:0;overflow-y:auto;background:#F1F4F0;padding:8px 12px 14px">${chatListHTML()}</div>
-   <div style="flex:none;background:#fff;border-top:1px solid var(--edge);padding:8px 12px max(8px,env(safe-area-inset-bottom))">
+
+function screenChat(){
+ if(!chatRoom || !roomById(chatRoom)) return screenChatRooms();
+ const r=roomById(chatRoom);
+ return `<div style="flex:none;display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--edge);background:#fff">
+     <button class="role" onclick="closeRoom()" style="padding:5px 8px" title="목록">←</button>
+     <b style="flex:1;font-size:14px;color:var(--ink)">${escAttr(r.name)}</b>
+     <span class="muted" style="font-size:11px;cursor:pointer" onclick="roomInfoModal()">${roomMembers(r).length}명 ⓘ</span></div>
+   <div id="chatList" style="flex:1;min-height:0;overflow-y:auto;background:#F1F4F0;padding:8px 12px 14px">${chatListHTML()}</div>
+   <div style="flex:none;background:#fff;border-top:1px solid var(--edge);padding:8px 12px">
      <div style="display:flex;gap:8px;align-items:center">
        <input class="tsel" id="chatText" style="flex:1;border-radius:20px;padding:10px 14px" placeholder="메시지 입력" autocomplete="off" maxlength="1000" onkeydown="if(event.key==='Enter'){event.preventDefault();sendChat();}">
        <button class="btn" style="width:40px;height:40px;padding:0;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center" onclick="sendChat()" aria-label="전송">${IC('up','li lg')}</button></div>
    </div>`; }
+
 function sendChat(){
  const el=$('chatText'), txt=(el?el.value:'').trim(); if(!txt)return;
+ if(!chatRoom){toast('채팅방을 먼저 선택하세요');return;}
  if(!_fsDb||!_chatApi){toast('채팅 연결 준비 중이에요');return;}
  if(!_fbUid){toast('로그인 후 이용할 수 있어요');return;}
  const {collection,addDoc,serverTimestamp}=_chatApi;
- const payload={auth:_fbUid,uid:CUR,name:(curUser()&&curUser().name)||'',text:txt.slice(0,1000),cts:Date.now(),ts:serverTimestamp()};
+ const r=roomById(chatRoom);
+ const payload={auth:_fbUid,uid:CUR,name:(curUser()&&curUser().name)||'',text:txt.slice(0,1000),cts:Date.now(),ts:serverTimestamp(),nep:{}};
  if(el)el.value='';
- addDoc(collection(_fsDb,'messages'),payload)
-   .then(()=>pushSend(payload.name||'FarmPlanet',txt.slice(0,120),{tag:'chat'}))
+ addDoc(collection(_fsDb,'rooms',chatRoom,'messages'),payload)
+   .then(()=>pushSend(`${payload.name||'FarmPlanet'} · ${r?r.name:''}`,txt.slice(0,120),
+     {tag:'chat-'+chatRoom, onlyUids:roomMembers(r)}))
    .catch(e=>{ toast('전송 실패: '+((e&&(e.code||e.message))||e)); if(el)el.value=txt; }); }
+
+function toggleNep(msgId){ // 넵 — 확인했다는 표시
+ if(!_fsDb||!_chatApi||!_fbUid||!chatRoom)return;
+ const {doc,updateDoc}=_chatApi;
+ const m=roomMsgs(chatRoom).find(x=>x.id===msgId); if(!m)return;
+ const on=!(m.nep&&m.nep[CUR]);
+ m.nep=m.nep||{}; m.nep[CUR]=on;                       // 즉시 반영(낙관적)
+ const el=$('chatList'); if(el)el.innerHTML=chatListHTML();
+ updateDoc(doc(_fsDb,'rooms',chatRoom,'messages',msgId),{['nep.'+CUR]:on})
+   .catch(e=>{ m.nep[CUR]=!on; if(el)el.innerHTML=chatListHTML();
+     toast('반응 실패: '+((e&&(e.code||e.message))||e)); }); }
+
 /* ═══════════ 앱 외부 푸시 알림 (Cloudflare Worker) ═══════════ */
 const PUSH_URL='https://farmplanet-push.kimjuham1120.workers.dev';
 const VAPID_PUB='BEg3PHpSlx0RL3KBDBUhUA-S8qfPr4H8kbMu_H3yNsGqvGvie1bIAq3d19lPUcxtahsFxfxIFgw-pqpy8NNGako';
