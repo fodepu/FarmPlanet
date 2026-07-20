@@ -387,7 +387,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.12.3'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.12.4'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -2082,8 +2082,8 @@ async function pushTest(){ // 내 폰에만 보내보기(설정 확인용)
    const j=await r.json().catch(()=>({}));
    if(!r.ok){toast('실패: '+(j.error||r.status));return;}
    if(!j.sent){
-     if(!j.total) toast('저장된 기기 0개 — 등록 직후면 1분 뒤 다시 눌러주세요(반영 지연)');
-     else { toast('내 계정으로 다시 등록하는 중… 5초 뒤 한 번 더 눌러주세요');
+     if(!j.total) toast('저장된 기기 0개 — 등록 직후면 1분 뒤 다시 눌러주세요(서버 반영 지연)');
+     else { toast('내 계정으로 다시 등록했어요. 서버 반영에 최대 1분 걸려요 — 1분 뒤 한 번만 더 눌러주세요');
             _resynced=false; pushMaybeResync(); }
      return; }
    toast(`보냈어요 (기기 ${j.sent}/${j.total}). 잠시 후 확인하세요`);
