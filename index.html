@@ -239,6 +239,7 @@ input.inp{min-height:auto}
  <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 4v4M12 16v4M4 12h4M16 12h4M6.5 6.5l2.5 2.5M15 15l2.5 2.5M17.5 6.5 15 9M9 15l-2.5 2.5"/></symbol>
  <symbol id="i-cart" viewBox="0 0 24 24"><circle cx="9" cy="20" r="1.4"/><circle cx="17" cy="20" r="1.4"/><path d="M3 4h2.5l2.2 11h10.2l2.1-8H6"/></symbol>
  <symbol id="i-box" viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/><path d="M4 7.5l8 4.5 8-4.5"/><path d="M12 12v9"/></symbol>
+ <symbol id="i-chat" viewBox="0 0 24 24"><path d="M20 12c0 3.9-3.6 7-8 7-1 0-2-.2-2.9-.5L4 20l1.6-3.6C4.6 15.2 4 13.7 4 12c0-3.9 3.6-7 8-7s8 3.1 8 7z"/></symbol>
  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c1-4 4-5.5 7-5.5S18 16 19 20"/></symbol>
  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4.5 4.5 0 0 0 6.4.4l3-3a4.5 4.5 0 1 0-6.4-6.4l-1.5 1.5"/><path d="M14 10a4.5 4.5 0 0 0-6.4-.4l-3 3a4.5 4.5 0 1 0 6.4 6.4l1.5-1.5"/></symbol>
  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4.5 4.5"/></symbol>
@@ -384,7 +385,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.10.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.11.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -410,6 +411,9 @@ const SYNC_ENABLED=FIREBASE_CONFIG.apiKey.indexOf('여기')===-1;
 let _fbAuth=null,_fbSignInCred=null,_fbSignOut=null;
 let _fsSet=null,_applyingRemote=false,_syncT=null,_lastSyncJSON='',_syncReady=false,_syncStat='연결 준비 중',_syncAt=0;
 let _pendingUser=null,_authTO=null,_authForce=false;
+/* 채팅: 상태문서와 분리된 messages 컬렉션(1MB 한도·동시전송 유실 회피). CHAT은 메모리에만 둔다 */
+const CHAT_LIMIT=200;
+let _fsDb=null,_chatApi=null,_chatUnsub=null,_chatErr='',_fbUid=null,CHAT=[];
 let STAFF, SHIFTS, ORDERS, NOTICES, CK, SUBMITS, CUR, REFS, READS, SCHED_TS=0, DELETED=[], ODEL=[], PATTERN=null, ATT={}, STORE_LOC=null, WAGE=0, ATTREQ=[], ATTLOG={}, BOARD=[], STORE_IP=null, INV=[], CATS=[], HOL=[], WIFILOCK=false;
 function touchSched(){SCHED_TS=Date.now();} // 시간표 변경 시각 기록(신규 표시용)
 function defaults(){
@@ -459,9 +463,10 @@ function syncPayload(){
 async function syncBoot(){
  try{
   const {initializeApp,getApps}=await import('https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js');
-  const {getFirestore,doc,onSnapshot,setDoc}=await import('https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js');
+  const {getFirestore,doc,onSnapshot,setDoc,collection,addDoc,query,orderBy,limit,serverTimestamp}=await import('https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js');
   const app=getApps().length?getApps()[0]:initializeApp(FIREBASE_CONFIG);
   const db=getFirestore(app);
+  _fsDb=db; _chatApi={collection,addDoc,query,orderBy,limit,onSnapshot,serverTimestamp}; maybeChatSubscribe();
   const ref=doc(db,'shared','state');
   _fsSet=(data)=>setDoc(ref,data);
   onSnapshot(ref,(snap)=>{ const first=!_syncReady; _syncReady=true; _syncStat='연결됨'; _syncAt=Date.now();
@@ -909,6 +914,7 @@ function unread(){const r=READS[CUR]||{};
  return {n:NOTICES.filter(x=>(x.ts||0)>(r.notice||0)).length,
          o:ORDERS.filter(x=>(x.ts||0)>(r.order||0)).length,
          b:(BOARD||[]).filter(x=>(x.mt||x.ts||0)>(r.board||0)).length,
+         c:(CHAT||[]).filter(m=>(m.cts||0)>(r.chat||0)&&m.uid!==CUR).length,
          sched:(SCHED_TS||0)>(r.sched||0)?1:0};}
 
 /* ═══════════ 로그인 ═══════════ */
@@ -941,7 +947,7 @@ async function fbBoot(){
   await setPersistence(_fbAuth,browserLocalPersistence).catch(()=>{});
   _fbSignInCred=(idTok)=>signInWithCredential(_fbAuth,GoogleAuthProvider.credential(idTok));
   _fbSignOut=()=>signOut(_fbAuth);
-  onAuthStateChanged(_fbAuth,(user)=>{ if(user)onFbLogin(user.email||''); else onFbLogout(); });
+  onAuthStateChanged(_fbAuth,(user)=>{ _fbUid=user?user.uid:null; if(user)onFbLogin(user.email||''); else onFbLogout(); });
   gisStart();
  }catch(e){ console.warn('firebase 초기화 실패 → 폴백 로그인',e); fbFallbackBoot(); }
 }
@@ -1025,6 +1031,7 @@ function screenHome(){
    <div class="big">안녕하세요, ${hon(curUser().name)}</div>
    <div class="sh">${IC('clock','li sm')}오늘 근무 · ${todayShift||'휴무'}</div></div>
  <div class="grid2" style="margin-bottom:12px">
+   <div class="qbtn" style="position:relative" onclick="go('sched')">${IC('cal')}시간표${u.sched?'<span class="bdotn" style="position:absolute;top:10px;right:10px;margin:0"></span>':''}</div>
    <div class="qbtn" onclick="go('inv')">${IC('box')}재고관리</div>
    <div class="qbtn" style="position:relative" onclick="go('comm')">${IC('bell')}공지·게시판${(u.n||u.b)?'<span class="bdotn" style="position:absolute;top:10px;right:10px;margin:0"></span>':''}</div>
    <div class="qbtn" onclick="go('close')">${IC('check')}오픈·마감 체크</div>
@@ -1926,7 +1933,63 @@ function invLogBody(){
  }).join('') : `<p class="muted" style="text-align:center;padding:22px 2px">이 날은 실사·입고 기록이 없어요.</p>`;
  return `<p class="muted" style="font-size:11px;margin:2px 0 10px;text-align:center">그날의 실사·입고 내역 (읽기 전용) · ‹ › 로 날짜 이동</p>${rows}`;
 }
-const NAV=[["home","home","홈"],["att","clock","근태"],["sched","cal","시간표"],["order","cart","발주"]];
+/* ═══════════ 채팅 (messages 컬렉션 — 상태문서와 분리) ═══════════ */
+function maybeChatSubscribe(){
+ if(!_fsDb||!_chatApi||_chatUnsub||!CUR)return;
+ const {collection,query,orderBy,limit,onSnapshot}=_chatApi;
+ try{
+  _chatUnsub=onSnapshot(query(collection(_fsDb,'messages'),orderBy('cts','desc'),limit(CHAT_LIMIT)),
+   (snap)=>{ _chatErr='';
+     const arr=[]; snap.forEach(d=>{const v=d.data()||{}; arr.push({id:d.id,uid:v.uid,name:v.name||'',text:v.text||'',cts:v.cts||0});});
+     CHAT=arr.reverse(); // 최신순으로 받아 시간순으로 뒤집음
+     if(tab==='chat'){ const el=$('chatList'); if(el){ el.innerHTML=chatListHTML(); chatMarkRead(); chatScroll(); } }
+     else { const ae=document.activeElement; if(!(ae&&(ae.tagName==='INPUT'||ae.tagName==='TEXTAREA')))render(); } // 배지 갱신(입력 중이면 미룸)
+   },
+   (err)=>{ _chatErr=(err&&(err.code||err.message))||String(err); console.warn('chat 오류',err); if(tab==='chat')render(); });
+ }catch(e){ _chatErr=(e&&e.message)||String(e); } }
+function chatMarkRead(){ if(!CUR||!CHAT.length)return; const last=CHAT[CHAT.length-1].cts||0;
+ READS[CUR]=READS[CUR]||{}; if((READS[CUR].chat||0)<last){ READS[CUR].chat=last; save(); } }
+function chatScroll(){ const sc=$('screen'); if(sc)sc.scrollTop=sc.scrollHeight; }
+function chatAfterRender(){ chatMarkRead(); chatScroll(); }
+function chatDayLabel(ts){ const d=new Date(ts), k=dk(d);
+ if(k===todayK())return '오늘';
+ if(k===dk(new Date(Date.now()-86400000)))return '어제';
+ return `${d.getMonth()+1}월 ${d.getDate()}일 (${WD[d.getDay()]})`; }
+function chatListHTML(){
+ if(_chatErr) return `<div class="warnbox" style="margin:8px 0">채팅을 불러오지 못했어요 — ${escAttr(_chatErr)}<br>보안 규칙에 <b>messages</b> 권한이 없으면 이 오류가 납니다.</div>`;
+ if(!CHAT.length) return `<p class="muted" style="text-align:center;padding:26px 2px">아직 대화가 없어요. 첫 메시지를 남겨보세요.</p>`;
+ let lastDay='', lastUid='', out='';
+ CHAT.forEach(m=>{
+   const day=dk(new Date(m.cts));
+   if(day!==lastDay){ out+=`<div style="text-align:center;margin:12px 0 8px"><span class="pill" style="background:#EDF1EA;color:var(--sub)">${chatDayLabel(m.cts)}</span></div>`; lastDay=day; lastUid=''; }
+   const mine=m.uid===CUR, t=new Date(m.cts);
+   const tm=String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0');
+   out+=`<div style="display:flex;flex-direction:column;align-items:${mine?'flex-end':'flex-start'};margin-bottom:6px">
+     ${(!mine&&m.uid!==lastUid)?`<div class="muted" style="font-size:10.5px;margin:2px 0 2px 4px">${escAttr(m.name)}</div>`:''}
+     <div style="display:flex;align-items:flex-end;gap:5px;flex-direction:${mine?'row-reverse':'row'};max-width:86%">
+       <div style="background:${mine?'#EDF7F0':'#fff'};border:1px solid ${mine?'#cfe6d6':'var(--edge)'};border-radius:${mine?'12px 4px 12px 12px':'4px 12px 12px 12px'};padding:8px 11px;font-size:13px;line-height:1.5;color:var(--ink);white-space:pre-wrap;word-break:break-word">${escAttr(m.text)}</div>
+       <span class="muted" style="font-size:9.5px;flex:none">${tm}</span></div></div>`;
+   lastUid=m.uid; });
+ return out; }
+function screenChat(){
+ maybeChatSubscribe();
+ return `<h2 class="title">${IC('chat')}채팅</h2>
+   <div id="chatList">${chatListHTML()}</div>
+   <div style="position:sticky;bottom:0;background:var(--bg);padding:8px 0 2px;border-top:1px solid var(--edge);margin-top:8px">
+     <div class="row" style="gap:6px">
+       <input class="tsel" id="chatText" style="flex:1" placeholder="메시지 입력…" autocomplete="off" maxlength="1000" onkeydown="if(event.key==='Enter'){event.preventDefault();sendChat();}">
+       <button class="btn" style="width:auto;padding:0 16px" onclick="sendChat()">전송</button></div>
+     <p class="muted" style="font-size:10.5px;text-align:center;margin:6px 0 0">최근 ${CHAT_LIMIT}개까지 보여요</p>
+   </div>`; }
+function sendChat(){
+ const el=$('chatText'), txt=(el?el.value:'').trim(); if(!txt)return;
+ if(!_fsDb||!_chatApi){toast('채팅 연결 준비 중이에요');return;}
+ if(!_fbUid){toast('로그인 후 이용할 수 있어요');return;}
+ const {collection,addDoc,serverTimestamp}=_chatApi;
+ const payload={auth:_fbUid,uid:CUR,name:(curUser()&&curUser().name)||'',text:txt.slice(0,1000),cts:Date.now(),ts:serverTimestamp()};
+ if(el)el.value='';
+ addDoc(collection(_fsDb,'messages'),payload).catch(e=>{ toast('전송 실패: '+((e&&(e.code||e.message))||e)); if(el)el.value=txt; }); }
+const NAV=[["home","home","홈"],["att","clock","근태"],["chat","chat","채팅"],["order","cart","발주"]];
 function render(){
  if(CUR&&!curUser()){ CUR=null; if(USE_FB){showAuthOverlay(true);} } // 내 계정이 사라지면 재로그인
  if(CUR){role=isAdmin(curUser())?'admin':'staff';} // 권한 항상 최신화
@@ -1944,15 +2007,18 @@ function render(){
  else if(tab==="board") html=screenBoard();
  else if(tab==="comm") html=screenComm();
  else if(tab==="inv") html=screenInventory();
+ else if(tab==="chat") html=screenChat();
  $("screen").innerHTML=html;
  if(tab==="manual") renderManual($("msearch")?.value||"");
  if(tab==="inv") setTimeout(initInvSort,0);
- const navTab=(tab==='close'||tab==='manual'||tab==='closeAdmin'||tab==='notice'||tab==='board'||tab==='comm'||tab==='inv')?'home':tab;
- const u=CUR?unread():{n:0,o:0,sched:0};
+ if(tab==="chat") setTimeout(chatAfterRender,0);
+ const navTab=(tab==='close'||tab==='manual'||tab==='closeAdmin'||tab==='notice'||tab==='board'||tab==='comm'||tab==='inv'||tab==='sched')?'home':tab;
+ const u=CUR?unread():{n:0,o:0,sched:0,c:0};
  $("nav").innerHTML=NAV.map(n=>{
-   const dot=(n[0]==='order'&&u.o)||(n[0]==='sched'&&u.sched)||(n[0]==='att'&&isAdmin(curUser())&&attReqCount());
+   const dot=(n[0]==='order'&&u.o)||(n[0]==='chat'&&u.c)||(n[0]==='att'&&isAdmin(curUser())&&attReqCount());
    return `<button class="${navTab===n[0]?'on':''}" onclick="go('${n[0]}')" style="position:relative">
    ${IC(n[1],'li lg')}${n[2]}${dot?'<span class="ndot"></span>':''}</button>`;}).join("");
+ maybeChatSubscribe(); // 로그인 후 최초 1회 구독(이미 구독됐으면 즉시 반환)
  save();
 }
 /* 부팅 */
