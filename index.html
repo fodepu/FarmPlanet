@@ -30,6 +30,7 @@ svg.li.lg{width:20px;height:20px} svg.li.sm{width:13px;height:13px}
 .role{border:1px solid var(--edge);background:#F0F4EE;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;color:var(--sub);cursor:pointer}
 /* 본문 */
 .screen{flex:1;overflow-y:auto;padding:6px 16px 20px}
+.screen.chatmode{display:flex;flex-direction:column;padding:0;overflow:hidden}
 .title{font-size:17px;font-weight:800;margin:6px 0 10px;display:flex;align-items:center;gap:6px}
 .title svg.li{color:var(--deep)}
 .hero{background:linear-gradient(135deg,#43AB60,#2E8C49);border-radius:8px;padding:16px;color:#fff;margin-bottom:12px;box-shadow:0 6px 16px rgba(62,160,90,.22)}
@@ -240,6 +241,7 @@ input.inp{min-height:auto}
  <symbol id="i-cart" viewBox="0 0 24 24"><circle cx="9" cy="20" r="1.4"/><circle cx="17" cy="20" r="1.4"/><path d="M3 4h2.5l2.2 11h10.2l2.1-8H6"/></symbol>
  <symbol id="i-box" viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/><path d="M4 7.5l8 4.5 8-4.5"/><path d="M12 12v9"/></symbol>
  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M20 12c0 3.9-3.6 7-8 7-1 0-2-.2-2.9-.5L4 20l1.6-3.6C4.6 15.2 4 13.7 4 12c0-3.9 3.6-7 8-7s8 3.1 8 7z"/></symbol>
+ <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 19V6"/><path d="M5.5 12.5L12 6l6.5 6.5"/></symbol>
  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c1-4 4-5.5 7-5.5S18 16 19 20"/></symbol>
  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4.5 4.5 0 0 0 6.4.4l3-3a4.5 4.5 0 1 0-6.4-6.4l-1.5 1.5"/><path d="M14 10a4.5 4.5 0 0 0-6.4-.4l-3 3a4.5 4.5 0 1 0 6.4 6.4l1.5-1.5"/></symbol>
  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4.5 4.5"/></symbol>
@@ -385,7 +387,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.11.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.11.2'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -1949,7 +1951,7 @@ function maybeChatSubscribe(){
  }catch(e){ _chatErr=(e&&e.message)||String(e); } }
 function chatMarkRead(){ if(!CUR||!CHAT.length)return; const last=CHAT[CHAT.length-1].cts||0;
  READS[CUR]=READS[CUR]||{}; if((READS[CUR].chat||0)<last){ READS[CUR].chat=last; save(); } }
-function chatScroll(){ const sc=$('screen'); if(sc)sc.scrollTop=sc.scrollHeight; }
+function chatScroll(){ const el=$('chatList'); if(el)el.scrollTop=el.scrollHeight; }
 function chatAfterRender(){ chatMarkRead(); chatScroll(); }
 function chatDayLabel(ts){ const d=new Date(ts), k=dk(d);
  if(k===todayK())return '오늘';
@@ -1982,15 +1984,14 @@ function chatListHTML(){
          <div style="background:${mine?'#DCF0E1':'#fff'};border:1px solid ${mine?'#c6e5cf':'#E5EAE3'};border-radius:${rad};padding:8px 11px;font-size:13.5px;line-height:1.45;color:var(--ink);white-space:pre-wrap;word-break:break-word">${escAttr(m.text)}</div>
          ${meta}</div></div></div>`; });
  return out; }
-function screenChat(){
+function screenChat(){ // .screen.chatmode 안에서 목록이 자체 스크롤, 입력바는 바닥 고정
  maybeChatSubscribe();
- return `<div style="display:flex;flex-direction:column;min-height:100%;margin:-6px -16px -20px">
-   <div id="chatList" style="flex:1;background:#F1F4F0;padding:6px 12px 14px">${chatListHTML()}</div>
-   <div style="position:sticky;bottom:0;background:#fff;border-top:1px solid var(--edge);padding:8px 12px max(8px,env(safe-area-inset-bottom))">
-     <div style="display:flex;gap:7px;align-items:center">
+ return `<div id="chatList" style="flex:1;min-height:0;overflow-y:auto;background:#F1F4F0;padding:8px 12px 14px">${chatListHTML()}</div>
+   <div style="flex:none;background:#fff;border-top:1px solid var(--edge);padding:8px 12px max(8px,env(safe-area-inset-bottom))">
+     <div style="display:flex;gap:8px;align-items:center">
        <input class="tsel" id="chatText" style="flex:1;border-radius:20px;padding:10px 14px" placeholder="메시지 입력" autocomplete="off" maxlength="1000" onkeydown="if(event.key==='Enter'){event.preventDefault();sendChat();}">
-       <button class="btn" style="width:auto;padding:0 18px;border-radius:20px;flex:none" onclick="sendChat()">전송</button></div>
-   </div></div>`; }
+       <button class="btn" style="width:40px;height:40px;padding:0;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center" onclick="sendChat()" aria-label="전송">${IC('up','li lg')}</button></div>
+   </div>`; }
 function sendChat(){
  const el=$('chatText'), txt=(el?el.value:'').trim(); if(!txt)return;
  if(!_fsDb||!_chatApi){toast('채팅 연결 준비 중이에요');return;}
@@ -2019,6 +2020,7 @@ function render(){
  else if(tab==="inv") html=screenInventory();
  else if(tab==="chat") html=screenChat();
  $("screen").innerHTML=html;
+ $("screen").classList.toggle('chatmode', tab==='chat'); // 채팅일 때만 화면을 flex로(입력바 바닥 고정)
  if(tab==="manual") renderManual($("msearch")?.value||"");
  if(tab==="inv") setTimeout(initInvSort,0);
  if(tab==="chat") setTimeout(chatAfterRender,0);
