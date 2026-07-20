@@ -33,12 +33,16 @@ svg.li.lg{width:20px;height:20px} svg.li.sm{width:13px;height:13px}
 .screen.chatmode{display:flex;flex-direction:column;padding:0;overflow:hidden}
 /* 채팅 입력창: input 대신 contenteditable — iOS의 form 보조바(∧ ∨ ✓)를 띄우지 않음 */
 .chatin{flex:1;min-width:0;border:1px solid var(--edge);background:#fff;border-radius:20px;padding:10px 14px;
-  font-size:14px;line-height:1.45;color:var(--ink);max-height:96px;overflow-y:auto;outline:none;
+  font-size:16px;line-height:1.45;color:var(--ink);max-height:110px;overflow-y:auto;outline:none;
   -webkit-user-select:text;user-select:text;word-break:break-word;white-space:pre-wrap}
 .chatin:focus{border-color:var(--deep)}
 .chatin:empty:before{content:attr(data-ph);color:#9AA79D;pointer-events:none}
 /* 키보드가 올라오면 하단 탭을 숨겨 입력창이 키보드에 붙게 한다 */
 body.kb .nav{display:none}
+/* 입력 확정용 원형 화살표 — 텍스트 버튼보다 작아 입력창이 넓어진다 */
+.sfab{width:34px;height:34px;min-width:34px;padding:0;border:none;border-radius:50%;background:var(--btn);
+  color:#fff;flex:none;display:flex;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation}
+.sfab:active{opacity:.75}
 .title{font-size:17px;font-weight:800;margin:6px 0 10px;display:flex;align-items:center;gap:6px}
 .title svg.li{color:var(--deep)}
 .hero{background:linear-gradient(135deg,#43AB60,#2E8C49);border-radius:8px;padding:16px;color:#fff;margin-bottom:12px;box-shadow:0 6px 16px rgba(62,160,90,.22)}
@@ -65,8 +69,8 @@ body.kb .nav{display:none}
 .seg button.on{background:var(--deep);border-color:var(--deep);color:#fff}
 .pill{background:#EDF7F0;color:var(--deep);border-radius:6px;padding:2px 8px;font-size:10.5px;font-weight:800}
 .pill.hot{background:#fdeceb;color:#b04a3f}.pill.ice{background:#e3f0fb;color:#2b6cb0}
-.search{width:100%;border:1px solid var(--edge);border-radius:7px;padding:11px 13px;font-size:13px;margin-bottom:11px;background:#fff}
-.inp{width:100%;border:1px solid var(--edge);border-radius:7px;padding:11px;font-size:13px;background:#fff;font-family:inherit;min-height:64px;resize:none}
+.search{width:100%;border:1px solid var(--edge);border-radius:7px;padding:11px 13px;font-size:16px;margin-bottom:11px;background:#fff}
+.inp{width:100%;border:1px solid var(--edge);border-radius:7px;padding:11px;font-size:16px;background:#fff;font-family:inherit;min-height:92px;resize:none}
 input.inp{min-height:auto}
 /* 체크리스트 */
 .ck{background:#fff;border:1px solid var(--edge);border-radius:7px;padding:10px 12px;display:flex;gap:10px;align-items:center;margin-bottom:6px}
@@ -196,7 +200,7 @@ input.inp{min-height:auto}
 .mbox h3{font-size:15px;margin-bottom:12px}
 .fld{margin-bottom:12px}
 .fld label{font-size:12px;color:var(--sub);display:block;margin-bottom:5px;font-weight:700}
-.tsel{width:100%;padding:11px;border:1.5px solid var(--edge);border-radius:7px;font-size:14px;background:#fff}
+.tsel{width:100%;padding:11px;border:1.5px solid var(--edge);border-radius:7px;font-size:16px;background:#fff}
 .upd{background:var(--deep);color:#fff;font-size:12px;font-weight:700;padding:9px 14px;display:flex;align-items:center;justify-content:center;gap:10px}
 .upd button{border:none;border-radius:6px;background:#fff;color:var(--deep);font-size:11.5px;font-weight:800;padding:5px 12px;cursor:pointer}
 .toast{position:absolute;bottom:76px;left:50%;transform:translateX(-50%);background:#2B3230;color:#fff;font-size:12.5px;font-weight:700;
@@ -397,7 +401,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.16.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.16.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -1496,8 +1500,8 @@ function screenNotice(){
      <div class="ordday">${rows}</div>
      ${waitCnt?`<button class="btn sec" style="margin-bottom:8px" onclick="copyOrders()">${IC('copy','li sm')} 대기 발주 전체 복사 (${waitCnt}건)</button>`:''}
      <div class="row" style="gap:7px">
-       <input class="tsel" id="odText" style="flex:1" placeholder="필요한 물건 (예: 우유 2팩)" onkeydown="if(event.key==='Enter')addOrder()">
-       <button class="btn" style="width:auto;padding:0 16px" onclick="addOrder()">등록</button></div>
+       <input class="tsel" id="odText" style="flex:1" placeholder="필요한 물건 (예: 우유 2팩)" enterkeyhint="send" onkeydown="if(event.key==='Enter'&&!event.isComposing){event.preventDefault();addOrder();}">
+       <button class="sfab" onclick="addOrder()" aria-label="발주 등록">${IC('up','li sm')}</button></div>
      <p class="muted" style="font-size:11px;margin-top:8px;text-align:center">‹ › 또는 날짜를 눌러 다른 날 발주를 봐요 · 등록은 오늘로 추가됩니다</p>`;
  }
  return `<h2 class="title">${IC('bell')}공지 · 인수인계</h2>${noticeBody()}`;
@@ -1519,8 +1523,9 @@ function noticeBody(){
    <div class="dt">${n.dt}</div><div class="bd">${n.bd}</div>${foot}</div>`;}).join("");
  return `${pinned}
    <div class="card"><h3>${admin?'공지 올리기':'인수인계 남기기'}</h3>
-     <textarea class="inp" id="hoText" placeholder="${admin?'전 직원에게 보이는 공지를 작성하세요':'예: 우유 1팩 남음, 3번 테이블 의자 흔들림…'}"></textarea>
-     <button class="btn" style="margin-top:8px" onclick="addNote()">등록</button></div>
+     <div style="display:flex;gap:8px;align-items:flex-end">
+       <textarea class="inp" id="hoText" style="flex:1" placeholder="${admin?'전 직원에게 보이는 공지를 작성하세요':'예: 우유 1팩 남음, 3번 테이블 의자 흔들림…'}"></textarea>
+       <button class="sfab" style="margin-bottom:4px" onclick="addNote()" aria-label="등록">${IC('up','li sm')}</button></div></div>
    ${list}`;
 }
 let ordDate=null; // 발주방에서 보고있는 날짜(ISO). null=오늘
@@ -2158,7 +2163,7 @@ function screenChat(){
      <div style="display:flex;gap:8px;align-items:center">
        <div class="chatin" id="chatText" contenteditable="true" role="textbox" aria-label="메시지 입력" data-ph="메시지 입력" enterkeyhint="send"
             oninput="chatInputTrim(this)" onkeydown="if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();sendChatTap(event);}"></div>
-       <button class="btn" style="width:40px;height:40px;padding:0;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;touch-action:manipulation" onpointerdown="sendChatTap(event)" onclick="sendChatTap(event)" aria-label="전송">${IC('up','li lg')}</button></div>
+       <button class="sfab" onpointerdown="sendChatTap(event)" onclick="sendChatTap(event)" aria-label="전송">${IC('up','li sm')}</button></div>
    </div>`; }
 
 /* 전송 탭 — 버튼이 입력창 포커스를 뺏으면 iOS에서 첫 탭이 삼켜지므로
