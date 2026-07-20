@@ -385,7 +385,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.11.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.11.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -1955,32 +1955,42 @@ function chatDayLabel(ts){ const d=new Date(ts), k=dk(d);
  if(k===todayK())return '오늘';
  if(k===dk(new Date(Date.now()-86400000)))return '어제';
  return `${d.getMonth()+1}월 ${d.getDate()}일 (${WD[d.getDay()]})`; }
+function chatStaff(uid){ return STAFF.find(s=>s.id===uid); }
+function chatUnreadCnt(m){ let n=0; (STAFF||[]).forEach(s=>{ if(s.pending||s.id===m.uid)return;
+ const r=(READS[s.id]&&READS[s.id].chat)||0; if(r<(m.cts||0))n++; }); return n; }
 function chatListHTML(){
  if(_chatErr) return `<div class="warnbox" style="margin:8px 0">채팅을 불러오지 못했어요 — ${escAttr(_chatErr)}<br>보안 규칙에 <b>messages</b> 권한이 없으면 이 오류가 납니다.</div>`;
- if(!CHAT.length) return `<p class="muted" style="text-align:center;padding:26px 2px">아직 대화가 없어요. 첫 메시지를 남겨보세요.</p>`;
- let lastDay='', lastUid='', out='';
- CHAT.forEach(m=>{
-   const day=dk(new Date(m.cts));
-   if(day!==lastDay){ out+=`<div style="text-align:center;margin:12px 0 8px"><span class="pill" style="background:#EDF1EA;color:var(--sub)">${chatDayLabel(m.cts)}</span></div>`; lastDay=day; lastUid=''; }
-   const mine=m.uid===CUR, t=new Date(m.cts);
+ if(!CHAT.length) return `<p class="muted" style="text-align:center;padding:40px 2px">아직 대화가 없어요.<br>첫 메시지를 남겨보세요.</p>`;
+ let out='', lastDay='';
+ CHAT.forEach((m,i)=>{
+   const day=dk(new Date(m.cts)), prev=CHAT[i-1], next=CHAT[i+1];
+   if(day!==lastDay){ out+=`<div style="text-align:center;margin:14px 0 10px"><span style="background:#dfe6dd;color:#5d6b60;font-size:10.5px;font-weight:700;border-radius:20px;padding:3px 11px">${chatDayLabel(m.cts)}</span></div>`; lastDay=day; }
+   const grpPrev = prev && prev.uid===m.uid && dk(new Date(prev.cts))===day && (m.cts-prev.cts)<300000;
+   const grpNext = next && next.uid===m.uid && dk(new Date(next.cts))===day && (next.cts-m.cts)<300000;
+   const mine=m.uid===CUR, st=chatStaff(m.uid), t=new Date(m.cts);
    const tm=String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0');
-   out+=`<div style="display:flex;flex-direction:column;align-items:${mine?'flex-end':'flex-start'};margin-bottom:6px">
-     ${(!mine&&m.uid!==lastUid)?`<div class="muted" style="font-size:10.5px;margin:2px 0 2px 4px">${escAttr(m.name)}</div>`:''}
-     <div style="display:flex;align-items:flex-end;gap:5px;flex-direction:${mine?'row-reverse':'row'};max-width:86%">
-       <div style="background:${mine?'#EDF7F0':'#fff'};border:1px solid ${mine?'#cfe6d6':'var(--edge)'};border-radius:${mine?'12px 4px 12px 12px':'4px 12px 12px 12px'};padding:8px 11px;font-size:13px;line-height:1.5;color:var(--ink);white-space:pre-wrap;word-break:break-word">${escAttr(m.text)}</div>
-       <span class="muted" style="font-size:9.5px;flex:none">${tm}</span></div></div>`;
-   lastUid=m.uid; });
+   const un=chatUnreadCnt(m);
+   const rad = mine ? (grpPrev?'14px':'14px 4px 14px 14px') : (grpPrev?'14px':'4px 14px 14px 14px');
+   const meta = grpNext? '' : `<div style="display:flex;flex-direction:column;align-items:${mine?'flex-end':'flex-start'};flex:none;line-height:1.25">
+       ${un?`<span style="font-size:10px;font-weight:800;color:#e0913a">${un}</span>`:''}
+       <span style="font-size:9.5px;color:#9AA79D">${tm}</span></div>`;
+   out+=`<div style="display:flex;gap:7px;margin-top:${grpPrev?'2px':'10px'};${mine?'flex-direction:row-reverse':''}">
+     ${mine?'':`<div style="width:32px;flex:none">${grpPrev?'':`<div style="width:32px;height:32px;border-radius:11px;background:${st&&st.c?st.c:'#dfe6dd'};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#3c4a40">${escAttr((m.name||'?').charAt(0))}</div>`}</div>`}
+     <div style="max-width:74%;display:flex;flex-direction:column;align-items:${mine?'flex-end':'flex-start'}">
+       ${(!mine&&!grpPrev)?`<div style="font-size:11px;color:#6c7a70;margin:1px 0 4px 2px">${escAttr(m.name)}</div>`:''}
+       <div style="display:flex;align-items:flex-end;gap:4px;${mine?'flex-direction:row-reverse':''}">
+         <div style="background:${mine?'#DCF0E1':'#fff'};border:1px solid ${mine?'#c6e5cf':'#E5EAE3'};border-radius:${rad};padding:8px 11px;font-size:13.5px;line-height:1.45;color:var(--ink);white-space:pre-wrap;word-break:break-word">${escAttr(m.text)}</div>
+         ${meta}</div></div></div>`; });
  return out; }
 function screenChat(){
  maybeChatSubscribe();
- return `<h2 class="title">${IC('chat')}채팅</h2>
-   <div id="chatList">${chatListHTML()}</div>
-   <div style="position:sticky;bottom:0;background:var(--bg);padding:8px 0 2px;border-top:1px solid var(--edge);margin-top:8px">
-     <div class="row" style="gap:6px">
-       <input class="tsel" id="chatText" style="flex:1" placeholder="메시지 입력…" autocomplete="off" maxlength="1000" onkeydown="if(event.key==='Enter'){event.preventDefault();sendChat();}">
-       <button class="btn" style="width:auto;padding:0 16px" onclick="sendChat()">전송</button></div>
-     <p class="muted" style="font-size:10.5px;text-align:center;margin:6px 0 0">최근 ${CHAT_LIMIT}개까지 보여요</p>
-   </div>`; }
+ return `<div style="display:flex;flex-direction:column;min-height:100%;margin:-6px -16px -20px">
+   <div id="chatList" style="flex:1;background:#F1F4F0;padding:6px 12px 14px">${chatListHTML()}</div>
+   <div style="position:sticky;bottom:0;background:#fff;border-top:1px solid var(--edge);padding:8px 12px max(8px,env(safe-area-inset-bottom))">
+     <div style="display:flex;gap:7px;align-items:center">
+       <input class="tsel" id="chatText" style="flex:1;border-radius:20px;padding:10px 14px" placeholder="메시지 입력" autocomplete="off" maxlength="1000" onkeydown="if(event.key==='Enter'){event.preventDefault();sendChat();}">
+       <button class="btn" style="width:auto;padding:0 18px;border-radius:20px;flex:none" onclick="sendChat()">전송</button></div>
+   </div></div>`; }
 function sendChat(){
  const el=$('chatText'), txt=(el?el.value:'').trim(); if(!txt)return;
  if(!_fsDb||!_chatApi){toast('채팅 연결 준비 중이에요');return;}
