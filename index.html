@@ -387,7 +387,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.11.2'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.12.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -1040,6 +1040,7 @@ function screenHome(){
    <div class="qbtn" onclick="go('manual')">${IC('book')}매뉴얼·레시피</div>
    ${isAdmin(curUser())?`<div class="qbtn" style="position:relative" onclick="staffManage()">${IC('user')}직원 관리${pendingCount()?'<span class="bdotn" style="position:absolute;top:10px;right:10px;margin:0"></span>':''}</div>`:''}
  </div>
+ ${pushCard()}
  <div class="card"><h3>${IC('tv','li sm')}매장 TV</h3>
    <div class="muted" style="margin-bottom:8px">메뉴판·포스터는 스마트플랫에서 관리합니다.</div>
    ${role==='admin'?`<button class="btn sec" onclick="window.open(SMARTFLAT_URL,'_blank')">${IC('link','li sm')} 스마트플랫 관리자 열기</button>`:''}</div>`;
@@ -1533,6 +1534,7 @@ function ordCalHTML(selISO){
 function addOrder(){
  const v=$("odText").value.trim();if(!v){toast('물건을 입력하세요');return;}
  ORDERS.push({id:'o'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),who:curUser().name,txt:v,dt:fmtDT(),ts:Date.now(),mt:Date.now(),st:'wait'});
+ pushSend('🛒 발주 요청 · '+curUser().name, v.slice(0,120), {tag:'order'});
  ordDate=null; // 등록은 오늘 → 오늘 날짜로 이동해 보이게
  render();toast('발주 요청이 등록되었습니다');
 }
@@ -1628,6 +1630,7 @@ function copyFallback(txt,cb){
 function addNote(){
  const v=$("hoText").value.trim();if(!v){toast('내용을 입력하세요');return;}
  NOTICES.unshift({tag:role==='admin'?'공지':'인수인계',gold:role==='admin',who:curUser().name,dt:fmtDT(),ts:Date.now(),bd:v});
+ pushSend((role==='admin'?'📢 새 공지':'📋 인수인계')+' · '+curUser().name, v.slice(0,120), {tag:'notice'});
  render();toast('등록되었습니다');
 }
 
@@ -1723,6 +1726,7 @@ function addBoard(){
  }
  const dleft=boardDaysLeft(dv);
  const post=()=>{ BOARD.unshift({id:boardId(),who:curUser().name,uid:CUR,dt:fmtDT(),ts:Date.now(),mt:Date.now(),target:dv,kind:boardKind,memo,newRanges,status:'open',vols:{},picked:'',pickedName:'',snap:null});
+   pushSend('🙋 '+(boardKind==='sub'?'대타 요청':'시간 조정 요청')+' · '+curUser().name, dv+(memo?' — '+memo.slice(0,80):''), {tag:'board'});
    save();render();toast('게시판에 등록되었습니다'); };
  if(dleft!==null&&dleft<BOARD_LEAD_DAYS){
    askConfirm(`기준(${BOARD_LEAD_DAYS}일 전)보다 늦은 요청이에요 (D-${dleft}). 그래도 올릴까요? 대신할 사람을 못 구할 수 있어요.`,'그래도 등록',post);
@@ -1999,7 +2003,81 @@ function sendChat(){
  const {collection,addDoc,serverTimestamp}=_chatApi;
  const payload={auth:_fbUid,uid:CUR,name:(curUser()&&curUser().name)||'',text:txt.slice(0,1000),cts:Date.now(),ts:serverTimestamp()};
  if(el)el.value='';
- addDoc(collection(_fsDb,'messages'),payload).catch(e=>{ toast('전송 실패: '+((e&&(e.code||e.message))||e)); if(el)el.value=txt; }); }
+ addDoc(collection(_fsDb,'messages'),payload)
+   .then(()=>pushSend(payload.name||'FarmPlanet',txt.slice(0,120),{tag:'chat'}))
+   .catch(e=>{ toast('전송 실패: '+((e&&(e.code||e.message))||e)); if(el)el.value=txt; }); }
+/* ═══════════ 앱 외부 푸시 알림 (Cloudflare Worker) ═══════════ */
+const PUSH_URL='https://farmplanet-push.kimjuham1120.workers.dev';
+const VAPID_PUB='BEg3PHpSlx0RL3KBDBUhUA-S8qfPr4H8kbMu_H3yNsGqvGvie1bIAq3d19lPUcxtahsFxfxIFgw-pqpy8NNGako';
+let _pushState='unknown'; // unknown | off | on | unsupported | nostandalone
+
+function b64ToU8(s){ // VAPID 공개키 → applicationServerKey
+ const pad='='.repeat((4-s.length%4)%4);
+ const b=atob((s+pad).replace(/-/g,'+').replace(/_/g,'/'));
+ const a=new Uint8Array(b.length); for(let i=0;i<b.length;i++)a[i]=b.charCodeAt(i); return a;
+}
+function isStandalone(){ // iOS는 홈화면 설치 상태에서만 웹푸시 가능
+ return window.matchMedia('(display-mode: standalone)').matches || navigator.standalone===true;
+}
+function isIOS(){ return /iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1); }
+async function fbIdToken(){ try{ return _fbAuth&&_fbAuth.currentUser ? await _fbAuth.currentUser.getIdToken() : null; }catch(e){ return null; } }
+
+async function pushRefresh(){ // 현재 알림 상태 파악 → 홈 버튼 문구 갱신
+ if(!('serviceWorker' in navigator)||!('PushManager' in window)){ _pushState=(isIOS()&&!isStandalone())?'nostandalone':'unsupported'; return; }
+ if(isIOS()&&!isStandalone()){ _pushState='nostandalone'; return; }
+ if(Notification.permission!=='granted'){ _pushState='off'; return; }
+ try{ const reg=await navigator.serviceWorker.ready; const sub=await reg.pushManager.getSubscription(); _pushState=sub?'on':'off'; }
+ catch(e){ _pushState='off'; }
+}
+async function pushEnable(){ // "알림 받기" 버튼
+ if(isIOS()&&!isStandalone()){ askConfirm('아이폰은 홈 화면에 앱을 설치해야 알림을 받을 수 있어요.\n\n사파리 아래 공유 버튼 → "홈 화면에 추가" → 홈 화면 아이콘으로 다시 열어주세요.','알겠습니다',()=>{}); return; }
+ if(!('serviceWorker' in navigator)||!('PushManager' in window)){ toast('이 브라우저는 알림을 지원하지 않아요'); return; }
+ try{
+   const perm=await Notification.requestPermission();
+   if(perm!=='granted'){ toast('알림이 차단되어 있어요. 설정에서 허용해주세요'); await pushRefresh(); render(); return; }
+   const reg=await navigator.serviceWorker.ready;
+   let sub=await reg.pushManager.getSubscription();
+   if(!sub) sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64ToU8(VAPID_PUB)});
+   const idToken=await fbIdToken();
+   if(!idToken){ toast('로그인 후 다시 시도해주세요'); return; }
+   const r=await fetch(PUSH_URL+'/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},
+     body:JSON.stringify({idToken,uid:CUR,name:(curUser()&&curUser().name)||'',sub:sub.toJSON()})});
+   if(!r.ok){ const t=await r.text().catch(()=>''); toast('알림 등록 실패: '+t.slice(0,60)); return; }
+   _pushState='on'; render(); toast('알림이 켜졌어요');
+ }catch(e){ toast('알림 등록 실패: '+((e&&e.message)||e)); }
+}
+async function pushDisable(){
+ try{
+   const reg=await navigator.serviceWorker.ready;
+   const sub=await reg.pushManager.getSubscription();
+   if(sub){ const idToken=await fbIdToken();
+     if(idToken) await fetch(PUSH_URL+'/unsubscribe',{method:'POST',headers:{'Content-Type':'application/json'},
+       body:JSON.stringify({idToken,uid:CUR,endpoint:sub.endpoint})}).catch(()=>{});
+     await sub.unsubscribe().catch(()=>{}); }
+   _pushState='off'; render(); toast('알림을 껐어요');
+ }catch(e){ toast('해제 실패'); }
+}
+function pushToggle(){ _pushState==='on'?pushDisable():pushEnable(); }
+
+/* 알림 보내기 — 실패해도 앱 동작에 영향 없도록 조용히 처리(본인 기기는 제외) */
+async function pushSend(title,body,opts){
+ try{
+   const idToken=await fbIdToken(); if(!idToken)return;
+   await fetch(PUSH_URL+'/send',{method:'POST',headers:{'Content-Type':'application/json'},
+     body:JSON.stringify(Object.assign({idToken,title,body,excludeUid:CUR,
+       url:'https://fodepu.github.io/FarmPlanet/'},opts||{}))});
+ }catch(e){ /* 알림 실패는 무시 */ }
+}
+function pushCard(){ // 홈 화면 알림 카드
+ if(_pushState==='unsupported') return '';
+ if(_pushState==='nostandalone') return `<div class="card"><h3>${IC('bell','li sm')}알림</h3>
+   <div class="muted">아이폰은 <b>홈 화면에 추가</b> 후 앱 아이콘으로 열어야 알림을 받을 수 있어요.<br>사파리 아래 <b>공유 버튼</b> → <b>홈 화면에 추가</b></div></div>`;
+ const on=_pushState==='on';
+ return `<div class="card"><h3>${IC('bell','li sm')}알림</h3>
+   <div class="muted" style="margin-bottom:8px">${on?'새 채팅·공지·발주 요청이 오면 폰으로 알려드려요.':'앱을 꺼놔도 새 소식을 폰으로 받아보세요.'}</div>
+   <button class="btn ${on?'sec':''}" onclick="pushToggle()">${IC('bell','li sm')} ${on?'알림 끄기':'알림 받기'}</button></div>`;
+}
+
 const NAV=[["home","home","홈"],["att","clock","근태"],["chat","chat","채팅"],["order","cart","발주"]];
 function render(){
  if(CUR&&!curUser()){ CUR=null; if(USE_FB){showAuthOverlay(true);} } // 내 계정이 사라지면 재로그인
@@ -2046,7 +2124,9 @@ if(USE_FB){
 }
 /* 서비스워커 등록 (네트워크 우선 = 항상 최신, 오프라인 지원) */
 if('serviceWorker' in navigator && location.protocol!=='file:'){
- navigator.serviceWorker.register('sw.js').catch(()=>{});
+ navigator.serviceWorker.register('sw.js')
+   .then(()=>pushRefresh().then(()=>{ if(CUR)render(); }))
+   .catch(()=>{});
 }
 /* 캐시 무시 강제 새로고침 — iOS 홈화면 앱의 옛 캐시 우회 */
 async function hardReload(){
