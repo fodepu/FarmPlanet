@@ -40,6 +40,7 @@ svg.li.lg{width:20px;height:20px} svg.li.sm{width:13px;height:13px}
 /* 키보드가 올라오면 하단 탭을 숨겨 입력창이 키보드에 붙게 한다 */
 body.kb .nav{display:none}
 /* 입력 확정용 원형 화살표 — 텍스트 버튼보다 작아 입력창이 넓어진다 */
+.btn.sm{padding:9px 14px;font-size:12.5px;border-radius:8px}
 .sfab{width:34px;height:34px;min-width:34px;padding:0;border:none;border-radius:50%;background:var(--btn);
   color:#fff;flex:none;display:flex;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation}
 .sfab:active{opacity:.75}
@@ -401,7 +402,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.16.2'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.16.3'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -1501,7 +1502,7 @@ function screenNotice(){
      ${waitCnt?`<button class="btn sec" style="margin-bottom:8px" onclick="copyOrders()">${IC('copy','li sm')} 대기 발주 전체 복사 (${waitCnt}건)</button>`:''}
      <div class="row" style="gap:7px">
        <input class="tsel" id="odText" style="flex:1" placeholder="필요한 물건 (예: 우유 2팩)" enterkeyhint="send" onkeydown="if(event.key==='Enter'&&!event.isComposing){event.preventDefault();addOrder();}">
-       <button class="btn" style="width:auto;padding:0 16px" onclick="addOrder()">등록</button></div>
+       <button class="btn sm" style="width:auto;flex:none" onclick="addOrder()">등록</button></div>
      <p class="muted" style="font-size:11px;margin-top:8px;text-align:center">‹ › 또는 날짜를 눌러 다른 날 발주를 봐요 · 등록은 오늘로 추가됩니다</p>`;
  }
  return `<h2 class="title">${IC('bell')}공지 · 인수인계</h2>${noticeBody()}`;
@@ -1524,7 +1525,7 @@ function noticeBody(){
  return `${pinned}
    <div class="card"><h3>${admin?'공지 올리기':'인수인계 남기기'}</h3>
      <textarea class="inp" id="hoText" placeholder="${admin?'전 직원에게 보이는 공지를 작성하세요':'예: 우유 1팩 남음, 3번 테이블 의자 흔들림…'}"></textarea>
-     <button class="btn" style="margin-top:8px" onclick="addNote()">등록</button></div>
+     <button class="btn sm" style="width:auto;margin-top:8px" onclick="addNote()">등록</button></div>
    ${list}`;
 }
 let ordDate=null; // 발주방에서 보고있는 날짜(ISO). null=오늘
@@ -2430,11 +2431,21 @@ function vvFit(){
  if(window.scrollY) window.scrollTo(0,0);        // 사파리가 밀어올린 스크롤 되돌림
  if(tab==='chat'&&chatRoom) chatScroll();
 }
-/* 채팅 입력창에 포커스가 있는 동안만 하단 탭을 숨겨 입력창이 키보드에 붙게 한다 */
+/* 글자를 입력하는 동안은 하단 탭을 숨긴다 — 키보드 위로 탭이 밀려 올라오는 것 방지 */
+function isTextField(el){
+ if(!el)return false;
+ if(el.isContentEditable)return true;
+ const ce=el.getAttribute&&el.getAttribute('contenteditable');
+ if(ce==='true'||ce==='')return true;
+ if(el.tagName==='TEXTAREA')return true;
+ if(el.tagName!=='INPUT')return false;
+ return ['checkbox','radio','button','submit','reset','file','range','color'].indexOf((el.type||'text').toLowerCase())===-1;
+}
 document.addEventListener('focusin',(e)=>{
- if(e.target&&e.target.id==='chatText'){ document.body.classList.add('kb'); setTimeout(chatScroll,60); } });
+ if(isTextField(e.target)){ document.body.classList.add('kb');
+   if(e.target.id==='chatText') setTimeout(chatScroll,60); } });
 document.addEventListener('focusout',(e)=>{
- if(e.target&&e.target.id==='chatText'){ document.body.classList.remove('kb'); } });
+ if(isTextField(e.target)) document.body.classList.remove('kb'); });
 if(window.visualViewport){
  visualViewport.addEventListener('resize',vvFit);
  visualViewport.addEventListener('scroll',vvFit);
