@@ -387,7 +387,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.12.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.12.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -2058,6 +2058,17 @@ async function pushDisable(){
  }catch(e){ toast('해제 실패'); }
 }
 function pushToggle(){ _pushState==='on'?pushDisable():pushEnable(); }
+async function pushTest(){ // 내 폰에만 보내보기(설정 확인용)
+ try{
+   const idToken=await fbIdToken(); if(!idToken){toast('로그인 후 시도해주세요');return;}
+   toast('보내는 중…');
+   const r=await fetch(PUSH_URL+'/send',{method:'POST',headers:{'Content-Type':'application/json'},
+     body:JSON.stringify({idToken,title:'FarmPlanet',body:'알림이 정상적으로 도착했어요 🎉',tag:'test',onlyUids:[CUR]})});
+   const j=await r.json().catch(()=>({}));
+   if(!r.ok){toast('실패: '+(j.error||r.status));return;}
+   if(!j.sent){toast('등록된 기기가 없어요. 알림 받기를 먼저 눌러주세요');return;}
+   toast('보냈어요. 잠시 후 알림을 확인하세요');
+ }catch(e){ toast('실패: '+((e&&e.message)||e)); } }
 
 /* 알림 보내기 — 실패해도 앱 동작에 영향 없도록 조용히 처리(본인 기기는 제외) */
 async function pushSend(title,body,opts){
@@ -2075,7 +2086,9 @@ function pushCard(){ // 홈 화면 알림 카드
  const on=_pushState==='on';
  return `<div class="card"><h3>${IC('bell','li sm')}알림</h3>
    <div class="muted" style="margin-bottom:8px">${on?'새 채팅·공지·발주 요청이 오면 폰으로 알려드려요.':'앱을 꺼놔도 새 소식을 폰으로 받아보세요.'}</div>
-   <button class="btn ${on?'sec':''}" onclick="pushToggle()">${IC('bell','li sm')} ${on?'알림 끄기':'알림 받기'}</button></div>`;
+   <div style="display:flex;gap:8px">
+     <button class="btn ${on?'sec':''}" style="flex:1" onclick="pushToggle()">${IC('bell','li sm')} ${on?'알림 끄기':'알림 받기'}</button>
+     ${on?`<button class="btn sec" style="flex:none" onclick="pushTest()">테스트</button>`:''}</div></div>`;
 }
 
 const NAV=[["home","home","홈"],["att","clock","근태"],["chat","chat","채팅"],["order","cart","발주"]];
