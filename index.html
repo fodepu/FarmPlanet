@@ -402,7 +402,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.17.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.17.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -2260,40 +2260,52 @@ function screenDocs(){
           <button class="btn sm sec" onclick="docView('${s.id}','${t.k}')">보기</button>
           <button class="btn sm sec" style="color:var(--warn)" onclick="docAsk('${s.id}','${t.k}')">삭제</button>
           <button class="btn sm sec" onclick="docPick('${s.id}','${t.k}')">교체</button></div>`
-     : `<button class="btn sm" style="margin-top:8px;width:auto" onclick="docPick('${s.id}','${t.k}')">${IC('cam','li sm')} 등록</button>`;
+     : `<button class="btn sm" style="margin-top:8px;width:auto" onclick="docPick('${s.id}','${t.k}')">${IC('cam','li sm')} 사진·파일 등록</button>`;
    return `<div class="card" style="padding:13px 14px;margin-bottom:10px">
      <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
        <b style="font-size:14px;color:var(--ink);flex:1">${t.label}</b>${badge}</div>
      ${meta===undefined?`<div class="warnbox" style="margin:6px 0">권한이 없거나 불러오지 못했어요. 보안 규칙을 확인하세요.</div>`:''}
      ${dateBox}
-     ${has&&meta.by?`<div class="muted" style="font-size:10.5px;margin-top:4px">${meta.name||''} · ${docWhen(meta.ts)} ${chatStaff(meta.by)?('· '+chatStaff(meta.by).name):''}</div>`:''}
+     ${has&&meta.by?`<div class="muted" style="font-size:10.5px;margin-top:4px">${(meta.mime&&meta.mime.indexOf('image')<0)?'📄 ':''}${escAttr(meta.name||'')} · ${docWhen(meta.ts)} ${chatStaff(meta.by)?('· '+chatStaff(meta.by).name):''}</div>`:''}
      ${actions}</div>`;
  }).join('');
  return `<div style="display:flex;align-items:center;gap:8px;margin:2px 0 12px">
      <button class="role" onclick="closeDocs()" style="padding:5px 8px" title="뒤로">←</button>
      <h2 class="title" style="margin:0"><span style="width:22px;height:22px;border-radius:6px;background:${s.c};display:inline-block;vertical-align:-4px;margin-right:6px"></span>${escAttr(s.name)} · 구비서류</h2></div>
-   <div class="muted" style="font-size:11px;margin:-6px 0 12px">관리자·매니저만 볼 수 있어요. 사진으로 찍거나 이미지로 등록하세요.</div>
+   <div class="muted" style="font-size:11px;margin:-6px 0 12px">관리자·매니저만 볼 수 있어요. 사진·이미지는 자동 압축, PDF 등 파일은 700KB 이하로 등록돼요.</div>
    ${cards}
-   <input type="file" id="docFile" accept="image/*" style="display:none" onchange="docChosen(this)">`;
+   <input type="file" id="docFile" accept="image/*,application/pdf,.pdf,.doc,.docx,.hwp" style="display:none" onchange="docChosen(this)">`;
 }
 function docWhen(ts){ if(!ts)return ''; const d=new Date(ts); return `${d.getFullYear()}.${d.getMonth()+1}.${d.getDate()}`; }
 function docDaysLeft(iso){ try{ const d=new Date(iso+'T00:00:00'); return Math.round((d-new Date(new Date().toDateString()))/86400000); }catch(e){ return null; } }
 
 let _docTarget=null;
 function docPick(emp,t){ _docTarget={emp,t}; const el=$('docFile'); if(el){ el.value=''; el.click(); } }
+const DOC_MAXBYTES=700*1024; // 원본 파일(비이미지) 허용 상한 — base64로 커져도 Firestore 1MB 안
 function docChosen(inp){
  const f=inp.files&&inp.files[0]; if(!f||!_docTarget)return;
- if(!/^image\//.test(f.type)){ toast('이미지 파일만 등록할 수 있어요'); return; }
  toast('불러오는 중…');
  const r=new FileReader();
- r.onload=e=>{ const img=new Image();
-   img.onload=()=>{ let data;
-     try{ data=docCompress(img); }catch(err){ toast('이미지 처리 실패'); return; }
-     docSave(_docTarget.emp,_docTarget.t,data,f.name||'사진');
-   };
-   img.onerror=()=>toast('이미지를 읽지 못했어요');
-   img.src=e.target.result; };
- r.readAsDataURL(f);
+ if(/^image\//.test(f.type)){
+   // 이미지: 압축해서 저장
+   r.onload=e=>{ const img=new Image();
+     img.onload=()=>{ let data;
+       try{ data=docCompress(img); }catch(err){ toast('이미지 처리 실패'); return; }
+       docSave(_docTarget.emp,_docTarget.t,data,f.name||'사진','image/jpeg');
+     };
+     img.onerror=()=>toast('이미지를 읽지 못했어요');
+     img.src=e.target.result; };
+   r.readAsDataURL(f);
+ }else{
+   // PDF 등 일반 파일: 원본 그대로 저장(압축 불가) — 용량만 확인
+   if(f.size>DOC_MAXBYTES){
+     toast(`파일이 커요(${Math.round(f.size/1024)}KB). ${Math.round(DOC_MAXBYTES/1024)}KB 이하만 가능 — PDF를 압축하거나 사진으로 찍어 올려주세요`);
+     return;
+   }
+   r.onload=e=>docSave(_docTarget.emp,_docTarget.t,e.target.result,f.name||'파일',f.type||'application/octet-stream');
+   r.onerror=()=>toast('파일을 읽지 못했어요');
+   r.readAsDataURL(f);
+ }
 }
 function docCompress(img){ // 최대 1500px · 품질을 낮춰가며 ~850KB 이하로
  let long=1500, q=0.72, url='';
@@ -2308,12 +2320,13 @@ function docCompress(img){ // 최대 1500px · 품질을 낮춰가며 ~850KB 이
  }
  return url;
 }
-async function docSave(emp,t,data,name){
+async function docSave(emp,t,data,name,mime){
  if(_docBusy){toast('처리 중이에요');return;} _docBusy=true;
  try{
+   if(data.length>1000000){ toast('파일이 너무 커서 저장할 수 없어요(1MB 초과)'); _docBusy=false; return; }
    const {doc,setDoc}=_docApi;
    const type=DOC_TYPES.find(x=>x.k===t)||{};
-   const meta={emp,type:t,has:true,name:String(name).slice(0,40),size:data.length,by:CUR,ts:Date.now()};
+   const meta={emp,type:t,has:true,name:String(name).slice(0,40),mime:mime||'image/jpeg',size:data.length,by:CUR,ts:Date.now()};
    if(type.exp){ // 보건증: 검진일·갱신일 입력받기(기존 값 유지)
      const prev=_docMeta[docKey(emp,t)]||{};
      const info=await docDateModal(prev.issue||'', prev.expire||'');
@@ -2345,13 +2358,31 @@ async function docView(emp,t){
    const snap=await getDoc(doc(_fsDb,'staffdocfiles',docKey(emp,t)));
    if(!snap.exists()){toast('파일이 없어요');return;}
    const data=snap.data().data;
+   const meta=_docMeta[docKey(emp,t)]||{};
    const label=(DOC_TYPES.find(x=>x.k===t)||{}).label||'서류';
-   openModal(`<h3 style="color:var(--ink)">${label}</h3>
-     <img src="${data}" style="width:100%;border-radius:10px;border:1px solid var(--edge);margin:8px 0">
-     <div class="row"><a class="btn sec" href="${data}" download="${escAttr(label)}.jpg" style="text-decoration:none;text-align:center">다운로드</a>
+   const mime=meta.mime||(/^data:([^;]+)/.exec(data)||[])[1]||'image/jpeg';
+   const isImg=/^image\//.test(mime);
+   const ext=mime.indexOf('pdf')>=0?'pdf':(meta.name&&meta.name.indexOf('.')>=0?meta.name.split('.').pop():'file');
+   const preview = isImg
+     ? `<img src="${data}" style="width:100%;border-radius:10px;border:1px solid var(--edge);margin:8px 0">`
+     : `<div style="text-align:center;padding:26px 10px;background:#f4f7f2;border:1px solid var(--edge);border-radius:10px;margin:8px 0">
+          <div style="font-size:34px">📄</div><div style="font-size:13px;color:var(--ink);margin-top:6px;word-break:break-all">${escAttr(meta.name||'파일')}</div>
+          <div class="muted" style="font-size:11px;margin-top:2px">${(meta.size/1024|0)}KB</div></div>`;
+   openModal(`<h3 style="color:var(--ink)">${label}</h3>${preview}
+     <div class="row">
+       ${isImg?'':`<button class="btn sec" onclick="docOpen('${emp}','${t}')">열기</button>`}
+       <a class="btn sec" href="${data}" download="${escAttr((meta.name&&meta.name.indexOf('.')>=0)?meta.name:label+'.'+ext)}" style="text-decoration:none;text-align:center">다운로드</a>
        <button class="btn" onclick="closeModal()">닫기</button></div>`);
  }catch(e){ toast('불러오기 실패: '+((e&&(e.code||e.message))||e)); }
 }
+async function docOpen(emp,t){ // 비이미지(PDF 등) 새 탭으로 열기
+ try{ const {doc,getDoc}=_docApi;
+   const snap=await getDoc(doc(_fsDb,'staffdocfiles',docKey(emp,t)));
+   if(!snap.exists()){toast('파일이 없어요');return;}
+   const data=snap.data().data;
+   const w=window.open(); if(w){ w.document.write(`<iframe src="${data}" style="border:0;width:100%;height:100%"></iframe>`); w.document.title=(DOC_TYPES.find(x=>x.k===t)||{}).label||'서류'; }
+   else toast('팝업이 차단됐어요 — 다운로드를 이용하세요');
+ }catch(e){ toast('열기 실패'); } }
 function docAsk(emp,t){
  const label=(DOC_TYPES.find(x=>x.k===t)||{}).label||'서류';
  askConfirm(`${label} 서류를 삭제할까요?\n되돌릴 수 없어요.`,'삭제',()=>docDelete(emp,t)); }
