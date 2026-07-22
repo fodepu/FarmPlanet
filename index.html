@@ -402,7 +402,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.16.4'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.17.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -432,6 +432,7 @@ let _pendingUser=null,_authTO=null,_authForce=false;
 const CHAT_LIMIT=200;
 let _fsDb=null,_chatApi=null,_chatErr='',_fbUid=null;
 let CHATR={},_roomUnsub={},chatRoom=null;   // 방별 메시지 / 방별 구독 / 열려있는 방
+let _docApi=null;
 let STAFF, SHIFTS, ORDERS, NOTICES, CK, SUBMITS, CUR, REFS, READS, SCHED_TS=0, DELETED=[], ODEL=[], PATTERN=null, ATT={}, STORE_LOC=null, WAGE=0, ATTREQ=[], ATTLOG={}, BOARD=[], STORE_IP=null, INV=[], CATS=[], HOL=[], WIFILOCK=false, ROOMS=[];
 function touchSched(){SCHED_TS=Date.now();} // 시간표 변경 시각 기록(신규 표시용)
 function defaults(){
@@ -481,10 +482,10 @@ function syncPayload(){
 async function syncBoot(){
  try{
   const {initializeApp,getApps}=await import('https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js');
-  const {getFirestore,doc,onSnapshot,setDoc,updateDoc,collection,addDoc,query,orderBy,limit,serverTimestamp}=await import('https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js');
+  const {getFirestore,doc,getDoc,onSnapshot,setDoc,updateDoc,deleteDoc,collection,addDoc,query,orderBy,limit,serverTimestamp}=await import('https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js');
   const app=getApps().length?getApps()[0]:initializeApp(FIREBASE_CONFIG);
   const db=getFirestore(app);
-  _fsDb=db; _chatApi={collection,addDoc,query,orderBy,limit,onSnapshot,serverTimestamp,doc,updateDoc}; maybeChatSubscribe();
+  _fsDb=db; _chatApi={collection,addDoc,query,orderBy,limit,onSnapshot,serverTimestamp,doc,updateDoc}; _docApi={doc,getDoc,setDoc,deleteDoc}; maybeChatSubscribe();
   const ref=doc(db,'shared','state');
   _fsSet=(data)=>setDoc(ref,data);
   onSnapshot(ref,(snap)=>{ const first=!_syncReady; _syncReady=true; _syncStat='연결됨'; _syncAt=Date.now();
@@ -1268,7 +1269,7 @@ function staffManage(){
    <span style="width:24px;height:24px;border-radius:6px;background:${s.c};flex:none"></span>
    <div class="tx"><b>${s.name}</b>${s.pending?' <span class="pill" style="background:#e6f1fb;color:#185fa5">승인 대기</span>':isOwner(s)?' <span class="pill">관리자</span>':s.mgr?' <span class="pill">매니저</span>':''}
      <div class="muted" style="font-size:11px">${s.email||'이메일 미등록'}</div></div>
-   ${s.pending?`<button class="cam" style="color:var(--deep);border-color:#bfe0c8;font-weight:800" onclick="approveStaff(${i})">승인</button>`:`<button class="cam" onclick="editStaffInfo(${i})">수정</button>`}
+   ${s.pending?`<button class="cam" style="color:var(--deep);border-color:#bfe0c8;font-weight:800" onclick="approveStaff(${i})">승인</button>`:`<button class="cam" onclick="openStaffDocs(${i})" title="구비서류">서류</button><button class="cam" onclick="editStaffInfo(${i})">수정</button>`}
    ${isAdmin(s)||s.id===CUR?'':`<button class="cam" style="color:var(--warn);border-color:#f0d9bd" onclick="removeStaff(${i})">삭제</button>`}
  </div>`).join('');
  const pc=pendingCount();
@@ -2204,6 +2205,164 @@ function toggleNep(msgId){ // 넵 — 확인했다는 표시
    .catch(e=>{ m.nep[CUR]=!on; if(el)el.innerHTML=chatListHTML();
      toast('반응 실패: '+((e&&(e.code||e.message))||e)); }); }
 
+/* ═══════════ 구비서류 보관 (관리자 전용 · Firestore staffdocs) ═══════════
+   - 파일(사진)은 압축해 Firestore 문서에 base64로 저장, 메타와 파일을 분리
+   - 접근은 보안 규칙으로 관리자·매니저 이메일만 허용(민감정보)
+   - 메타: staffdocs/{emp__type}  ·  파일: staffdocfiles/{emp__type} */
+const DOC_TYPES=[
+ {k:'resident', label:'주민등록등본', exp:false},
+ {k:'bankbook', label:'통장사본',     exp:false},
+ {k:'health',   label:'보건증 (건강진단결과서)', exp:true},
+ {k:'contract', label:'근로계약서',   exp:false},
+];
+let docEmp=null, _docMeta={}, _docBusy=false;
+const docKey=(emp,t)=>emp+'__'+t;
+
+function openStaffDocs(i){
+ const s=STAFF[i]; if(!s)return;
+ if(!isAdmin(curUser())){toast('관리자·매니저만 볼 수 있어요');return;}
+ if(!_fsDb||!_docApi){toast('서류 저장소 연결 준비 중이에요');return;}
+ docEmp=s.id; closeModal(); tab='sdocs'; render(); docLoadMeta(s.id);
+}
+function closeDocs(){ docEmp=null; tab='home'; render(); setTimeout(staffManage,0); }
+
+async function docLoadMeta(emp){
+ if(!_fsDb||!_docApi)return;
+ const {doc,getDoc}=_docApi;
+ for(const t of DOC_TYPES){
+   try{ const snap=await getDoc(doc(_fsDb,'staffdocs',docKey(emp,t.k)));
+     _docMeta[docKey(emp,t.k)]= snap.exists()? snap.data() : null; }
+   catch(e){ _docMeta[docKey(emp,t.k)]=undefined; /* 권한 오류 등 */ }
+ }
+ if(tab==='sdocs') render();
+}
+
+function screenDocs(){
+ const s=(STAFF||[]).find(x=>x.id===docEmp);
+ if(!s) return `<p class="muted" style="text-align:center;padding:40px">직원을 찾을 수 없어요.</p>`;
+ const cards=DOC_TYPES.map(t=>{
+   const key=docKey(s.id,t.k), meta=_docMeta[key];
+   const has=meta&&meta.has;
+   let dateBox='';
+   if(t.exp){
+     const near=has&&meta.expire?docDaysLeft(meta.expire):null;
+     const col=(near!==null&&near<=30)?'#d9534f':'#2f80ed';
+     dateBox=`<div class="muted" style="font-size:11px;line-height:1.7;margin:6px 0 2px">만료 30일·7일 전 확인이 필요해요.
+       <div style="margin-top:4px">검진일 <b style="color:#3c4a40">${has&&meta.issue?meta.issue:'—'}</b></div>
+       <div>갱신일 <b style="color:${has?col:'#9AA79D'}">${has&&meta.expire?meta.expire:'—'}</b>
+         ${(near!==null)?`<span style="color:${col};font-weight:800;margin-left:4px">${near<0?'만료됨':'D-'+near}</span>`:''}</div></div>`;
+   }
+   const badge = has
+     ? `<span class="pill" style="background:#e7f5ec;color:#2c7a4b">제출 완료</span>`
+     : `<span class="pill" style="background:#faf0e6;color:#b5793a">미제출</span>`;
+   const actions = has
+     ? `<div style="display:flex;gap:6px;margin-top:8px">
+          <button class="btn sm sec" onclick="docView('${s.id}','${t.k}')">보기</button>
+          <button class="btn sm sec" style="color:var(--warn)" onclick="docAsk('${s.id}','${t.k}')">삭제</button>
+          <button class="btn sm sec" onclick="docPick('${s.id}','${t.k}')">교체</button></div>`
+     : `<button class="btn sm" style="margin-top:8px;width:auto" onclick="docPick('${s.id}','${t.k}')">${IC('cam','li sm')} 등록</button>`;
+   return `<div class="card" style="padding:13px 14px;margin-bottom:10px">
+     <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
+       <b style="font-size:14px;color:var(--ink);flex:1">${t.label}</b>${badge}</div>
+     ${meta===undefined?`<div class="warnbox" style="margin:6px 0">권한이 없거나 불러오지 못했어요. 보안 규칙을 확인하세요.</div>`:''}
+     ${dateBox}
+     ${has&&meta.by?`<div class="muted" style="font-size:10.5px;margin-top:4px">${meta.name||''} · ${docWhen(meta.ts)} ${chatStaff(meta.by)?('· '+chatStaff(meta.by).name):''}</div>`:''}
+     ${actions}</div>`;
+ }).join('');
+ return `<div style="display:flex;align-items:center;gap:8px;margin:2px 0 12px">
+     <button class="role" onclick="closeDocs()" style="padding:5px 8px" title="뒤로">←</button>
+     <h2 class="title" style="margin:0"><span style="width:22px;height:22px;border-radius:6px;background:${s.c};display:inline-block;vertical-align:-4px;margin-right:6px"></span>${escAttr(s.name)} · 구비서류</h2></div>
+   <div class="muted" style="font-size:11px;margin:-6px 0 12px">관리자·매니저만 볼 수 있어요. 사진으로 찍거나 이미지로 등록하세요.</div>
+   ${cards}
+   <input type="file" id="docFile" accept="image/*" style="display:none" onchange="docChosen(this)">`;
+}
+function docWhen(ts){ if(!ts)return ''; const d=new Date(ts); return `${d.getFullYear()}.${d.getMonth()+1}.${d.getDate()}`; }
+function docDaysLeft(iso){ try{ const d=new Date(iso+'T00:00:00'); return Math.round((d-new Date(new Date().toDateString()))/86400000); }catch(e){ return null; } }
+
+let _docTarget=null;
+function docPick(emp,t){ _docTarget={emp,t}; const el=$('docFile'); if(el){ el.value=''; el.click(); } }
+function docChosen(inp){
+ const f=inp.files&&inp.files[0]; if(!f||!_docTarget)return;
+ if(!/^image\//.test(f.type)){ toast('이미지 파일만 등록할 수 있어요'); return; }
+ toast('불러오는 중…');
+ const r=new FileReader();
+ r.onload=e=>{ const img=new Image();
+   img.onload=()=>{ let data;
+     try{ data=docCompress(img); }catch(err){ toast('이미지 처리 실패'); return; }
+     docSave(_docTarget.emp,_docTarget.t,data,f.name||'사진');
+   };
+   img.onerror=()=>toast('이미지를 읽지 못했어요');
+   img.src=e.target.result; };
+ r.readAsDataURL(f);
+}
+function docCompress(img){ // 최대 1500px · 품질을 낮춰가며 ~850KB 이하로
+ let long=1500, q=0.72, url='';
+ for(let tries=0; tries<6; tries++){
+   const sc=Math.min(1,long/Math.max(img.width,img.height));
+   const cv=document.createElement('canvas');
+   cv.width=Math.max(1,Math.round(img.width*sc)); cv.height=Math.max(1,Math.round(img.height*sc));
+   cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
+   url=cv.toDataURL('image/jpeg',q);
+   if(url.length<=850000) break;         // base64 길이 ≈ 바이트수, Firestore 1MB 한도 여유
+   if(q>0.5) q-=0.1; else long=Math.round(long*0.8);
+ }
+ return url;
+}
+async function docSave(emp,t,data,name){
+ if(_docBusy){toast('처리 중이에요');return;} _docBusy=true;
+ try{
+   const {doc,setDoc}=_docApi;
+   const type=DOC_TYPES.find(x=>x.k===t)||{};
+   const meta={emp,type:t,has:true,name:String(name).slice(0,40),size:data.length,by:CUR,ts:Date.now()};
+   if(type.exp){ // 보건증: 검진일·갱신일 입력받기(기존 값 유지)
+     const prev=_docMeta[docKey(emp,t)]||{};
+     const info=await docDateModal(prev.issue||'', prev.expire||'');
+     if(info){ meta.issue=info.issue; meta.expire=info.expire; }
+   }
+   await setDoc(doc(_fsDb,'staffdocfiles',docKey(emp,t)),{data,ts:Date.now()});
+   await setDoc(doc(_fsDb,'staffdocs',docKey(emp,t)),meta);
+   _docMeta[docKey(emp,t)]=meta;
+   if(tab==='sdocs')render(); toast('등록했어요');
+ }catch(e){ toast('저장 실패: '+((e&&(e.code||e.message))||e)); }
+ finally{ _docBusy=false; }
+}
+function docDateModal(issue,expire){ // Promise<{issue,expire}|null>
+ return new Promise(res=>{
+   openModal(`<h3 style="color:var(--ink)">보건증 날짜</h3>
+     <div class="fld" style="margin-top:8px"><label>검진일</label><input id="dcIssue" class="tsel" type="date" value="${issue||''}"></div>
+     <div class="fld" style="margin-top:8px"><label>갱신일(만료일)</label><input id="dcExpire" class="tsel" type="date" value="${expire||''}"></div>
+     <div class="muted" style="font-size:11px;margin-top:6px">보건증은 보통 발급 1년 뒤 만료돼요.</div>
+     <div class="row" style="margin-top:12px"><button class="btn sec" onclick="_docDateCb(null)">건너뛰기</button>
+       <button class="btn" onclick="_docDateCb(true)">저장</button></div>`);
+   window._docDateCb=(ok)=>{ const i=$('dcIssue'),x=$('dcExpire');
+     const r= ok? {issue:(i&&i.value)||'', expire:(x&&x.value)||''} : null; closeModal(); res(r); };
+ });
+}
+async function docView(emp,t){
+ if(!_docApi)return;
+ toast('불러오는 중…');
+ try{ const {doc,getDoc}=_docApi;
+   const snap=await getDoc(doc(_fsDb,'staffdocfiles',docKey(emp,t)));
+   if(!snap.exists()){toast('파일이 없어요');return;}
+   const data=snap.data().data;
+   const label=(DOC_TYPES.find(x=>x.k===t)||{}).label||'서류';
+   openModal(`<h3 style="color:var(--ink)">${label}</h3>
+     <img src="${data}" style="width:100%;border-radius:10px;border:1px solid var(--edge);margin:8px 0">
+     <div class="row"><a class="btn sec" href="${data}" download="${escAttr(label)}.jpg" style="text-decoration:none;text-align:center">다운로드</a>
+       <button class="btn" onclick="closeModal()">닫기</button></div>`);
+ }catch(e){ toast('불러오기 실패: '+((e&&(e.code||e.message))||e)); }
+}
+function docAsk(emp,t){
+ const label=(DOC_TYPES.find(x=>x.k===t)||{}).label||'서류';
+ askConfirm(`${label} 서류를 삭제할까요?\n되돌릴 수 없어요.`,'삭제',()=>docDelete(emp,t)); }
+async function docDelete(emp,t){
+ try{ const {doc,deleteDoc}=_docApi;
+   await deleteDoc(doc(_fsDb,'staffdocfiles',docKey(emp,t))).catch(()=>{});
+   await deleteDoc(doc(_fsDb,'staffdocs',docKey(emp,t)));
+   _docMeta[docKey(emp,t)]=null; if(tab==='sdocs')render(); toast('삭제했어요');
+ }catch(e){ toast('삭제 실패: '+((e&&(e.code||e.message))||e)); }
+}
+
 /* ═══════════ 앱 외부 푸시 알림 (Cloudflare Worker) ═══════════ */
 const PUSH_URL='https://farmplanet-push.kimjuham1120.workers.dev';
 const VAPID_PUB='BEg3PHpSlx0RL3KBDBUhUA-S8qfPr4H8kbMu_H3yNsGqvGvie1bIAq3d19lPUcxtahsFxfxIFgw-pqpy8NNGako';
@@ -2387,12 +2546,13 @@ function render(){
  else if(tab==="comm") html=screenComm();
  else if(tab==="inv") html=screenInventory();
  else if(tab==="chat") html=screenChat();
+ else if(tab==="sdocs") html=screenDocs();
  $("screen").innerHTML=html;
  $("screen").classList.toggle('chatmode', tab==='chat'); // 채팅일 때만 화면을 flex로(입력바 바닥 고정)
  if(tab==="manual") renderManual($("msearch")?.value||"");
  if(tab==="inv") setTimeout(initInvSort,0);
  if(tab==="chat") setTimeout(chatAfterRender,0);
- const navTab=(tab==='close'||tab==='manual'||tab==='closeAdmin'||tab==='notice'||tab==='board'||tab==='comm'||tab==='inv'||tab==='sched')?'home':tab;
+ const navTab=(tab==='close'||tab==='manual'||tab==='closeAdmin'||tab==='notice'||tab==='board'||tab==='comm'||tab==='inv'||tab==='sched'||tab==='sdocs')?'home':tab;
  const u=CUR?unread():{n:0,o:0,sched:0,c:0};
  $("nav").innerHTML=NAV.map(n=>{
    const dot=(n[0]==='order'&&u.o)||(n[0]==='chat'&&u.c)||(n[0]==='att'&&isAdmin(curUser())&&attReqCount());
