@@ -402,7 +402,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.18.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.19.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -590,7 +590,7 @@ function resetAll(){askConfirm('<b>모든 데이터</b>(시간표·발주·공�
  localStorage.removeItem(SKEY);defaults();render();toast('초기화되었습니다');});}
 
 let role="staff", tab="home", ckMode="close";
-let onlyMine=false, noticeView='notice';
+let onlyMine=false, noticeView='notice', schedFocus=null;
 
 
 /* ═══════════ 공통 ═══════════ */
@@ -730,11 +730,11 @@ function attDayModal(iso){ const r=attRecFor(CUR,iso); if(!r||!r.in){toast('기�
    <div style="margin:6px 0 10px">${brk}</div>
    <div style="border-top:1px solid var(--edge);padding-top:9px;font-size:13.5px">근무 <b>${fmtDur(recWorkedMs(r,live))}</b> <span class="muted">·</span> 휴게 ${fmtDur(recBreakMs(r,end))}</div>
    <button class="btn sec" style="margin-top:12px" onclick="closeModal()">닫기</button>`); }
-function fmtHMS(ms){ const s=Math.max(0,Math.floor(ms/1000)),p=n=>String(n).padStart(2,'0'); return p(Math.floor(s/3600))+':'+p(Math.floor(s%3600/60))+':'+p(s%60); }
+function fmtHMS(ms){ const m=Math.max(0,Math.floor(ms/60000)); return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); } // 시:분 (초 미표시)
 function attElapsed(){ const a=attToday(); if(!a)return 0; const st=attStatus(a);
  if(st==='work')return workedMs(a); if(st==='break'){const b=attOpenBreak(a);return b?Date.now()-b.s:0;} return 0; }
 function tickAtt(){ if(tab!=='att'||!CUR)return; const el=$('aClock'); if(!el)return; const st=attStatus(attToday()); if(st==='work'||st==='break')el.textContent=fmtHMS(attElapsed()); }
-setInterval(tickAtt,1000);
+setInterval(tickAtt,15000);
 function confirmClockOut(){ askConfirm('퇴근하시겠어요? 오늘 근무를 종료합니다.','퇴근',()=>clockOut()); }
 function parseTs(v){ // "14:00" "14" "2"(→오후2시) "230"(2:30) 등 유연 파싱
  v=String(v||'').trim().replace(/[시분]/g,'').replace(/\s/g,''); if(!v)return null;
@@ -808,6 +808,19 @@ function admStaffDetail(uid){ if(!isAdmin(curUser()))return;
  openModal(`<h3>${s.name} · ${y}년 ${mo+1}월</h3>${rows||'<p class="muted" style="text-align:center;padding:14px">기록이 없어요</p>'}
    <div class="lrow tot"><span>합계 ${workedIsos.length}일</span><b>${Math.floor(min/60)}시간 ${min%60}분</b></div>
    <button class="btn sec" style="margin-top:12px" onclick="closeModal()">닫기</button>`); }
+function attLiveStatus(uid){ // 오늘 기준 'work'|'break'|null
+ const a=(ATT[uid]&&ATT[uid].date===todayK())?ATT[uid]:null;
+ if(!a||!a.in||a.out)return null;
+ const br=a.breaks||[], last=br[br.length-1];
+ return (last&&last.s&&!last.e)?'break':'work';
+}
+function currentDutyHTML(){
+ const now=[]; (STAFF||[]).forEach(s=>{ if(s.pending)return; const st=attLiveStatus(s.id); if(st)now.push({s,st,a:ATT[s.id]}); });
+ now.sort((x,y)=>(x.a.in||0)-(y.a.in||0));
+ const rows= now.length? now.map(({s,st,a})=>`<div class="lrow"><span><span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:${s.c};margin-right:6px"></span>${s.name} <span class="pill" style="background:${st==='break'?'#FAEEDA':'#EAF3DE'};color:${st==='break'?'#854F0B':'#3B6D11'};font-size:10px">${st==='break'?'휴게 중':'근무 중'}</span></span><b style="white-space:nowrap">${fmtT(a.in)}~ · ${fmtDur(workedMs(a))}</b></div>`).join('')
+   : `<p class="muted" style="text-align:center;padding:12px 2px">지금 근무 중인 사람이 없어요.</p>`;
+ return `<div class="card" style="margin-top:12px"><h3>${IC('clock','li sm')}현재 근무 중 (${now.length})</h3>${rows}</div>`;
+}
 function screenAtt(){
  const admin=isAdmin(curUser()), a=attToday(), st=attStatus(a);
  const td=TODAY(), shift=td?rangesLabel(CUR+'|'+td.k):'';
@@ -833,7 +846,7 @@ function screenAtt(){
  const editBtn = a? `<button class="btn sec" style="margin-top:14px" onclick="reqAtt()">${IC('swap','li sm')} 기록 수정 요청</button>`:'';
  const reqBox = (admin && attReqCount())? `<div class="card" style="margin-top:12px;border-color:#bcd7f0"><h3>${IC('bell','li sm')}근태 요청 ${attReqCount()}건</h3>${ATTREQ.map(r=>`<div style="border-top:1px solid var(--edge);padding:8px 0"><div style="font-size:13px"><b>${r.name}</b> <span class="pill" style="background:${r.kind==='in'?'#e7f0ff':'#F0F4EE'};color:${r.kind==='in'?'#2f6fd0':'var(--deep)'};font-size:10px">${r.kind==='in'?'출근 요청':'기록 수정'}</span> <span class="muted" style="font-size:11px">${r.date.slice(5)}</span></div><div class="muted" style="font-size:11.5px">출근 ${fmtT(r.in)}${r.out?' · 퇴근 '+fmtT(r.out):" · '근무 중'으로"}${r.note?' · "'+r.note+'"':''}</div><div class="row" style="gap:6px;margin-top:6px"><button class="btn sec" style="color:var(--warn);border-color:#f0d9bd" onclick="rejectAttReq('${r.id}')">거절</button><button class="btn" onclick="approveAttReq('${r.id}')">승인</button></div></div>`).join('')}</div>`:'';
  const adminBox = admin? `<div class="muted" style="font-size:11px;margin-top:14px">${STORE_IP?(WIFILOCK?'매장 와이파이 고정됨 🔒':'매장 와이파이 등록됨'):'매장 와이파이 미등록 — 출퇴근 확인 안 함'} · <span class="authlink" onclick="openWifiSetup()">와이파이 설정</span></div>`:'';
- return `<h2 class="title">${IC('clock')}근태</h2><div class="card">${body}${editBtn}</div>${attHistoryHTML()}${admin?admSummaryHTML():''}${reqBox}${adminBox}`;
+ return `<h2 class="title">${IC('clock')}근태</h2><div class="card">${body}${editBtn}</div>${admin?currentDutyHTML():''}${attHistoryHTML()}${admin?admSummaryHTML():''}${reqBox}${adminBox}`;
 }
 function setWage(){ const v=prompt('시급(원):',WAGE); if(v===null)return; const n=parseInt(String(v).replace(/[^0-9]/g,''),10); if(!n){toast('숫자를 입력하세요');return;} WAGE=n; save(); reAtt(); toast('시급을 '+won(n)+'(으)로 저장했습니다'); }
 function attView(){
@@ -1127,7 +1140,8 @@ function screenSched(){
    <button onclick="setWeek(${weekOffset+1})">${IC('chevR','li sm')}</button></div></div>`;
  const actions=`
    <div class="row" style="margin-bottom:8px">
-    <button class="btn sec" style="${onlyMine?'background:var(--deep);color:#fff;border-color:var(--deep)':''}" onclick="onlyMine=!onlyMine;render()">${onlyMine?'전체 보기':'내 근무만'}</button></div>
+    <button class="btn sec" style="${onlyMine?'background:var(--deep);color:#fff;border-color:var(--deep)':''}" onclick="onlyMine=!onlyMine;schedFocus=null;render()">${onlyMine?'전체 보기':'내 근무만'}</button></div>
+   ${schedFocus?`<div class="row" style="margin-bottom:8px"><button class="btn sec" style="background:var(--deep);color:#fff;border-color:var(--deep)" onclick="schedFocus=null;render()">${(STAFF.find(s=>s.id===schedFocus)||{}).name||''} 근무만 보는 중 · 전체 보기</button></div>`:''}
    ${admin?`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px">
      <button class="btn sec" style="padding:8px 2px;font-size:11px;line-height:1.35" onclick="copyLastWeek()">지난주<br>복사</button>
      <button class="btn sec" style="padding:8px 2px;font-size:11px;line-height:1.35" onclick="applyPattern()">기본패턴<br>불러오기</button>
@@ -1142,12 +1156,13 @@ function screenSched(){
    ${admin?`<button class="btn" style="margin-top:12px" onclick="shareSchedule()">${IC('swap','li sm')} 시간표 공유 — 모든 직원에게 반영</button>`:''}
    <div class="muted" style="font-size:10.5px;text-align:center;margin-top:8px">실시간 동기화: ${SYNC_ENABLED?_syncStat:'꺼짐'}${_syncAt?' · '+new Date(_syncAt).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}):''} · v${APP_VER}</div>`;
 }
+function schedVisible(id){ return (!onlyMine||id===CUR) && (!schedFocus||id===schedFocus); }
+function schedFocusSet(id){ schedFocus=(schedFocus===id?null:id); onlyMine=false; if($('modal')&&$('modal').classList.contains('show'))closeModal(); render(); }
 function segLayout(dkey){
  // 각 근무 = 온전한 직사각형. 겹침 그룹 안에서 레인(0=기본,전체폭)을 매기고
  // 렌더에서 레인1=오른쪽, 레인2=왼쪽… 번갈아 붙여 위로 겹친다.
  const list=[];
- STAFF.filter(s=>!onlyMine||s.id===CUR).forEach(s=>{
-   getRanges(s.id+'|'+dkey).forEach((r,ri)=>list.push({s,sh:r,key:s.id+'#'+ri,a:t2n(r.s),b:t2n(r.e)}));
+ STAFF.forEach(s=>{ getRanges(s.id+'|'+dkey).forEach((r,ri)=>list.push({s,sh:r,key:s.id+'#'+ri,a:t2n(r.s),b:t2n(r.e)}));
  });
  list.sort((p,q)=>p.a-q.a||p.b-q.b);
  const out=[]; let comp=[], compEnd=-1;
@@ -1173,7 +1188,7 @@ function renderGrid(){
      let left=0,width=100,z=0,cls='wsh';
      if(g.lane>0){ const W=46; width=W; z=g.lane; cls='wsh ov'; left=(g.lane%2===1)?100-W:0; }
      return `<div class="${cls}" style="top:${top}%;height:${h}%;left:${left}%;width:${width}%;background:${g.s.c};z-index:${z}"
-       ${admin?`onclick="event.stopPropagation();editCell('${g.s.id}','${d.k}')"`:''}>${lbl}</div>`;
+       onclick="event.stopPropagation();${admin?`editCell('${g.s.id}','${d.k}')`:`schedFocusSet('${g.s.id}')`}">${lbl}</div>`;
    }).join('');
    const kind=dayKind(d.k), redC='#d33a2c', satC='#2b6cb0';
    const dc = kind==='red'?redC:(kind==='sat'?satC:'');
@@ -1188,7 +1203,7 @@ function renderGrid(){
    </div>`;
  }).join('');
  return `<div class="wcal z7"><div class="wtime">${times}</div>${cols}</div>
-   <div class="muted" style="font-size:11px;margin-bottom:12px">${onlyMine?'내 근무만 · ':''}${admin?'블록 = 수정 · 요일＋ = 추가 · ':''}겹침 = 나란히 칸 분할 · 보라 음영 = 피크</div>`;
+   <div class="muted" style="font-size:11px;margin-bottom:12px">${onlyMine?'내 근무만 · ':''}${admin?'블록 = 수정 · 요일＋ = 추가 · ':'이름 누르면 그 사람 근무만 · '}겹침 = 나란히 칸 분할 · 보라 음영 = 피크</div>`;
 }
 /* 빠른 입력 */
 let ecStaff=null, ecDay=null;
@@ -1219,6 +1234,7 @@ function editCell(sid,dkey){
  ecStaff=sid; ecDay=dkey; const st=STAFF.find(s=>s.id===sid), has=getRanges(sid+'|'+dkey).length, d=WEEK.find(x=>x.k===dkey);
  openModal(`<h3>${st.name} — ${d.m}/${d.d}(${d.w}) 편성</h3>
    ${T_INPUT(rangesLabel(sid+'|'+dkey))}
+   <button class="btn sec" style="width:100%;margin-bottom:8px" onclick="schedFocusSet('${sid}')">${IC('cal','li sm')} 이 사람 시간표만 보기</button>
    <div class="row"><button class="btn sec" onclick="delCell()">${has?'근무 삭제':'닫기'}</button><button class="btn" onclick="saveCell()">저장</button></div>`);
  const i=$('ecT'); i.focus(); i.select();
 }
