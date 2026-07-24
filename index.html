@@ -402,7 +402,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.20.2'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.20.3'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -1823,7 +1823,7 @@ function runConfirm(){const cb=_confirmCb;_confirmCb=null;closeModal();if(cb)cb(
 /* ═══════════ 재고관리 (Phase 1) ═══════════ */
 function invId(){return 'v'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);}
 function invLog(v,ty,delta,to){ v.log=v.log||[]; v.log.unshift({ty,delta,to,ts:Date.now(),who:curUser().name}); if(v.log.length>60)v.log=v.log.slice(0,60); }
-function isLow(v){ return !v.noAlert && (v.onHand||0)<=(v.par||0); } // 발주 알림 끈 품목은 부족으로 치지 않음
+function isLow(v){ return (v.onHand||0)<=(v.par||0); }
 function catOf(v){ return (v.cat||'').trim()||'미분류'; }
 function jq(s){ return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
 function catList(){ const set=[...CATS]; INV.forEach(v=>{const c=(v.cat||'').trim(); if(c&&!set.includes(c))set.push(c);}); if(INV.some(v=>!(v.cat||'').trim()))set.push('미분류'); return set; }
@@ -1869,9 +1869,6 @@ function invForm(i){ if(!isAdmin(curUser())){toast('품목 추가·수정은 대
        <option value="" ${!(v.grp||'').trim()?'selected':''}>묶지 않음</option>
        ${invGroupNames().map(g=>`<option value="${escAttr(g)}" ${(v.grp||'').trim()===g?'selected':''}>${escAttr(g)}</option>`).join('')}
        <option value="__new__">＋ 새 묶음 만들기…</option></select></div>
-   <label style="display:flex;align-items:center;gap:9px;margin-top:12px;font-size:13px;cursor:pointer">
-     <input type="checkbox" id="ivNoAlert" ${v.noAlert?'checked':''} style="width:18px;height:18px">
-     <span>발주 알림 끄기 <span class="muted" style="font-size:11px">(재료용 · 다른 품목으로 대체돼 직접 발주 안 하는 경우)</span></span></label>
    <div class="row" style="margin-top:14px"><button class="btn sec" onclick="closeModal()">취소</button><button class="btn" onclick="saveItemForm(${i})">저장</button></div>`);
  setTimeout(()=>{const el=$('ivName');if(el)el.focus();},60); }
 function invGroupNames(){ const set=[]; INV.forEach(v=>{const g=(v.grp||'').trim(); if(g&&!set.includes(g))set.push(g);}); return set; }
@@ -1894,13 +1891,12 @@ function saveItemForm(i){
  const par=parseFloat($('ivPar')?$('ivPar').value:'0')||0;
  const cat=$('ivCat')?$('ivCat').value:'';
  const grp=(($('ivGrp')?$('ivGrp').value:'')||'').trim();
- const noAlert=!!($('ivNoAlert')&&$('ivNoAlert').checked);
- if(i>=0){ const v=INV[i]; if(!v)return; v.name=name; v.unit=unit; v.par=par; v.cat=cat; v.grp=grp; v.noAlert=noAlert; v.mt=Date.now();
+ if(i>=0){ const v=INV[i]; if(!v)return; v.name=name; v.unit=unit; v.par=par; v.cat=cat; v.grp=grp; v.mt=Date.now();
    save(); closeModal(); render(); toast('수정했습니다'); return; }
  const excl=i>=0?INV[i].id:null;
  if(INV.some(v=>(v.name||'').trim().toLowerCase()===name.toLowerCase())){toast('이미 있는 품목이에요');return;} // 완전 중복 차단
  const doAdd=()=>{ const maxOrd=INV.reduce((m,x)=>Math.max(m,x.ord||0),0);
-   INV.push({id:invId(),name,unit,par,cat,grp,noAlert,onHand:0,ord:maxOrd+1,ts:Date.now(),mt:Date.now(),log:[]});
+   INV.push({id:invId(),name,unit,par,cat,grp,onHand:0,ord:maxOrd+1,ts:Date.now(),mt:Date.now(),log:[]});
    save(); closeModal(); render(); toast(name+' 추가했습니다'); };
  const sim=invSimilar(name,excl);
  if(sim.length){ // 겹치는 품목 경고(추가는 허용)
@@ -1957,7 +1953,7 @@ function invItemCard(v,i,admin,pos){ const lowF=isLow(v);
    <div style="display:flex;align-items:center;gap:8px">
      ${canOrder?`<span class="invdrag" aria-label="드래그로 순서 변경">≡</span>`:''}
      <div style="flex:1"><b style="font-size:13.5px">${v.name}</b>${(v.grp||'').trim()?`<span style="display:inline-block;margin-left:5px;font-size:10px;font-weight:800;color:#5a7a63;background:#eaf3ec;border-radius:20px;padding:1px 7px;vertical-align:1px">묶음·${escAttr(v.grp.trim())}</span>`:''}
-       <div class="muted" style="font-size:11px">기준 ${v.par}${v.unit}${lowF?` · <b style="color:#b04a3f">발주 필요</b>`:(v.noAlert?` · <span style="color:#9AA79D">발주 알림 꺼짐</span>`:'')}</div></div>
+       <div class="muted" style="font-size:11px">기준 ${v.par}${v.unit}${lowF?` · <b style="color:#b04a3f">발주 필요</b>`:''}</div></div>
      <div style="text-align:right"><b style="font-size:19px;color:${lowF?'#b04a3f':'var(--deep)'}">${v.onHand||0}</b><span class="muted" style="font-size:11px"> ${v.unit}</span></div>
    </div>
    <div style="display:flex;gap:6px;margin-top:9px;flex-wrap:wrap">
