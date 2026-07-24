@@ -402,7 +402,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.19.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.19.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -2637,11 +2637,15 @@ if('serviceWorker' in navigator && location.protocol!=='file:'){
    iOS는 키보드가 떠도 레이아웃 뷰포트(100dvh)를 줄이지 않아 입력창이 키보드에 가려지거나
    붕 뜬다. visualViewport 높이를 그대로 앱에 적용하고, 키보드가 올라온 동안은
    하단 탭을 숨겨 입력창이 키보드에 딱 붙게 한다. */
+let _vvH=0;
 function vvFit(){
  const vv=window.visualViewport; if(!vv)return;
  const app=document.querySelector('.app'); if(!app)return;
- app.style.height=vv.height+'px';
- if(window.scrollY) window.scrollTo(0,0);        // 사파리가 밀어올린 스크롤 되돌림
+ const h=Math.round(vv.height);
+ if(h!==_vvH){ _vvH=h; app.style.height=h+'px'; }  // 값이 실제로 바뀔 때만 → 반복 리플로우(진동) 방지
+ const modalOpen=$('modal')&&$('modal').classList.contains('show');
+ // 모달(바텀시트)이 열려 있으면 iOS가 입력창을 키보드 위로 스크롤하도록 두고 간섭하지 않음
+ if(!modalOpen && window.scrollY) window.scrollTo(0,0);
  if(tab==='chat'&&chatRoom) chatScroll();
 }
 /* 글자를 입력하는 동안은 하단 탭을 숨긴다 — 키보드 위로 탭이 밀려 올라오는 것 방지 */
