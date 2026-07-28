@@ -404,7 +404,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.21.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.21.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -2232,9 +2232,8 @@ function chatListHTML(){
      <div style="max-width:74%;display:flex;flex-direction:column;align-items:${mine?'flex-end':'flex-start'}">
        ${(!mine&&!grpPrev)?`<div style="font-size:11px;font-weight:700;color:${nameColor(m.uid)};margin:1px 0 4px 2px">${escAttr(m.name)}</div>`:''}
        <div style="display:flex;align-items:flex-end;gap:4px;${mine?'flex-direction:row-reverse':''}">
-         <div ondblclick="toggleReact('${m.id}','nep')" style="background:${mine?'#DCF0E1':'#fff'};border:1px solid ${mine?'#c6e5cf':'#E5EAE3'};border-radius:${rad};padding:8px 11px;font-size:13.5px;line-height:1.45;color:var(--ink);white-space:pre-wrap;word-break:break-word">${escAttr(m.text)}</div>
-         ${meta}
-         <span style="flex:none;display:flex;flex-direction:column;gap:1px">${REACTS.map(([k,lbl])=>`<span onclick="toggleReact('${m.id}','${k}')" style="cursor:pointer;font-size:10px;color:#c3ccc5;padding:1px 3px">${lbl}</span>`).join('')}</span></div>
+         <div ontouchstart="reactHoldStart('${m.id}',event)" ontouchend="reactHoldEnd()" ontouchmove="reactHoldEnd()" oncontextmenu="event.preventDefault();openReactMenu('${m.id}')" style="background:${mine?'#DCF0E1':'#fff'};border:1px solid ${mine?'#c6e5cf':'#E5EAE3'};border-radius:${rad};padding:8px 11px;font-size:13.5px;line-height:1.45;color:var(--ink);white-space:pre-wrap;word-break:break-word;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none">${escAttr(m.text)}</div>
+         ${meta}</div>
        ${nepChip}</div></div>`; });
  return out; }
 
@@ -2281,6 +2280,17 @@ function sendChat(){
    .catch(e=>{ toast('전송 실패: '+((e&&(e.code||e.message))||e)); if(el)el.textContent=txt; }); }
 
 const REACTS=[['nep','넵'],['sook','숙지']]; // 확인(넵)·숙지 리액션
+let _lpTimer=null;
+function reactHoldStart(id,e){ clearTimeout(_lpTimer); _lpTimer=setTimeout(()=>{ _lpTimer=null; if(navigator.vibrate)try{navigator.vibrate(12);}catch(x){}; openReactMenu(id); },450); }
+function reactHoldEnd(){ if(_lpTimer){ clearTimeout(_lpTimer); _lpTimer=null; } } // 손 떼거나 스크롤하면 취소
+function openReactMenu(id){ // 꾹 누르면 뜨는 리액션 목록
+ const m=roomMsgs(chatRoom).find(x=>x.id===id); if(!m)return;
+ const items=REACTS.map(([k,lbl])=>{ const on=!!(m[k]&&m[k][CUR]);
+   return `<button class="btn sec" style="display:flex;justify-content:space-between;align-items:center;width:100%;${on?'border-color:#8FD1A6;color:#3c6b4a':''}" onclick="closeModal();toggleReact('${id}','${k}')"><span>${lbl}</span><span style="font-weight:800">${on?'✓ 취소':''}</span></button>`; }).join('');
+ openModal(`<h3 style="color:var(--ink)">리액션 달기</h3>
+   <div class="muted" style="font-size:11.5px;margin:-4px 0 10px">"${escAttr((m.text||'').slice(0,30))}${(m.text||'').length>30?'…':''}"</div>
+   <div style="display:flex;flex-direction:column;gap:8px">${items}
+     <button class="btn sec" onclick="closeModal()">닫기</button></div>`); }
 function toggleReact(msgId,type){ // 넵/숙지 토글
  if(!_fsDb||!_chatApi||!_fbUid||!chatRoom)return;
  if(!REACTS.some(r=>r[0]===type))return;
