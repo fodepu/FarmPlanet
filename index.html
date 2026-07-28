@@ -83,6 +83,8 @@ input.inp{min-height:auto}
 .prog i{display:block;height:6px;border-radius:4px;background:linear-gradient(90deg,#43AB60,#2E8C49)}
 .warnbox{background:#fdf3e7;border:1px solid #f0d9bd;color:#8a5a1f;border-radius:7px;padding:10px 12px;font-size:12px;line-height:1.6}
 .cam{border:1px solid var(--edge);background:#fff;color:var(--deep);border-radius:6px;padding:6px 10px;font-size:11px;font-weight:800;cursor:pointer;flex:none}
+.istep{width:30px;height:30px;border:1px solid var(--edge);background:#fff;color:var(--deep);border-radius:50%;font-size:17px;font-weight:800;line-height:1;cursor:pointer;flex:none;display:flex;align-items:center;justify-content:center;padding:0;touch-action:manipulation}
+.istep:active{background:#eef3ec}
 .invdrag{cursor:grab;color:#b7c2ba;font-size:19px;line-height:1;padding:4px 8px;flex:none;touch-action:none;user-select:none;-webkit-user-select:none}
 .invdrag:active{cursor:grabbing}
 .inv-ghost{opacity:.4} .inv-chosen{background:#f0f6f1}
@@ -402,7 +404,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.20.3'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.21.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -817,12 +819,20 @@ function attLiveStatus(uid){ // 오늘 기준 'work'|'break'|null
  const br=a.breaks||[], last=br[br.length-1];
  return (last&&last.s&&!last.e)?'break':'work';
 }
-function currentDutyHTML(){
- const now=[]; (STAFF||[]).forEach(s=>{ if(s.pending)return; const st=attLiveStatus(s.id); if(st)now.push({s,st,a:ATT[s.id]}); });
- now.sort((x,y)=>(x.a.in||0)-(y.a.in||0));
- const rows= now.length? now.map(({s,st,a})=>`<div class="lrow"><span><span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:${s.c};margin-right:6px"></span>${s.name} <span class="pill" style="background:${st==='break'?'#FAEEDA':'#EAF3DE'};color:${st==='break'?'#854F0B':'#3B6D11'};font-size:10px">${st==='break'?'휴게 중':'근무 중'}</span></span><b style="white-space:nowrap">${fmtT(a.in)}~ · ${fmtDur(workedMs(a))}</b></div>`).join('')
-   : `<p class="muted" style="text-align:center;padding:12px 2px">지금 근무 중인 사람이 없어요.</p>`;
- return `<div class="card" style="margin-top:12px"><h3>${IC('clock','li sm')}현재 근무 중 (${now.length})</h3>${rows}</div>`;
+function currentDutyHTML(){ // 오늘 근무한 사람 전체(근무중·휴게중·퇴근) — 관리자용
+ const tk=todayK(), list=[]; let onNow=0;
+ (STAFF||[]).forEach(s=>{ if(s.pending)return; const r=attRecFor(s.id,tk); if(!r||!r.in)return;
+   const live=r.in&&!r.out, st=attLiveStatus(s.id);
+   const rank = st==='work'?0 : st==='break'?1 : 2; if(rank<2)onNow++;
+   list.push({s,r,st,rank}); });
+ list.sort((a,b)=>(a.rank-b.rank)||((a.r.in||0)-(b.r.in||0)));
+ const rows= list.length? list.map(({s,r,st,rank})=>{
+   const label= rank===0?'근무 중':rank===1?'휴게 중':'퇴근';
+   const bg= rank===0?'#EAF3DE':rank===1?'#FAEEDA':'#EDF1EA', col= rank===0?'#3B6D11':rank===1?'#854F0B':'var(--deep)';
+   const time= r.out? `${fmtT(r.in)}~${fmtT(r.out)}` : `${fmtT(r.in)}~`;
+   return `<div class="lrow"><span><span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:${s.c};margin-right:6px"></span>${s.name} <span class="pill" style="background:${bg};color:${col};font-size:10px">${label}</span></span><b style="white-space:nowrap;font-size:12px">${time} · ${fmtDur(workedMs(r))}</b></div>`;
+ }).join('') : `<p class="muted" style="text-align:center;padding:12px 2px">오늘 근무한 사람이 없어요.</p>`;
+ return `<div class="card" style="margin-top:12px"><h3>${IC('clock','li sm')}오늘 근무 현황 <span class="muted" style="font-size:11px;font-weight:600">· 근무 중 ${onNow}명</span></h3>${rows}</div>`;
 }
 function screenAtt(){
  const admin=isAdmin(curUser()), a=attToday(), st=attStatus(a);
@@ -1914,10 +1924,12 @@ function invNumModal(title,label,val,cb){
    <div class="row" style="margin-top:14px"><button class="btn sec" onclick="closeModal()">취소</button><button class="btn" onclick="invNumOk()">저장</button></div>`);
  _invNumCb=cb; setTimeout(()=>{const el=$('invNum');if(el){el.focus();try{el.select();}catch(e){}}},60); }
 function invNumOk(){ const el=$('invNum'); const n=parseFloat(el?el.value:''); if(isNaN(n)){toast('숫자를 입력하세요');return;} const cb=_invNumCb; _invNumCb=null; closeModal(); if(cb)cb(n); }
-function invCount(i){ const v=INV[i]; if(!v)return;
- invNumModal(`${v.name} · 실사`, `지금 실제 수량 (${v.unit})`, v.onHand||0, n=>{ const delta=n-(v.onHand||0); v.onHand=n; invLog(v,'실사',delta,n); v.mt=Date.now(); save();render();toast(`${v.name} 재고를 ${n}${v.unit}로 맞췄습니다`); }); }
-function invIn(i){ const v=INV[i]; if(!v)return;
- invNumModal(`${v.name} · 입고`, `들어온 수량 (${v.unit})`, '', n=>{ if(!n){toast('숫자를 입력하세요');return;} v.onHand=(v.onHand||0)+n; invLog(v,'입고',n,v.onHand); v.mt=Date.now(); save();render();toast(`${v.name} ${n}${v.unit} 입고 (현재 ${v.onHand}${v.unit})`); }); }
+function invStep(i,d){ const v=INV[i]; if(!v)return; const was=(v.onHand||0); const nv=Math.max(0,was+d); if(nv===was)return;
+ const wasLow=isLow(v); v.onHand=nv; invLog(v, d>0?'입고':'사용', d, nv); v.mt=Date.now(); save();
+ if(tab==='inv' && isLow(v)===wasLow){ const el=$('invList'); if(el){ el.innerHTML=invListHTML(isAdmin(curUser())); initInvSort(); } } // 저재고 상태 그대로면 목록만 갱신(진동 방지)
+ else render(); } // 저재고 상태가 바뀌면 정렬 위해 전체 재렌더
+function invSet(i){ const v=INV[i]; if(!v)return; // 실사·입고 통합: 지금 실제 수량을 입력
+ invNumModal(`${v.name} · 수량`, `지금 실제 수량 (${v.unit})`, v.onHand||0, n=>{ const delta=n-(v.onHand||0); v.onHand=n; invLog(v,'실사',delta,n); v.mt=Date.now(); save();render();toast(`${v.name} ${n}${v.unit}로 맞췄습니다`); }); }
 function invOrder(i){ const v=INV[i]; if(!v)return;
  ORDERS.push({id:'o'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),who:curUser().name,txt:v.name,dt:fmtDT(),ts:Date.now(),mt:Date.now(),st:'wait'});
  save();render();toast(`${v.name}을(를) 발주방에 담았습니다`); }
@@ -1954,11 +1966,13 @@ function invItemCard(v,i,admin,pos){ const lowF=isLow(v);
      ${canOrder?`<span class="invdrag" aria-label="드래그로 순서 변경">≡</span>`:''}
      <div style="flex:1"><b style="font-size:13.5px">${v.name}</b>${(v.grp||'').trim()?`<span style="display:inline-block;margin-left:5px;font-size:10px;font-weight:800;color:#5a7a63;background:#eaf3ec;border-radius:20px;padding:1px 7px;vertical-align:1px">묶음·${escAttr(v.grp.trim())}</span>`:''}
        <div class="muted" style="font-size:11px">기준 ${v.par}${v.unit}${lowF?` · <b style="color:#b04a3f">발주 필요</b>`:''}</div></div>
-     <div style="text-align:right"><b style="font-size:19px;color:${lowF?'#b04a3f':'var(--deep)'}">${v.onHand||0}</b><span class="muted" style="font-size:11px"> ${v.unit}</span></div>
+     <div style="display:flex;align-items:center;gap:7px">
+       <button class="istep" onclick="event.stopPropagation();invStep(${i},-1)" aria-label="1 줄이기">−</button>
+       <div style="text-align:center;min-width:40px"><b style="font-size:19px;color:${lowF?'#b04a3f':'var(--deep)'}">${v.onHand||0}</b><span class="muted" style="font-size:11px"> ${v.unit}</span></div>
+       <button class="istep" onclick="event.stopPropagation();invStep(${i},1)" aria-label="1 늘리기">＋</button></div>
    </div>
    <div style="display:flex;gap:6px;margin-top:9px;flex-wrap:wrap">
-     <button class="cam" onclick="invCount(${i})">실사</button>
-     <button class="cam" onclick="invIn(${i})">입고 +</button>
+     <button class="cam" onclick="invSet(${i})">수량 입력</button>
      ${lowF?`<button class="cam" style="color:var(--deep);border-color:#bfe0c8;font-weight:800" onclick="invOrder(${i})">발주 담기</button>`:''}
      ${admin?`<span class="oact" onclick="invForm(${i})">수정</span><span class="oact del" onclick="delInvItem(${i})">삭제</span>`:''}
    </div></div>`;
@@ -2078,7 +2092,7 @@ function maybeChatSubscribe(){
    _roomUnsub[rid]=onSnapshot(query(collection(_fsDb,'rooms',rid,'messages'),orderBy('cts','desc'),limit(CHAT_LIMIT)),
     (snap)=>{ _chatErr='';
       const arr=[]; snap.forEach(d=>{const v=d.data()||{};
-        arr.push({id:d.id,uid:v.uid,name:v.name||'',text:v.text||'',cts:v.cts||0,nep:v.nep||{}});});
+        arr.push({id:d.id,uid:v.uid,name:v.name||'',text:v.text||'',cts:v.cts||0,nep:v.nep||{},sook:v.sook||{}});});
       CHATR[rid]=arr.reverse();
       if(tab==='chat'&&chatRoom===rid){ const el=$('chatList'); if(el){ el.innerHTML=chatListHTML(); chatMarkRead(); chatScroll(); } }
       else { const ae=document.activeElement; if(!(ae&&(ae.tagName==='INPUT'||ae.tagName==='TEXTAREA'||ae.isContentEditable)))render(); }
@@ -2203,10 +2217,13 @@ function chatListHTML(){
    const tm=String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0');
    const un=msgUnreadCnt(m,chatRoom);
    const rad = mine ? (grpPrev?'14px':'14px 4px 14px 14px') : (grpPrev?'14px':'4px 14px 14px 14px');
-   const neps=Object.keys(m.nep||{}).filter(k=>m.nep[k]);
-   const iNep=neps.indexOf(CUR)!==-1;
-   const nepNames=neps.map(id=>{const s=chatStaff(id);return s?s.name:id;}).join(', ');
-   const nepChip=neps.length?`<div style="margin-top:3px"><span title="${escAttr(nepNames)}" onclick="toggleNep('${m.id}')" style="display:inline-block;cursor:pointer;background:${iNep?'#DCF0E1':'#fff'};border:1px solid ${iNep?'#8FD1A6':'#E5EAE3'};border-radius:20px;padding:1px 8px;font-size:10.5px;font-weight:700;color:${iNep?'#3c6b4a':'#7d8a80'}">넵 ${neps.length}</span></div>`:'';
+   const reactChipsHtml = REACTS.map(([k,lbl])=>{
+     const ids=Object.keys(m[k]||{}).filter(x=>m[k][x]); if(!ids.length)return '';
+     const mineOn=ids.indexOf(CUR)!==-1;
+     const names=ids.map(id=>{const s=chatStaff(id);return s?s.name:id;}).join(', ');
+     return `<span title="${escAttr(names)}" onclick="toggleReact('${m.id}','${k}')" style="display:inline-block;cursor:pointer;background:${mineOn?'#DCF0E1':'#fff'};border:1px solid ${mineOn?'#8FD1A6':'#E5EAE3'};border-radius:20px;padding:1px 8px;font-size:10.5px;font-weight:700;color:${mineOn?'#3c6b4a':'#7d8a80'}">${lbl} ${ids.length}</span>`;
+   }).join('');
+   const nepChip = reactChipsHtml? `<div style="margin-top:3px;display:flex;gap:4px;flex-wrap:wrap">${reactChipsHtml}</div>`:'';
    const meta = grpNext? '' : `<div style="display:flex;flex-direction:column;align-items:${mine?'flex-end':'flex-start'};flex:none;line-height:1.25">
        ${un?`<span style="font-size:10px;font-weight:800;color:#e0913a">${un}</span>`:''}
        <span style="font-size:9.5px;color:#9AA79D">${tm}</span></div>`;
@@ -2215,9 +2232,9 @@ function chatListHTML(){
      <div style="max-width:74%;display:flex;flex-direction:column;align-items:${mine?'flex-end':'flex-start'}">
        ${(!mine&&!grpPrev)?`<div style="font-size:11px;font-weight:700;color:${nameColor(m.uid)};margin:1px 0 4px 2px">${escAttr(m.name)}</div>`:''}
        <div style="display:flex;align-items:flex-end;gap:4px;${mine?'flex-direction:row-reverse':''}">
-         <div ondblclick="toggleNep('${m.id}')" style="background:${mine?'#DCF0E1':'#fff'};border:1px solid ${mine?'#c6e5cf':'#E5EAE3'};border-radius:${rad};padding:8px 11px;font-size:13.5px;line-height:1.45;color:var(--ink);white-space:pre-wrap;word-break:break-word">${escAttr(m.text)}</div>
+         <div ondblclick="toggleReact('${m.id}','nep')" style="background:${mine?'#DCF0E1':'#fff'};border:1px solid ${mine?'#c6e5cf':'#E5EAE3'};border-radius:${rad};padding:8px 11px;font-size:13.5px;line-height:1.45;color:var(--ink);white-space:pre-wrap;word-break:break-word">${escAttr(m.text)}</div>
          ${meta}
-         ${neps.length?'':`<span onclick="toggleNep('${m.id}')" style="flex:none;cursor:pointer;font-size:10px;color:#c3ccc5;padding:2px 4px">넵</span>`}</div>
+         <span style="flex:none;display:flex;flex-direction:column;gap:1px">${REACTS.map(([k,lbl])=>`<span onclick="toggleReact('${m.id}','${k}')" style="cursor:pointer;font-size:10px;color:#c3ccc5;padding:1px 3px">${lbl}</span>`).join('')}</span></div>
        ${nepChip}</div></div>`; });
  return out; }
 
@@ -2256,22 +2273,24 @@ function sendChat(){
  if(!_fbUid){toast('로그인 후 이용할 수 있어요');return;}
  const {collection,addDoc,serverTimestamp}=_chatApi;
  const r=roomById(chatRoom);
- const payload={auth:_fbUid,uid:CUR,name:(curUser()&&curUser().name)||'',text:txt.slice(0,1000),cts:Date.now(),ts:serverTimestamp(),nep:{}};
+ const payload={auth:_fbUid,uid:CUR,name:(curUser()&&curUser().name)||'',text:txt.slice(0,1000),cts:Date.now(),ts:serverTimestamp(),nep:{},sook:{}};
  if(el)el.textContent='';
  addDoc(collection(_fsDb,'rooms',chatRoom,'messages'),payload)
    .then(()=>pushSend(`${payload.name||'FarmPlanet'} · ${r?r.name:''}`,txt.slice(0,120),
      {tag:'chat-'+chatRoom, onlyUids:roomMembers(r)}))
    .catch(e=>{ toast('전송 실패: '+((e&&(e.code||e.message))||e)); if(el)el.textContent=txt; }); }
 
-function toggleNep(msgId){ // 넵 — 확인했다는 표시
+const REACTS=[['nep','넵'],['sook','숙지']]; // 확인(넵)·숙지 리액션
+function toggleReact(msgId,type){ // 넵/숙지 토글
  if(!_fsDb||!_chatApi||!_fbUid||!chatRoom)return;
+ if(!REACTS.some(r=>r[0]===type))return;
  const {doc,updateDoc}=_chatApi;
  const m=roomMsgs(chatRoom).find(x=>x.id===msgId); if(!m)return;
- const on=!(m.nep&&m.nep[CUR]);
- m.nep=m.nep||{}; m.nep[CUR]=on;                       // 즉시 반영(낙관적)
+ const on=!(m[type]&&m[type][CUR]);
+ m[type]=m[type]||{}; m[type][CUR]=on;                 // 즉시 반영(낙관적)
  const el=$('chatList'); if(el)el.innerHTML=chatListHTML();
- updateDoc(doc(_fsDb,'rooms',chatRoom,'messages',msgId),{['nep.'+CUR]:on})
-   .catch(e=>{ m.nep[CUR]=!on; if(el)el.innerHTML=chatListHTML();
+ updateDoc(doc(_fsDb,'rooms',chatRoom,'messages',msgId),{[type+'.'+CUR]:on})
+   .catch(e=>{ m[type][CUR]=!on; if(el)el.innerHTML=chatListHTML();
      toast('반응 실패: '+((e&&(e.code||e.message))||e)); }); }
 
 /* ═══════════ 구비서류 보관 (관리자 전용 · Firestore staffdocs) ═══════════
