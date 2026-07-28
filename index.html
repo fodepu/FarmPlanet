@@ -404,7 +404,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.22.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.22.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -448,7 +448,12 @@ function schedUndo(){
  if(SCHEDUNDO.wk!==WEEK[0].k){toast('그 작업을 한 주로 이동한 뒤 눌러주세요');return;}
  const u=SCHEDUNDO;
  u.keys.forEach(k=>{ if(u.snap[k]===null||u.snap[k]===undefined) delete SHIFTS[k]; else SHIFTS[k]=u.snap[k]; });
- SCHEDUNDO=null; touchSched(); render(); toast(`"${u.label}" 되돌렸습니다 — 공유하려면 시간표 공유`); }
+ SCHEDUNDO=null; touchSched(); save(); render();
+ // 원격에 바로 반영 — 안 그러면 앞선 작업의 동기화 응답이 되돌리기를 덮어쓴다
+ if(SYNC_ENABLED&&_fsSet){ const blob=JSON.stringify(syncPayload()); _lastSyncJSON=blob;
+   _fsSet({blob,ts:Date.now()}).then(()=>toast(`"${u.label}" 되돌렸습니다 ✓`))
+     .catch(e=>toast('되돌렸지만 공유 실패: '+((e&&(e.code||e.message))||e))); }
+ else toast(`"${u.label}" 되돌렸습니다`); }
 function defaults(){
  STAFF=[
   {id:'boss',name:'대표님', wage:0,       c:PALETTE[0], email:ADMIN_EMAILS[0]},
@@ -1166,11 +1171,7 @@ function screenSched(){
  const actions=`
    <div class="row" style="margin-bottom:8px">
     <button class="btn sec" style="${onlyMine?'background:var(--deep);color:#fff;border-color:var(--deep)':''}" onclick="onlyMine=!onlyMine;schedFocus=null;render()">${onlyMine?'전체 보기':'내 근무만'}</button></div>
-   ${canSchedFocus()?`<div class="row" style="margin-bottom:8px">
-     <select class="tsel" style="flex:1;${schedFocus?'border-color:var(--deep);color:var(--deep);font-weight:700':''}" onchange="schedFocusPick(this.value)">
-       <option value="">직원별 보기 — 전체</option>
-       ${STAFF.filter(s=>!s.pending).map(s=>`<option value="${s.id}" ${schedFocus===s.id?'selected':''}>${escAttr(s.name)}</option>`).join('')}
-     </select></div>`:''}
+   ${schedFocus?`<div class="row" style="margin-bottom:8px"><button class="btn sec" style="background:var(--deep);color:#fff;border-color:var(--deep)" onclick="schedFocus=null;render()">${escAttr((STAFF.find(s=>s.id===schedFocus)||{}).name||'')} 근무만 보는 중 · 전체 보기</button></div>`:''}
    ${admin?`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px">
      <button class="btn sec" style="padding:8px 2px;font-size:11px;line-height:1.35" onclick="copyLastWeek()">지난주<br>복사</button>
      <button class="btn sec" style="padding:8px 2px;font-size:11px;line-height:1.35" onclick="applyPattern()">기본패턴<br>불러오기</button>
