@@ -404,7 +404,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.21.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.21.2'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -1154,7 +1154,11 @@ function screenSched(){
  const actions=`
    <div class="row" style="margin-bottom:8px">
     <button class="btn sec" style="${onlyMine?'background:var(--deep);color:#fff;border-color:var(--deep)':''}" onclick="onlyMine=!onlyMine;schedFocus=null;render()">${onlyMine?'전체 보기':'내 근무만'}</button></div>
-   ${schedFocus?`<div class="row" style="margin-bottom:8px"><button class="btn sec" style="background:var(--deep);color:#fff;border-color:var(--deep)" onclick="schedFocus=null;render()">${(STAFF.find(s=>s.id===schedFocus)||{}).name||''} 근무만 보는 중 · 전체 보기</button></div>`:''}
+   ${canSchedFocus()?`<div class="row" style="margin-bottom:8px">
+     <select class="tsel" style="flex:1;${schedFocus?'border-color:var(--deep);color:var(--deep);font-weight:700':''}" onchange="schedFocusPick(this.value)">
+       <option value="">직원별 보기 — 전체</option>
+       ${STAFF.filter(s=>!s.pending).map(s=>`<option value="${s.id}" ${schedFocus===s.id?'selected':''}>${escAttr(s.name)}</option>`).join('')}
+     </select></div>`:''}
    ${admin?`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px">
      <button class="btn sec" style="padding:8px 2px;font-size:11px;line-height:1.35" onclick="copyLastWeek()">지난주<br>복사</button>
      <button class="btn sec" style="padding:8px 2px;font-size:11px;line-height:1.35" onclick="applyPattern()">기본패턴<br>불러오기</button>
@@ -1169,8 +1173,11 @@ function screenSched(){
    ${admin?`<button class="btn" style="margin-top:12px" onclick="shareSchedule()">${IC('swap','li sm')} 시간표 공유 — 모든 직원에게 반영</button>`:''}
    <div class="muted" style="font-size:10.5px;text-align:center;margin-top:8px">실시간 동기화: ${SYNC_ENABLED?_syncStat:'꺼짐'}${_syncAt?' · '+new Date(_syncAt).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}):''} · v${APP_VER}</div>`;
 }
+function canSchedFocus(){ return isAdmin(curUser()); } // 관리자·매니저만 사람별 보기
 function schedVisible(id){ return (!onlyMine||id===CUR) && (!schedFocus||id===schedFocus); }
-function schedFocusSet(id){ schedFocus=(schedFocus===id?null:id); onlyMine=false; if($('modal')&&$('modal').classList.contains('show'))closeModal(); render(); }
+function schedFocusPick(id){ if(!canSchedFocus())return; schedFocus=id||null; onlyMine=false; render(); }
+function schedFocusSet(id){ if(!canSchedFocus()){toast('관리자·매니저만 사용할 수 있어요');return;}
+ schedFocus=(schedFocus===id?null:id); onlyMine=false; if($('modal')&&$('modal').classList.contains('show'))closeModal(); render(); }
 function segLayout(dkey){
  // 각 근무 = 온전한 직사각형. 겹침 그룹 안에서 레인(0=기본,전체폭)을 매기고
  // 렌더에서 레인1=오른쪽, 레인2=왼쪽… 번갈아 붙여 위로 겹친다.
@@ -1201,7 +1208,7 @@ function renderGrid(){
      let left=0,width=100,z=0,cls='wsh';
      if(g.lane>0){ const W=46; width=W; z=g.lane; cls='wsh ov'; left=(g.lane%2===1)?100-W:0; }
      return `<div class="${cls}" style="top:${top}%;height:${h}%;left:${left}%;width:${width}%;background:${g.s.c};z-index:${z}"
-       onclick="event.stopPropagation();${admin?`editCell('${g.s.id}','${d.k}')`:`schedFocusSet('${g.s.id}')`}">${lbl}</div>`;
+       ${admin?`onclick="event.stopPropagation();editCell('${g.s.id}','${d.k}')"`:(canSchedFocus()?`onclick="event.stopPropagation();schedFocusSet('${g.s.id}')"`:'')}>${lbl}</div>`;
    }).join('');
    const kind=dayKind(d.k), redC='#d33a2c', satC='#2b6cb0';
    const dc = kind==='red'?redC:(kind==='sat'?satC:'');
@@ -1216,7 +1223,7 @@ function renderGrid(){
    </div>`;
  }).join('');
  return `<div class="wcal z7"><div class="wtime">${times}</div>${cols}</div>
-   <div class="muted" style="font-size:11px;margin-bottom:12px">${onlyMine?'내 근무만 · ':''}${admin?'블록 = 수정 · 요일＋ = 추가 · ':'이름 누르면 그 사람 근무만 · '}겹침 = 나란히 칸 분할 · 보라 음영 = 피크</div>`;
+   <div class="muted" style="font-size:11px;margin-bottom:12px">${onlyMine?'내 근무만 · ':''}${admin?'블록 = 수정 · 요일＋ = 추가 · ':(canSchedFocus()?'블록 누르면 그 사람 근무만 · ':'')}겹침 = 나란히 칸 분할 · 보라 음영 = 피크</div>`;
 }
 /* 빠른 입력 */
 let ecStaff=null, ecDay=null;
@@ -1247,7 +1254,7 @@ function editCell(sid,dkey){
  ecStaff=sid; ecDay=dkey; const st=STAFF.find(s=>s.id===sid), has=getRanges(sid+'|'+dkey).length, d=WEEK.find(x=>x.k===dkey);
  openModal(`<h3>${st.name} — ${d.m}/${d.d}(${d.w}) 편성</h3>
    ${T_INPUT(rangesLabel(sid+'|'+dkey))}
-   <button class="btn sec" style="width:100%;margin-bottom:8px" onclick="schedFocusSet('${sid}')">${IC('cal','li sm')} 이 사람 시간표만 보기</button>
+   ${canSchedFocus()?`<button class="btn sec" style="width:100%;margin-bottom:8px" onclick="schedFocusSet('${sid}')">${IC('cal','li sm')} 이 사람 시간표만 보기</button>`:''}
    <div class="row"><button class="btn sec" onclick="delCell()">${has?'근무 삭제':'닫기'}</button><button class="btn" onclick="saveCell()">저장</button></div>`);
  const i=$('ecT'); i.focus(); i.select();
 }
