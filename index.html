@@ -404,7 +404,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.21.2'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.22.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -437,6 +437,18 @@ let CHATR={},_roomUnsub={},chatRoom=null;   // 방별 메시지 / 방별 구독 
 let _docApi=null;
 let STAFF, SHIFTS, ORDERS, NOTICES, CK, SUBMITS, CUR, REFS, READS, SCHED_TS=0, DELETED=[], ODEL=[], PATTERN=null, ATT={}, STORE_LOC=null, WAGE=0, ATTREQ=[], ATTLOG={}, BOARD=[], STORE_IP=null, INV=[], CATS=[], HOL=[], WIFILOCK=false, ROOMS=[], IDEL=[], CDEL=[];
 function touchSched(){SCHED_TS=Date.now();} // 시간표 변경 시각 기록(신규 표시용)
+/* ── 시간표 일괄 작업 되돌리기 (지난주 복사·기본패턴·초기화) ── */
+let SCHEDUNDO=null; // {label, keys:[...], snap:{key:value|null}, wk}
+function schedSnapshot(label){
+ const snap={}, keys=[];
+ WEEK.forEach(d=>STAFF.forEach(s=>{ const k=s.id+'|'+d.k; keys.push(k); snap[k]=(SHIFTS[k]!==undefined)?SHIFTS[k]:null; }));
+ SCHEDUNDO={label,keys,snap,wk:WEEK[0].k}; }
+function schedUndo(){
+ if(!SCHEDUNDO){toast('되돌릴 작업이 없어요');return;}
+ if(SCHEDUNDO.wk!==WEEK[0].k){toast('그 작업을 한 주로 이동한 뒤 눌러주세요');return;}
+ const u=SCHEDUNDO;
+ u.keys.forEach(k=>{ if(u.snap[k]===null||u.snap[k]===undefined) delete SHIFTS[k]; else SHIFTS[k]=u.snap[k]; });
+ SCHEDUNDO=null; touchSched(); render(); toast(`"${u.label}" 되돌렸습니다 — 공유하려면 시간표 공유`); }
 function defaults(){
  STAFF=[
   {id:'boss',name:'대표님', wage:0,       c:PALETTE[0], email:ADMIN_EMAILS[0]},
@@ -1163,7 +1175,8 @@ function screenSched(){
      <button class="btn sec" style="padding:8px 2px;font-size:11px;line-height:1.35" onclick="copyLastWeek()">지난주<br>복사</button>
      <button class="btn sec" style="padding:8px 2px;font-size:11px;line-height:1.35" onclick="applyPattern()">기본패턴<br>불러오기</button>
      <button class="btn sec" style="padding:8px 2px;font-size:11px;line-height:1.35" onclick="savePattern()">기본패턴<br>저장</button>
-     <button class="btn sec" style="padding:8px 2px;font-size:11px;line-height:1.35;color:var(--warn);border-color:#f0d9bd" onclick="resetWeek()">시간표<br>초기화</button></div>`:''}`;
+     <button class="btn sec" style="padding:8px 2px;font-size:11px;line-height:1.35;color:var(--warn);border-color:#f0d9bd" onclick="resetWeek()">시간표<br>초기화</button></div>
+     ${(SCHEDUNDO&&SCHEDUNDO.wk===WEEK[0].k)?`<div class="row" style="margin-bottom:10px"><button class="btn sec" style="border-color:#bfd0e8;color:#2f6fd0" onclick="schedUndo()">${IC('refresh','li sm')} "${escAttr(SCHEDUNDO.label)}" 되돌리기</button></div>`:''}`:''}`;
  const view=renderGrid();
  return `<h2 class="title">${IC('cal')}시간표</h2>
    <div class="card note-card"><div class="muted" style="font-size:11.5px;line-height:1.65">
@@ -1176,6 +1189,13 @@ function screenSched(){
 function canSchedFocus(){ return isAdmin(curUser()); } // 관리자·매니저만 사람별 보기
 function schedVisible(id){ return (!onlyMine||id===CUR) && (!schedFocus||id===schedFocus); }
 function schedFocusPick(id){ if(!canSchedFocus())return; schedFocus=id||null; onlyMine=false; render(); }
+function schedBlockTap(sid,dkey){ // 전체 보기 → 그 사람만 보기 → (편집권한자면) 편집
+ if(canSchedFocus()){
+   if(schedFocus===sid){ editCell(sid,dkey); return; }   // 이미 그 사람만 보는 중이면 편집
+   schedFocusSet(sid); return;                            // 아니면 먼저 그 사람만 보기
+ }
+ if(sid===CUR){ onlyMine=!onlyMine; render(); }           // 일반 직원: 본인 블록으로 내 근무만 토글
+}
 function schedFocusSet(id){ if(!canSchedFocus()){toast('관리자·매니저만 사용할 수 있어요');return;}
  schedFocus=(schedFocus===id?null:id); onlyMine=false; if($('modal')&&$('modal').classList.contains('show'))closeModal(); render(); }
 function segLayout(dkey){
@@ -1208,7 +1228,7 @@ function renderGrid(){
      let left=0,width=100,z=0,cls='wsh';
      if(g.lane>0){ const W=46; width=W; z=g.lane; cls='wsh ov'; left=(g.lane%2===1)?100-W:0; }
      return `<div class="${cls}" style="top:${top}%;height:${h}%;left:${left}%;width:${width}%;background:${g.s.c};z-index:${z}"
-       ${admin?`onclick="event.stopPropagation();editCell('${g.s.id}','${d.k}')"`:(canSchedFocus()?`onclick="event.stopPropagation();schedFocusSet('${g.s.id}')"`:'')}>${lbl}</div>`;
+       onclick="event.stopPropagation();schedBlockTap('${g.s.id}','${d.k}')">${lbl}</div>`;
    }).join('');
    const kind=dayKind(d.k), redC='#d33a2c', satC='#2b6cb0';
    const dc = kind==='red'?redC:(kind==='sat'?satC:'');
@@ -1223,7 +1243,7 @@ function renderGrid(){
    </div>`;
  }).join('');
  return `<div class="wcal z7"><div class="wtime">${times}</div>${cols}</div>
-   <div class="muted" style="font-size:11px;margin-bottom:12px">${onlyMine?'내 근무만 · ':''}${admin?'블록 = 수정 · 요일＋ = 추가 · ':(canSchedFocus()?'블록 누르면 그 사람 근무만 · ':'')}겹침 = 나란히 칸 분할 · 보라 음영 = 피크</div>`;
+   <div class="muted" style="font-size:11px;margin-bottom:12px">${onlyMine?'내 근무만 · ':''}${canSchedFocus()?(schedFocus?'블록 = 수정 · 요일＋ = 추가 · ':'블록 = 그 사람만 보기 · 요일＋ = 추가 · '):'내 블록 = 내 근무만 · '}겹침 = 나란히 칸 분할 · 보라 음영 = 피크</div>`;
 }
 /* 빠른 입력 */
 let ecStaff=null, ecDay=null;
@@ -1282,15 +1302,18 @@ function savePattern(){
  WEEK.forEach((d,i)=>{const day=[]; STAFF.forEach(s=>{const rs=getRanges(s.id+'|'+d.k); if(rs.length)day.push({id:s.id,ranges:rs.map(r=>({s:r.s,e:r.e}))});}); p[i]=day;});
  PATTERN=p; save(); toast('현재 주간을 기본 패턴으로 저장했습니다 ✓');}
 function applyPattern(){
+ schedSnapshot('기본패턴 불러오기');
  if(PATTERN){ WEEK.forEach((d,i)=>{(PATTERN[i]||[]).forEach(e=>{ if(STAFF.find(s=>s.id===e.id)) setRanges(e.id+'|'+d.k, e.ranges.map(r=>({s:r.s,e:r.e}))); });}); }
  else { seedWeek(WEEK); }
  touchSched(); render(); toast(PATTERN?'저장된 기본 패턴을 불러왔습니다 — 공유하려면 시간표 공유':'기본 패턴을 채웠습니다 — 검토 후 수정');}
 function autoFill(){applyPattern();}
 function resetWeek(){
- askConfirm(`<b>${WEEK[0].m}/${WEEK[0].d} ~ ${WEEK[6].m}/${WEEK[6].d}</b> 주간 시간표를 <b>모두 삭제</b>합니다.<br>되돌릴 수 없어요.`,'초기화',()=>{
+ askConfirm(`<b>${WEEK[0].m}/${WEEK[0].d} ~ ${WEEK[6].m}/${WEEK[6].d}</b> 주간 시간표를 <b>모두 삭제</b>합니다.<br>실수했다면 바로 <b>되돌리기</b>로 복구할 수 있어요.`,'초기화',()=>{
+   schedSnapshot('시간표 초기화');
    WEEK.forEach(d=>STAFF.forEach(s=>{delete SHIFTS[s.id+'|'+d.k];}));
    touchSched();render();toast('이번 주 시간표를 초기화했습니다 — 공유하려면 시간표 공유를 누르세요');});}
 function copyLastWeek(){
+ schedSnapshot('지난주 복사');
  const prev=buildWeek(weekOffset-1);
  let n=0;
  prev.forEach((pd,i)=>{STAFF.forEach(s=>{
