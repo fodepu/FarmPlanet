@@ -404,7 +404,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.22.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.22.2'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -1203,7 +1203,8 @@ function segLayout(dkey){
  // 각 근무 = 온전한 직사각형. 겹침 그룹 안에서 레인(0=기본,전체폭)을 매기고
  // 렌더에서 레인1=오른쪽, 레인2=왼쪽… 번갈아 붙여 위로 겹친다.
  const list=[];
- STAFF.forEach(s=>{ getRanges(s.id+'|'+dkey).forEach((r,ri)=>list.push({s,sh:r,key:s.id+'#'+ri,a:t2n(r.s),b:t2n(r.e)}));
+ STAFF.forEach(s=>{ if(!schedVisible(s.id))return;   // '내 근무만'·'그 사람만 보기' 필터
+   getRanges(s.id+'|'+dkey).forEach((r,ri)=>list.push({s,sh:r,key:s.id+'#'+ri,a:t2n(r.s),b:t2n(r.e)}));
  });
  list.sort((p,q)=>p.a-q.a||p.b-q.b);
  const out=[]; let comp=[], compEnd=-1;
