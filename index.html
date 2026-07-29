@@ -404,7 +404,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.23.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.24.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -588,7 +588,7 @@ function shareSchedule(){
  if(!_fsSet){toast('동기화 연결 중이에요 — 잠시 후 다시 시도하세요');return;}
  _syncReady=true;
  const blob=JSON.stringify(syncPayload()); _lastSyncJSON=blob;
- _fsSet({blob,ts:Date.now()}).then(()=>toast('시간표를 모든 직원에게 공유했습니다'))
+ _fsSet({blob,ts:Date.now()}).then(()=>{pushUploadSched(true);toast('시간표를 모든 직원에게 공유했습니다');})
    .catch(e=>{_syncStat='전송 오류: '+(e&&(e.code||e.message)||e);toast('공유 실패: '+(e&&(e.code||e.message)||e));if(CUR)render();});
 }
 function load(){
@@ -693,7 +693,7 @@ function wifiSaveManual(){ if(WIFILOCK){toast('먼저 고정을 해제하세요'
 function toggleWifiLock(){ if(!STORE_IP && !WIFILOCK){toast('먼저 매장 IP를 등록하세요');return;} WIFILOCK=!WIFILOCK; save(); render(); openWifiSetup(); toast(WIFILOCK?'와이파이 설정을 고정했습니다 🔒':'고정을 해제했습니다 🔓'); }
 function logAtt(uid){ uid=uid||CUR; const a=ATT[uid]; if(a&&a.date){ ATTLOG[uid]=ATTLOG[uid]||{}; ATTLOG[uid][a.date]={in:a.in,out:a.out,breaks:(a.breaks||[]).map(b=>({s:b.s,e:b.e}))}; } }
 function clockIn(){ const a=attToday(); if(a&&a.in&&!a.out){toast('이미 출근 상태예요');return;}
- wifiGate('출근',()=>{ ATT[CUR]={date:todayK(),in:Date.now(),out:null,breaks:[]}; logAtt(); render(); reAtt(); toast('출근했습니다 — 좋은 하루 되세요!'); },
+ wifiGate('출근',()=>{ ATT[CUR]={date:todayK(),in:Date.now(),out:null,breaks:[]}; logAtt(); pushAttDone('in'); render(); reAtt(); toast('출근했습니다 — 좋은 하루 되세요!'); },
    msg=>offerClockInReq(msg)); }
 function offerClockInReq(reason){
  openModal(`<h3>출근이 확인되지 않았어요</h3>
@@ -708,7 +708,7 @@ function sendClockInReq(){
  closeModal(); save(); render(); toast('관리자에게 출근 요청을 보냈습니다'); }
 function clockOut(){ const a=attToday(); if(!a||!a.in){toast('먼저 출근하세요');return;} if(a.out){toast('이미 퇴근했어요');return;}
  // 퇴근은 와이파이 게이트 없음 — 어디서든 가능(깜빡한 퇴근 등). 시각이 다르면 '기록 수정 요청'
- const b=attOpenBreak(a); if(b)b.e=Date.now(); a.out=Date.now(); logAtt(); render(); reAtt(); toast('퇴근했습니다 — 시각이 다르면 기록 수정 요청하세요'); }
+ const b=attOpenBreak(a); if(b)b.e=Date.now(); a.out=Date.now(); logAtt(); pushAttDone('out'); render(); reAtt(); toast('퇴근했습니다 — 시각이 다르면 기록 수정 요청하세요'); }
 function breakStart(){ const a=attToday(); if(!a||!a.in||a.out){toast('출근 상태에서만 가능해요');return;} if(attOpenBreak(a)){toast('이미 휴게 중이에요');return;}
  a.breaks.push({s:Date.now()}); logAtt(); render(); reAtt(); toast('휴게 시작 — 푹 쉬세요'); }
 function breakEnd(){ const a=attToday(); const b=a&&attOpenBreak(a); if(!b){toast('휴게 중이 아니에요');return;} b.e=Date.now(); logAtt(); render(); reAtt(); toast('복귀했습니다'); }
@@ -2291,8 +2291,8 @@ function screenChat(){
    <div id="chatList" style="flex:1;min-height:0;overflow-y:auto;background:#F1F4F0;padding:8px 12px 14px">${chatListHTML()}</div>
    <div style="flex:none;background:#fff;border-top:1px solid var(--edge);padding:8px 12px">
      <div style="display:flex;gap:8px;align-items:center">
-       <div class="chatin" id="chatText" contenteditable="true" role="textbox" aria-label="메시지 입력" data-ph="메시지 입력" enterkeyhint="send"
-            oninput="chatInputTrim(this)" onkeydown="if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();sendChatTap(event);}"></div>
+       <div class="chatin" id="chatText" contenteditable="true" role="textbox" aria-label="메시지 입력" data-ph="메시지 입력" enterkeyhint="enter"
+            oninput="chatInputTrim(this)" onkeydown="chatKey(event)"></div>
        <button class="sfab" onpointerdown="sendChatTap(event)" onclick="sendChatTap(event)" aria-label="전송">${IC('up','li sm')}</button></div>
    </div>`; }
 
@@ -2303,6 +2303,13 @@ function sendChatTap(e){
  if(e&&e.preventDefault)e.preventDefault();
  const now=Date.now(); if(now-_sendGuard<400)return; _sendGuard=now;
  sendChat(); }
+/* 엔터 처리 — 폰(터치)은 엔터=줄바꿈(전송은 화살표), PC는 엔터=전송·Shift+엔터=줄바꿈 */
+const IS_TOUCH=(typeof matchMedia==='function')&&matchMedia('(pointer:coarse)').matches;
+function chatKey(e){
+ if(e.key!=='Enter'||e.isComposing)return;
+ if(IS_TOUCH)return;                 // 폰: 기본 줄바꿈 유지
+ if(e.shiftKey)return;               // PC: Shift+엔터=줄바꿈
+ e.preventDefault(); sendChatTap(e); }
 function chatInputText(el){ return el?String(el.innerText||el.textContent||'').replace(/ /g,' ') : ''; }
 function chatInputTrim(el){ // 1000자 제한 (contenteditable엔 maxlength가 없음)
  const t=chatInputText(el); if(t.length<=1000)return;
@@ -2677,6 +2684,31 @@ async function pushReset(){ // 저장된 구독 전체 삭제 — 각 기기는 
    toast(`${j.deleted||0}개 정리했어요. 각자 앱을 열면 다시 등록돼요`);
  }catch(e){ toast('정리 실패: '+((e&&e.message)||e)); } }
 
+/* ── 출퇴근 5분 전 알림: 오늘 근무 일정을 서버에 올려둔다(관리자·매니저가 올리면 전원분) ── */
+let _schedUpAt=0;
+async function pushUploadSched(force){
+ try{
+   if(!CUR||!isAdmin(curUser()))return;              // 편성 권한자가 대표로 업로드
+   if(!force && Date.now()-_schedUpAt<30*60*1000)return;   // 30분에 한 번이면 충분
+   const td=TODAY(); if(!td)return;
+   const items=[];
+   (STAFF||[]).forEach(s=>{ if(s.pending)return;
+     const rs=getRanges(s.id+'|'+td.k); if(!rs.length)return;
+     const first=rs[0], last=rs[rs.length-1];
+     items.push({uid:s.id,name:s.name,in:first.s,out:last.e}); });
+   const idToken=await fbIdToken(); if(!idToken)return;
+   await fetch(PUSH_URL+'/sched',{method:'POST',headers:{'Content-Type':'application/json'},
+     body:JSON.stringify({idToken,date:td.k,items})});
+   _schedUpAt=Date.now();
+ }catch(e){}
+}
+async function pushAttDone(kind){ // 출근/퇴근 눌렀으면 그 알림은 그만
+ try{ const td=TODAY(); if(!td||!CUR)return;
+   const idToken=await fbIdToken(); if(!idToken)return;
+   await fetch(PUSH_URL+'/attdone',{method:'POST',headers:{'Content-Type':'application/json'},
+     body:JSON.stringify({idToken,date:td.k,uid:CUR,kind})});
+ }catch(e){}
+}
 /* 알림 보내기 — 실패해도 앱 동작에 영향 없도록 조용히 처리(본인 기기는 제외) */
 async function pushSend(title,body,opts){
  try{
@@ -2738,6 +2770,7 @@ function render(){
    ${IC(n[1],'li lg')}${n[2]}${dot?'<span class="ndot"></span>':''}</button>`;}).join("");
  maybeChatSubscribe(); // 로그인 후 최초 1회 구독(이미 구독됐으면 즉시 반환)
  pushMaybeResync();    // 로그인 확정 후 알림 구독을 내 계정으로 재등록(1회)
+ pushUploadSched();    // 오늘 근무 일정을 알림 서버에 올림(관리자·매니저, 30분 간격)
  pushUpdateBtn();      // 상단바 벨 상태 반영
  save();
 }
