@@ -442,7 +442,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.28.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.28.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -2692,7 +2692,7 @@ async function docDelete(emp,t){
 
 
 /* ═══════════ 도움말 — 중앙 팝업 · 한 화면씩 넘기기 ═══════════ */
-const HELP_KEY='farmplanet.helpseen', HELP_VER=3; // 숫자를 올리면 모두에게 다시 1회 표시
+const HELP_KEY='farmplanet.helpseen', HELP_VER=4; // 숫자를 올리면 모두에게 다시 1회 표시
 function helpIsIOS(){ return /iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1); }
 let helpDev=null, helpIdx=-1;   // 기기 선택(-1=선택 화면), 현재 단계
 
@@ -2730,12 +2730,6 @@ function helpSteps(){
      st('·','<b>홈 → 시간표</b>에서 이번 주 근무를 봅니다')
     +st('·','<b>내 근무만</b> 버튼으로 내 일정만 볼 수 있어요')
     +st('·','일정 변경·대타는 <b>홈 → 공지·게시판</b>에 <b>'+BOARD_LEAD_DAYS+'일 전까지</b> 올려주세요') },
-  { icon:'chat', title:'채팅', body:
-     st('·','아래 <b>채팅</b> 탭에서 방을 골라 들어갑니다')
-    +st('·','메시지를 <b>꾹 누르면</b> 복사·수정·삭제와 <b>넵/숙지</b>가 나와요')
-    +st('·','공지를 봤다는 뜻으로 <b>넵</b> 또는 <b>숙지</b>를 눌러주세요')
-    +st('·','폰에서 <b>엔터는 줄바꿈</b>, 보내기는 <b>↑ 버튼</b>이에요')
-    +st('·','채팅 탭을 <b>다시 누르면</b> 방 목록으로 나옵니다') },
   { icon:'box', title:'발주 · 재고', body:
      st('·','<b>발주</b> 탭: 필요한 물건을 적고 <b>등록</b>')
     +st('·','<b>홈 → 재고관리</b>: <b>＋ / −</b> 로 수량을 바로 조절')
