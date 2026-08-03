@@ -419,7 +419,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.25.2'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.26.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -790,26 +790,50 @@ function parseTs(v){ // "14:00" "14" "2"(→오후2시) "230"(2:30) 등 유연 �
  if(h>23||mm>59)return null;
  const d=new Date(); d.setHours(h,mm,0,0); return d.getTime(); }
 function attReqCount(){ return (ATTREQ||[]).length; }
+function brkLabel(a){ // 휴게 기록 → "12:00~13:00, 15:00~15:30"
+ return ((a&&a.breaks)||[]).filter(b=>b&&b.s).map(b=>fmtT(b.s)+'~'+(b.e?fmtT(b.e):'')).join(', '); }
+function parseBrk(v){ // "12~13, 15~15:30" → [{s,e}] · 빈칸이면 []
+ const txt=String(v||'').trim(); if(!txt)return [];
+ const out=[];
+ for(const part of txt.split(',')){ const t=part.trim(); if(!t)continue;
+   const m=t.split(/[~\-–]/); if(m.length!==2)return null;
+   const s=parseTs(m[0]); if(!s)return null;
+   const eStr=m[1].trim();
+   const e=eStr? parseTs(eStr) : null;
+   if(eStr&&!e)return null;
+   if(e&&e<=s)return null;
+   out.push({s,e}); }
+ return out; }
 function reqAtt(){ const a=attToday(); if(!a){toast('오늘 출근 기록이 없어요');return;}
  openModal(`<h3>근태 수정 요청 · ${curUser().name}</h3>
    <div class="muted" style="font-size:11.5px;margin-bottom:10px">고칠 시각을 입력해 관리자에게 요청하세요. <b>승인되면 반영</b>됩니다.</div>
    <div class="fld"><label>출근 시각 <span class="muted">(예: 9 또는 9:30)</span></label><input id="atIn" class="tsel" value="${fmtT(a.in)}" placeholder="9:00" autocomplete="off" inputmode="numeric"></div>
    <div class="fld" style="margin-top:8px"><label>퇴근 시각 <span class="muted">(예: 2 → 오후 2시 · 비우면 '근무 중')</span></label><input id="atOut" class="tsel" value="${a.out?fmtT(a.out):''}" placeholder="14:00" autocomplete="off" inputmode="numeric"></div>
+   <div class="fld" style="margin-top:8px"><label>휴게 <span class="muted">(예: 12~13 · 여러 번은 쉼표 · 없으면 비우기)</span></label>
+     <input id="atBrk" class="tsel" value="${brkLabel(a)}" placeholder="12~13, 15~15:30" autocomplete="off"></div>
    <div class="fld" style="margin-top:8px"><label>메모 <span class="muted">(선택)</span></label><input id="atNote" class="tsel" placeholder="예: 실수로 퇴근을 눌렀어요" autocomplete="off"></div>
    <div class="row" style="margin-top:12px"><button class="btn sec" onclick="go('att')">취소</button><button class="btn" onclick="sendAttReq()">관리자에게 요청 보내기</button></div>`);
  setTimeout(()=>{const el=$('atIn');if(el)el.focus();},50); }
 function sendAttReq(){ const a=attToday(); if(!a)return;
  const ti=parseTs($('atIn').value); if(!ti){toast('출근 시각 형식 확인 (예: 9 · 9:30)');return;}
  const ov=($('atOut')?$('atOut').value:'').trim(); let to=null; if(ov){to=parseTs(ov); if(!to){toast('퇴근 시각 형식 확인 (예: 2 · 14:00)');return;}}
+ const brks=parseBrk($('atBrk')?$('atBrk').value:'');
+ if(brks===null){toast('휴게 형식 확인 (예: 12~13 · 여러 번은 쉼표)');return;}
  const note=($('atNote')?$('atNote').value:'').trim();
  ATTREQ=(ATTREQ||[]).filter(r=>!(r.uid===CUR&&r.date===todayK())); // 같은 날 이전 요청은 대체
- ATTREQ.push({id:'r'+Date.now().toString(36),uid:CUR,name:curUser().name,date:todayK(),in:ti,out:to,note,ts:Date.now()});
- save(); go('att'); toast('관리자에게 수정 요청을 보냈습니다'); }
+ ATTREQ.push({id:'r'+Date.now().toString(36),uid:CUR,name:curUser().name,date:todayK(),in:ti,out:to,breaks:brks,note,ts:Date.now()});
+ save(); go('att');
+ pushSend('🕒 근태 수정 요청 · '+curUser().name,
+   `${fmtT(ti)}~${to?fmtT(to):'근무 중'}${brks.length?' · 휴게 '+brks.length+'회':''}${note?' — '+note:''}`,
+   {tag:'attreq', onlyUids:adminUids()});
+ toast('관리자에게 수정 요청을 보냈습니다'); }
+function adminUids(){ return (STAFF||[]).filter(s=>!s.pending&&isAdmin(s)).map(s=>s.id); }
 function approveAttReq(id){ if(!isAdmin(curUser())){toast('승인은 대표님·매니저만 가능해요');return;}
  const r=(ATTREQ||[]).find(x=>x.id===id); if(!r)return;
  let a=ATT[r.uid];
  if(!a || a.date!==r.date){ a=ATT[r.uid]={date:r.date,in:r.in,out:r.out||null,breaks:[]}; } // 기록 없음(출근 요청 등) → 새로 생성
  else { a.in=r.in; a.out=r.out||null; if(!r.out){const b=a.breaks&&a.breaks[a.breaks.length-1]; if(b&&!b.e)b.e=null;} }
+ if(Array.isArray(r.breaks)) a.breaks=r.breaks.map(b=>({s:b.s,e:b.e||null}));   // 휴게 수정 반영
  ATTLOG[r.uid]=ATTLOG[r.uid]||{}; ATTLOG[r.uid][r.date]={in:a.in,out:a.out,breaks:(a.breaks||[]).map(b=>({s:b.s,e:b.e}))}; // 승인 결과 일자기록 반영
  ATTREQ=ATTREQ.filter(x=>x.id!==id); save(); render(); toast(r.name+'님 요청을 승인·반영했습니다'); }
 function rejectAttReq(id){ if(!isAdmin(curUser())){toast('대표님·매니저만 가능해요');return;}
@@ -895,7 +919,7 @@ function screenAtt(){
      <div class="asum">출근 ${fmtT(a.in)} · 퇴근 ${fmtT(a.out)} · 휴게 ${a.breaks.length}회</div>`;
  }
  const editBtn = a? `<button class="btn sec" style="margin-top:14px" onclick="reqAtt()">${IC('swap','li sm')} 기록 수정 요청</button>`:'';
- const reqBox = (admin && attReqCount())? `<div class="card" style="margin-top:12px;border-color:#bcd7f0"><h3>${IC('bell','li sm')}근태 요청 ${attReqCount()}건</h3>${ATTREQ.map(r=>`<div style="border-top:1px solid var(--edge);padding:8px 0"><div style="font-size:13px"><b>${r.name}</b> <span class="pill" style="background:${r.kind==='in'?'#e7f0ff':'#F0F4EE'};color:${r.kind==='in'?'#2f6fd0':'var(--deep)'};font-size:10px">${r.kind==='in'?'출근 요청':'기록 수정'}</span> <span class="muted" style="font-size:11px">${r.date.slice(5)}</span></div><div class="muted" style="font-size:11.5px">출근 ${fmtT(r.in)}${r.out?' · 퇴근 '+fmtT(r.out):" · '근무 중'으로"}${r.note?' · "'+r.note+'"':''}</div><div class="row" style="gap:6px;margin-top:6px"><button class="btn sec" style="color:var(--warn);border-color:#f0d9bd" onclick="rejectAttReq('${r.id}')">거절</button><button class="btn" onclick="approveAttReq('${r.id}')">승인</button></div></div>`).join('')}</div>`:'';
+ const reqBox = (admin && attReqCount())? `<div class="card" style="margin-top:12px;border-color:#bcd7f0"><h3>${IC('bell','li sm')}근태 요청 ${attReqCount()}건</h3>${ATTREQ.map(r=>`<div style="border-top:1px solid var(--edge);padding:8px 0"><div style="font-size:13px"><b>${r.name}</b> <span class="pill" style="background:${r.kind==='in'?'#e7f0ff':'#F0F4EE'};color:${r.kind==='in'?'#2f6fd0':'var(--deep)'};font-size:10px">${r.kind==='in'?'출근 요청':'기록 수정'}</span> <span class="muted" style="font-size:11px">${r.date.slice(5)}</span></div><div class="muted" style="font-size:11.5px">출근 ${fmtT(r.in)}${r.out?' · 퇴근 '+fmtT(r.out):" · '근무 중'으로"}${Array.isArray(r.breaks)?' · 휴게 '+(r.breaks.length?r.breaks.map(b=>fmtT(b.s)+'~'+(b.e?fmtT(b.e):'')).join(', '):'없음'):''}${r.note?' · "'+r.note+'"':''}</div><div class="row" style="gap:6px;margin-top:6px"><button class="btn sec" style="color:var(--warn);border-color:#f0d9bd" onclick="rejectAttReq('${r.id}')">거절</button><button class="btn" onclick="approveAttReq('${r.id}')">승인</button></div></div>`).join('')}</div>`:'';
  const adminBox = admin? `<div class="muted" style="font-size:11px;margin-top:14px">${STORE_IP?(WIFILOCK?'매장 와이파이 고정됨 🔒':'매장 와이파이 등록됨'):'매장 와이파이 미등록 — 출퇴근 확인 안 함'} · <span class="authlink" onclick="openWifiSetup()">와이파이 설정</span></div>`:'';
  return `<h2 class="title">${IC('clock')}근태</h2><div class="card">${body}${editBtn}</div>${admin?currentDutyHTML():''}${attHistoryHTML()}${admin?admSummaryHTML():''}${reqBox}${adminBox}`;
 }
