@@ -421,7 +421,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.27.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.27.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -2671,7 +2671,7 @@ async function docDelete(emp,t){
 
 
 /* ═══════════ 도움말 (처음 로그인 시 자동 · 상단 ? 로 다시 보기) ═══════════ */
-const HELP_KEY='farmplanet.helpseen', HELP_VER=1;
+const HELP_KEY='farmplanet.helpseen', HELP_VER=2; // 숫자를 올리면 모두에게 다시 1회 표시
 function helpIsIOS(){ return /iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1); }
 let helpTab=null; // 'ios' | 'and' | null(자동)
 function setHelpTab(t){ helpTab=t; openHelp(true); }
