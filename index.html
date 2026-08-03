@@ -198,6 +198,19 @@ input.inp{min-height:auto}
 .lrow.tot{border-top:2px solid var(--deep);border-bottom:none;margin-top:3px;padding-top:9px;font-size:14px}
 /* 모달·토스트·네비 */
 .modal{position:absolute;inset:0;background:rgba(20,35,25,.4);display:none;align-items:flex-end;justify-content:center;z-index:30}
+/* 카톡식 메시지 메뉴 — 떠 있는 카드 + 아래 리액션 바 */
+.mmwrap{position:absolute;inset:0;background:rgba(20,35,25,.32);display:none;flex-direction:column;align-items:center;justify-content:center;z-index:40;padding:0 28px}
+.mmwrap.show{display:flex}
+.mmcard{width:100%;max-width:330px;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.18)}
+.mmrow{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:15px 18px;background:none;border:none;border-bottom:1px solid #f0f2ef;font-size:15px;color:var(--ink);cursor:pointer;text-align:left}
+.mmrow:last-child{border-bottom:none}
+.mmrow:active{background:#f4f6f3}
+.mmrow.dngr{color:#e2504a}
+.mmrow .li{opacity:.75;flex:none}
+.mmreact{display:flex;align-items:center;gap:6px;background:#fff;border-radius:30px;padding:9px 14px;margin-top:14px;box-shadow:0 8px 24px rgba(0,0,0,.16)}
+.mmreact button{border:none;background:none;font-size:14px;font-weight:800;color:#5d6b60;padding:7px 13px;border-radius:20px;cursor:pointer}
+.mmreact button.on{background:#DCF0E1;color:#2c7a4b}
+.mmreact button:active{background:#eef3ec}
 .modal.show{display:flex}
 .mbox{background:#fff;border-radius:14px 14px 0 0;width:100%;max-width:430px;padding:18px 16px 24px;max-height:82%;overflow-y:auto}
 .mbox h3{font-size:15px;margin-bottom:12px}
@@ -281,6 +294,7 @@ input.inp{min-height:auto}
 </div>
 <div class="toast" id="toast"></div>
 <div class="modal" id="modal" onclick="if(event.target.id==='modal')closeModal()"><div class="mbox" id="mbox"></div></div>
+<div class="mmwrap" id="msgMenu" onclick="if(event.target.id==='msgMenu')closeMsgMenu()"></div>
 <div id="authOverlay">
   <div class="ttl">FARM PLANET</div>
   <div class="sub">매장 앱 · 구글 계정으로 로그인</div>
@@ -405,7 +419,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.25.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.25.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -2354,20 +2368,21 @@ const REACTS=[['nep','넵'],['sook','숙지']]; // 확인(넵)·숙지 리액션
 let _lpTimer=null;
 function reactHoldStart(id,e){ clearTimeout(_lpTimer); _lpTimer=setTimeout(()=>{ _lpTimer=null; if(navigator.vibrate)try{navigator.vibrate(12);}catch(x){}; openReactMenu(id); },450); }
 function reactHoldEnd(){ if(_lpTimer){ clearTimeout(_lpTimer); _lpTimer=null; } } // 손 떼거나 스크롤하면 취소
-function openReactMenu(id){ // 꾹 누르면 뜨는 메뉴(카톡식) — 리액션 + 복사·수정·삭제
+function openReactMenu(id){ // 카톡식 — 떠 있는 카드 메뉴 + 아래 리액션 바
  const m=roomMsgs(chatRoom).find(x=>x.id===id); if(!m)return;
  const mine=m.uid===CUR, canDel=mine||isOwner(curUser());
+ const row=(label,icon,fn,dngr)=>`<button class="mmrow${dngr?' dngr':''}" onclick="${fn}"><span>${label}</span>${IC(icon,'li sm')}</button>`;
  const chips=REACTS.map(([k,lbl])=>{ const on=!!(m[k]&&m[k][CUR]);
-   return `<button onclick="closeModal();toggleReact('${id}','${k}')" style="flex:1;padding:12px 6px;border-radius:12px;border:1.5px solid ${on?'#8FD1A6':'var(--edge)'};background:${on?'#DCF0E1':'#fff'};color:${on?'#3c6b4a':'var(--ink)'};font-size:14px;font-weight:800;cursor:pointer">${lbl}${on?' ✓':''}</button>`; }).join('');
- const row=(icon,label,fn,danger)=>`<button class="btn sec" style="display:flex;align-items:center;gap:10px;width:100%;justify-content:flex-start;padding:12px 14px;${danger?'color:var(--warn)':''}" onclick="${fn}">${IC(icon,'li sm')}<span>${label}</span></button>`;
- openModal(`<div style="display:flex;gap:8px;margin-bottom:12px">${chips}</div>
-   <div class="muted" style="font-size:11.5px;margin-bottom:8px;padding:0 2px">"${escAttr((m.text||'').slice(0,40))}${(m.text||'').length>40?'…':''}"</div>
-   <div style="display:flex;flex-direction:column;gap:6px">
-     ${row('copy','복사',`closeModal();copyMsg('${id}')`)}
-     ${mine?row('swap','수정',`closeModal();editMsg('${id}')`):''}
-     ${canDel?row('trash','삭제',`closeModal();askDelMsg('${id}')`,true):''}
-     <button class="btn sec" onclick="closeModal()">닫기</button></div>`); }
-
+   return `<button class="${on?'on':''}" onclick="closeMsgMenu();toggleReact('${id}','${k}')">${lbl}</button>`; }).join('');
+ const el=$('msgMenu'); if(!el)return;
+ el.innerHTML=`<div class="mmcard">
+     ${row('복사','copy',`closeMsgMenu();copyMsg('${id}')`)}
+     ${mine?row('수정','swap',`closeMsgMenu();editMsg('${id}')`):''}
+     ${canDel?row('삭제','trash',`closeMsgMenu();askDelMsg('${id}')`,true):''}
+   </div>
+   <div class="mmreact">${chips}</div>`;
+ el.classList.add('show'); }
+function closeMsgMenu(){ const el=$('msgMenu'); if(el){ el.classList.remove('show'); el.innerHTML=''; } }
 function copyMsg(id){ const m=roomMsgs(chatRoom).find(x=>x.id===id); if(!m)return;
  const t=m.text||'';
  if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(()=>toast('복사했어요')).catch(()=>toast('복사 실패'));
