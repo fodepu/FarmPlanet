@@ -269,7 +269,7 @@ input.inp{min-height:auto}
  <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 4v4M12 16v4M4 12h4M16 12h4M6.5 6.5l2.5 2.5M15 15l2.5 2.5M17.5 6.5 15 9M9 15l-2.5 2.5"/></symbol>
  <symbol id="i-cart" viewBox="0 0 24 24"><circle cx="9" cy="20" r="1.4"/><circle cx="17" cy="20" r="1.4"/><path d="M3 4h2.5l2.2 11h10.2l2.1-8H6"/></symbol>
  <symbol id="i-box" viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/><path d="M4 7.5l8 4.5 8-4.5"/><path d="M12 12v9"/></symbol>
- <symbol id="i-chat" viewBox="0 0 24 24"><path d="M20 12c0 3.9-3.6 7-8 7-1 0-2-.2-2.9-.5L4 20l1.6-3.6C4.6 15.2 4 13.7 4 12c0-3.9 3.6-7 8-7s8 3.1 8 7z"/></symbol>
+ <symbol id="i-chat" viewBox="0 0 24 24"><path d="M12 4.5c-4.7 0-8.5 3-8.5 6.7 0 2.1 1.2 4 3.1 5.3v3.3l3.3-2c.7.1 1.4.2 2.1.2 4.7 0 8.5-3 8.5-6.8S16.7 4.5 12 4.5z"/></symbol>
  <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 19V6"/><path d="M5.5 12.5L12 6l6.5 6.5"/></symbol>
  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c1-4 4-5.5 7-5.5S18 16 19 20"/></symbol>
  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4.5 4.5 0 0 0 6.4.4l3-3a4.5 4.5 0 1 0-6.4-6.4l-1.5 1.5"/><path d="M14 10a4.5 4.5 0 0 0-6.4-.4l-3 3a4.5 4.5 0 1 0 6.4 6.4l1.5-1.5"/></symbol>
@@ -419,7 +419,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.25.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.25.2'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -637,7 +637,9 @@ let onlyMine=false, noticeView='notice', schedFocus=null;
 /* ═══════════ 공통 ═══════════ */
 const $=id=>document.getElementById(id);
 function toast(m){const t=$("toast");t.textContent=m;t.classList.add("show");clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove("show"),1800);}
-function go(t){ if(t==='inv'&&tab!=='inv')invFreezeReset(); tab=t;render();const sc=$("screen");if(sc.scrollTo)sc.scrollTo(0,0);}
+function go(t){ if(t==='inv'&&tab!=='inv')invFreezeReset();
+ if(t==='chat'&&tab==='chat'&&chatRoom){ chatRoom=null; }   // 채팅 탭 다시 누르면 방 목록으로
+ tab=t;render();const sc=$("screen");if(sc.scrollTo)sc.scrollTo(0,0);}
 function curUser(){return STAFF.find(s=>s.id===CUR);}
 function hon(n){return /님$/.test(n||'')?n:(n||'')+'님';} // 이미 '님'으로 끝나면 중복 안 붙임
 function pendingCount(){return STAFF.filter(s=>s.pending).length;}
@@ -2377,16 +2379,30 @@ function openReactMenu(id){ // 카톡식 — 떠 있는 카드 메뉴 + 아래 �
  const el=$('msgMenu'); if(!el)return;
  el.innerHTML=`<div class="mmcard">
      ${row('복사','copy',`closeMsgMenu();copyMsg('${id}')`)}
+     ${row('선택 복사','swap',`closeMsgMenu();selectCopyMsg('${id}')`)}
      ${mine?row('수정','swap',`closeMsgMenu();editMsg('${id}')`):''}
      ${canDel?row('삭제','trash',`closeMsgMenu();askDelMsg('${id}')`,true):''}
    </div>
    <div class="mmreact">${chips}</div>`;
  el.classList.add('show'); }
 function closeMsgMenu(){ const el=$('msgMenu'); if(el){ el.classList.remove('show'); el.innerHTML=''; } }
-function copyMsg(id){ const m=roomMsgs(chatRoom).find(x=>x.id===id); if(!m)return;
- const t=m.text||'';
- if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(()=>toast('복사했어요')).catch(()=>toast('복사 실패'));
- else { try{ const ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); toast('복사했어요'); }catch(e){ toast('복사 실패'); } } }
+function selectCopyMsg(id){ // 원하는 부분만 골라 복사
+ const m=roomMsgs(chatRoom).find(x=>x.id===id); if(!m)return;
+ openModal(`<h3 style="color:var(--ink)">선택 복사</h3>
+   <div class="muted" style="font-size:11.5px;margin:-4px 0 8px">복사할 부분을 드래그해 선택한 뒤 <b>선택 부분 복사</b>를 누르세요.</div>
+   <textarea class="inp" id="scText" style="min-height:120px" readonly>${escAttr(m.text||'')}</textarea>
+   <div class="row" style="margin-top:12px"><button class="btn sec" onclick="closeModal()">닫기</button>
+     <button class="btn" onclick="doSelectCopy()">선택 부분 복사</button></div>`);
+ setTimeout(()=>{const el=$('scText'); if(el)el.focus();},60); }
+function doSelectCopy(){
+ const el=$('scText'); if(!el)return;
+ const a=el.selectionStart, b=el.selectionEnd;
+ const t=(a!==b)? el.value.slice(a,b) : el.value;   // 선택 안 했으면 전체
+ clipWrite(t, a!==b?'선택한 부분을 복사했어요':'전체를 복사했어요'); closeModal(); }
+function clipWrite(t,msg){
+ if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(()=>toast(msg)).catch(()=>toast('복사 실패'));
+ else { try{ const ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); toast(msg); }catch(e){ toast('복사 실패'); } } }
+function copyMsg(id){ const m=roomMsgs(chatRoom).find(x=>x.id===id); if(!m)return; clipWrite(m.text||'','복사했어요'); }
 
 function editMsg(id){ const m=roomMsgs(chatRoom).find(x=>x.id===id); if(!m||m.uid!==CUR)return;
  openModal(`<h3 style="color:var(--ink)">메시지 수정</h3>
