@@ -263,6 +263,7 @@ input.inp{min-height:auto}
  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4.5 4.5"/></symbol>
  <symbol id="i-swap" viewBox="0 0 24 24"><path d="M7 8h12l-3.5-3.5M17 16H5l3.5 3.5"/></symbol>
  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v4h-4"/></symbol>
+ <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/></symbol>
  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></symbol>
 </svg>
 <div class="app">
@@ -404,7 +405,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.24.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.25.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -508,7 +509,7 @@ async function syncBoot(){
   const {getFirestore,doc,getDoc,onSnapshot,setDoc,updateDoc,deleteDoc,collection,addDoc,query,orderBy,limit,serverTimestamp}=await import('https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js');
   const app=getApps().length?getApps()[0]:initializeApp(FIREBASE_CONFIG);
   const db=getFirestore(app);
-  _fsDb=db; _chatApi={collection,addDoc,query,orderBy,limit,onSnapshot,serverTimestamp,doc,updateDoc}; _docApi={doc,getDoc,setDoc,deleteDoc}; maybeChatSubscribe();
+  _fsDb=db; _chatApi={collection,addDoc,query,orderBy,limit,onSnapshot,serverTimestamp,doc,updateDoc,deleteDoc}; _docApi={doc,getDoc,setDoc,deleteDoc}; maybeChatSubscribe();
   const ref=doc(db,'shared','state');
   _fsSet=(data)=>setDoc(ref,data);
   onSnapshot(ref,(snap)=>{ const first=!_syncReady; _syncReady=true; _syncStat='연결됨'; _syncAt=Date.now();
@@ -622,7 +623,7 @@ let onlyMine=false, noticeView='notice', schedFocus=null;
 /* ═══════════ 공통 ═══════════ */
 const $=id=>document.getElementById(id);
 function toast(m){const t=$("toast");t.textContent=m;t.classList.add("show");clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove("show"),1800);}
-function go(t){tab=t;render();const sc=$("screen");if(sc.scrollTo)sc.scrollTo(0,0);}
+function go(t){ if(t==='inv'&&tab!=='inv')invFreezeReset(); tab=t;render();const sc=$("screen");if(sc.scrollTo)sc.scrollTo(0,0);}
 function curUser(){return STAFF.find(s=>s.id===CUR);}
 function hon(n){return /님$/.test(n||'')?n:(n||'')+'님';} // 이미 '님'으로 끝나면 중복 안 붙임
 function pendingCount(){return STAFF.filter(s=>s.pending).length;}
@@ -1881,7 +1882,22 @@ function isLow(v){ return (v.onHand||0)<=(v.par||0); }
 function catOf(v){ return (v.cat||'').trim()||'미분류'; }
 function jq(s){ return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
 function catList(){ const set=[...CATS]; INV.forEach(v=>{const c=(v.cat||'').trim(); if(c&&!set.includes(c))set.push(c);}); if(INV.some(v=>!(v.cat||'').trim()))set.push('미분류'); return set; }
-function invSortedIdx(){ // 발주 필요 먼저 → 수동 순서. 묶음 품목은 서로 붙여서(클러스터) 보여줌
+let invFreeze=null; // 화면을 보는 동안 유지할 표시 순서(id 배열)
+function invFreezeReset(){ invFreeze=null; }
+function invSortedIdx(){
+ const fresh=invSortedFresh();
+ if(!invFreeze){ invFreeze=fresh.map(x=>x.v.id); return fresh; }
+ // 고정 순서대로 배열 — 새 품목은 뒤에, 삭제된 건 자동 제외
+ const byId={}; INV.forEach((v,i)=>byId[v.id]={v,i});
+ const out=[]; invFreeze.forEach(id=>{ if(byId[id]){ out.push(byId[id]); delete byId[id]; } });
+ fresh.forEach(x=>{ if(byId[x.v.id]){ out.push(byId[x.v.id]); delete byId[x.v.id]; } });
+ return out; }
+function invOrderStale(){ // 고정 순서와 실제 정렬이 달라졌는지(=정렬 새로고침 안내용)
+ if(!invFreeze)return false;
+ const fresh=invSortedFresh().map(x=>x.v.id).filter(id=>invFreeze.includes(id));
+ const cur=invFreeze.filter(id=>INV.some(v=>v.id===id));
+ return fresh.join()!==cur.join(); }
+function invSortedFresh(){ // 발주 필요 먼저 → 수동 순서. 묶음 품목은 서로 붙여서(클러스터) 보여줌
  const items=INV.map((v,i)=>({v,i}));
  const cOf=x=>(x.v.grp||'').trim()||('#'+x.v.id); // 묶음명 또는 개별 고유키
  const rank={};
@@ -1903,10 +1919,10 @@ function onInvSortEnd(){ const el=$('invList'); if(!el)return;
  newFull.forEach((id,k)=>{ const v=INV.find(x=>x.id===id); if(v){v.ord=k+1;v.mt=Date.now();} });
  save(); toast('순서를 저장했습니다'); } // DOM은 이미 이동됨 — 전체 재렌더 불필요
 let invDate=null, invCat='', invQ=''; // 보는 날짜(null=오늘), 분류 필터, 검색어
-function setInvCat(c){ invCat=c; render(); }
-function filterInv(q){ invQ=q; const el=$('invList'); if(el)el.innerHTML=invListHTML(isAdmin(curUser())); initInvSort(); }
-function invDateShift(d){ const b=new Date((invDate||todayK())+'T00:00:00'); b.setDate(b.getDate()+d); const iso=dk(b); if(iso>todayK())return; invDate=iso; render(); }
-function invDatePick(iso){ if(iso&&iso<=todayK())invDate=iso; render(); }
+function setInvCat(c){ invCat=c; invFreezeReset(); render(); }
+function filterInv(q){ invQ=q; invFreezeReset(); const el=$('invList'); if(el)el.innerHTML=invListHTML(isAdmin(curUser())); initInvSort(); }
+function invDateShift(d){ const b=new Date((invDate||todayK())+'T00:00:00'); b.setDate(b.getDate()+d); const iso=dk(b); if(iso>todayK())return; invDate=iso; invFreezeReset(); render(); }
+function invDatePick(iso){ if(iso&&iso<=todayK())invDate=iso; invFreezeReset(); render(); }
 /* 품목 추가·수정 (앱 모달 폼) */
 function invForm(i){ if(!isAdmin(curUser())){toast('품목 추가·수정은 대표님·매니저만 가능해요');return;}
  const v= i>=0? INV[i] : {name:'',unit:'개',par:0,cat:(invCat&&invCat!=='미분류'?invCat:'')}; if(i>=0&&!v)return;
@@ -1950,7 +1966,7 @@ function saveItemForm(i){
  const excl=i>=0?INV[i].id:null;
  if(INV.some(v=>(v.name||'').trim().toLowerCase()===name.toLowerCase())){toast('이미 있는 품목이에요');return;} // 완전 중복 차단
  const doAdd=()=>{ const maxOrd=INV.reduce((m,x)=>Math.max(m,x.ord||0),0);
-   INV.push({id:invId(),name,unit,par,cat,grp,onHand:0,ord:maxOrd+1,ts:Date.now(),mt:Date.now(),log:[]});
+   INV.push({id:invId(),name,unit,par,cat,grp,onHand:0,ord:maxOrd+1,ts:Date.now(),mt:Date.now(),log:[]}); invFreezeReset();
    save(); closeModal(); render(); toast(name+' 추가했습니다'); };
  const sim=invSimilar(name,excl);
  if(sim.length){ // 겹치는 품목 경고(추가는 허용)
@@ -1959,7 +1975,7 @@ function saveItemForm(i){
    askConfirm(`비슷한 품목이 이미 있어요: <b>${escAttr(names)}</b><br>중복이 아니라면 <b>묶음</b>으로 함께 관리하는 걸 추천해요.<br><br>그래도 새로 추가할까요?`,'그래도 추가',doAdd);
  } else doAdd(); }
 function delInvItem(i){ if(!isAdmin(curUser())){toast('삭제는 대표님·매니저만 가능해요');return;} const v=INV[i]; if(!v)return;
- askConfirm(`<b>${v.name}</b> 품목을 삭제할까요?`,'삭제',()=>{ const vv=INV[i]; if(vv){IDEL=[...new Set([...(IDEL||[]),vv.id])]; INV.splice(i,1);} save();render();toast('삭제했습니다'); }); }
+ askConfirm(`<b>${v.name}</b> 품목을 삭제할까요?`,'삭제',()=>{ const vv=INV[i]; if(vv){IDEL=[...new Set([...(IDEL||[]),vv.id])]; INV.splice(i,1);} invFreezeReset(); save();render();toast('삭제했습니다'); }); }
 /* 실사·입고 (앱 숫자 모달) */
 let _invNumCb=null;
 function invNumModal(title,label,val,cb){
@@ -1969,9 +1985,12 @@ function invNumModal(title,label,val,cb){
  _invNumCb=cb; setTimeout(()=>{const el=$('invNum');if(el){el.focus();try{el.select();}catch(e){}}},60); }
 function invNumOk(){ const el=$('invNum'); const n=parseFloat(el?el.value:''); if(isNaN(n)){toast('숫자를 입력하세요');return;} const cb=_invNumCb; _invNumCb=null; closeModal(); if(cb)cb(n); }
 function invStep(i,d){ const v=INV[i]; if(!v)return; const was=(v.onHand||0); const nv=Math.max(0,was+d); if(nv===was)return;
- const wasLow=isLow(v); v.onHand=nv; invLog(v, d>0?'입고':'사용', d, nv); v.mt=Date.now(); save();
- if(tab==='inv' && isLow(v)===wasLow){ const el=$('invList'); if(el){ el.innerHTML=invListHTML(isAdmin(curUser())); initInvSort(); } } // 저재고 상태 그대로면 목록만 갱신(진동 방지)
- else render(); } // 저재고 상태가 바뀌면 정렬 위해 전체 재렌더
+ v.onHand=nv; invLog(v, d>0?'입고':'사용', d, nv); v.mt=Date.now(); save();
+ // 순서는 고정이라 재정렬하지 않는다 → 연타해도 버튼이 밀려나지 않음
+ if(tab==='inv'){ const el=$('invList'); if(el){ el.innerHTML=invListHTML(isAdmin(curUser())); initInvSort(); }
+   const b=$('invReorder'); if(b)b.style.display=invOrderStale()?'':'none'; }
+ else render(); }
+function invResort(){ invFreeze=null; render(); toast('정렬을 새로고침했어요'); }
 function invSet(i){ const v=INV[i]; if(!v)return; // 실사·입고 통합: 지금 실제 수량을 입력
  invNumModal(`${v.name} · 수량`, `지금 실제 수량 (${v.unit})`, v.onHand||0, n=>{ const delta=n-(v.onHand||0); v.onHand=n; invLog(v,'실사',delta,n); v.mt=Date.now(); save();render();toast(`${v.name} ${n}${v.unit}로 맞췄습니다`); }); }
 function invOrder(i){ const v=INV[i]; if(!v)return;
@@ -2064,6 +2083,7 @@ function invStockBody(){
  return `<div class="muted" style="font-size:12px;margin:2px 0 8px">${INV.length?`전체 ${INV.length}개${low.length?` · <b style="color:#b04a3f">발주 필요 ${low.length}</b>`:' · 재고 여유 ✓'}`:''}</div>
    ${INV.length?`<input class="search" id="invSearch" placeholder="품목 검색…" value="${escAttr(invQ)}" oninput="filterInv(this.value)" autocomplete="off">`:''}
    ${INV.length?chips:''}
+   <button id="invReorder" class="btn sec" style="width:100%;margin-bottom:8px;border-color:#bfd0e8;color:#2f6fd0;display:${invOrderStale()?'':'none'}" onclick="invResort()">${IC('refresh','li sm')} 발주 필요 품목을 위로 — 정렬 새로고침</button>
    <div id="invList">${invListHTML(admin)}</div>
    ${admin?`<button class="btn" style="margin-top:12px" onclick="invForm(-1)">+ 품목 추가</button>`:''}
    <p class="muted" style="font-size:11px;margin-top:10px;text-align:center;line-height:1.6">실사 = 직접 센 수량 · 입고 + = 들어온 수량 · <b>≡</b> 끌어서 순서 변경 · ‹ M/D › 날짜로 지난 기록</p>`;
@@ -2136,7 +2156,7 @@ function maybeChatSubscribe(){
    _roomUnsub[rid]=onSnapshot(query(collection(_fsDb,'rooms',rid,'messages'),orderBy('cts','desc'),limit(CHAT_LIMIT)),
     (snap)=>{ _chatErr='';
       const arr=[]; snap.forEach(d=>{const v=d.data()||{};
-        arr.push({id:d.id,uid:v.uid,name:v.name||'',text:v.text||'',cts:v.cts||0,nep:v.nep||{},sook:v.sook||{}});});
+        arr.push({id:d.id,uid:v.uid,name:v.name||'',text:v.text||'',cts:v.cts||0,nep:v.nep||{},sook:v.sook||{},edited:!!v.edited});});
       CHATR[rid]=arr.reverse();
       if(tab==='chat'&&chatRoom===rid){ const el=$('chatList'); if(el){ el.innerHTML=chatListHTML(); chatMarkRead(); chatScroll(); } }
       else { const ae=document.activeElement; if(!(ae&&(ae.tagName==='INPUT'||ae.tagName==='TEXTAREA'||ae.isContentEditable)))render(); }
@@ -2270,7 +2290,7 @@ function chatListHTML(){
    const nepChip = reactChipsHtml? `<div style="margin-top:3px;display:flex;gap:4px;flex-wrap:wrap">${reactChipsHtml}</div>`:'';
    const meta = grpNext? '' : `<div style="display:flex;flex-direction:column;align-items:${mine?'flex-end':'flex-start'};flex:none;line-height:1.25">
        ${un?`<span style="font-size:10px;font-weight:800;color:#e0913a">${un}</span>`:''}
-       <span style="font-size:9.5px;color:#9AA79D">${tm}</span></div>`;
+       <span style="font-size:9.5px;color:#9AA79D">${m.edited?'수정됨 ':''}${tm}</span></div>`;
    out+=`<div style="display:flex;gap:7px;margin-top:${grpPrev?'2px':'10px'};${mine?'flex-direction:row-reverse':''}">
      ${mine?'':`<div style="width:32px;flex:none">${grpPrev?'':`<div style="width:32px;height:32px;border-radius:11px;background:${st&&st.c?st.c:'#dfe6dd'};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#3c4a40">${escAttr((m.name||'?').charAt(0))}</div>`}</div>`}
      <div style="max-width:74%;display:flex;flex-direction:column;align-items:${mine?'flex-end':'flex-start'}">
@@ -2334,14 +2354,56 @@ const REACTS=[['nep','넵'],['sook','숙지']]; // 확인(넵)·숙지 리액션
 let _lpTimer=null;
 function reactHoldStart(id,e){ clearTimeout(_lpTimer); _lpTimer=setTimeout(()=>{ _lpTimer=null; if(navigator.vibrate)try{navigator.vibrate(12);}catch(x){}; openReactMenu(id); },450); }
 function reactHoldEnd(){ if(_lpTimer){ clearTimeout(_lpTimer); _lpTimer=null; } } // 손 떼거나 스크롤하면 취소
-function openReactMenu(id){ // 꾹 누르면 뜨는 리액션 목록
+function openReactMenu(id){ // 꾹 누르면 뜨는 메뉴(카톡식) — 리액션 + 복사·수정·삭제
  const m=roomMsgs(chatRoom).find(x=>x.id===id); if(!m)return;
- const items=REACTS.map(([k,lbl])=>{ const on=!!(m[k]&&m[k][CUR]);
-   return `<button class="btn sec" style="display:flex;justify-content:space-between;align-items:center;width:100%;${on?'border-color:#8FD1A6;color:#3c6b4a':''}" onclick="closeModal();toggleReact('${id}','${k}')"><span>${lbl}</span><span style="font-weight:800">${on?'✓ 취소':''}</span></button>`; }).join('');
- openModal(`<h3 style="color:var(--ink)">리액션 달기</h3>
-   <div class="muted" style="font-size:11.5px;margin:-4px 0 10px">"${escAttr((m.text||'').slice(0,30))}${(m.text||'').length>30?'…':''}"</div>
-   <div style="display:flex;flex-direction:column;gap:8px">${items}
+ const mine=m.uid===CUR, canDel=mine||isOwner(curUser());
+ const chips=REACTS.map(([k,lbl])=>{ const on=!!(m[k]&&m[k][CUR]);
+   return `<button onclick="closeModal();toggleReact('${id}','${k}')" style="flex:1;padding:12px 6px;border-radius:12px;border:1.5px solid ${on?'#8FD1A6':'var(--edge)'};background:${on?'#DCF0E1':'#fff'};color:${on?'#3c6b4a':'var(--ink)'};font-size:14px;font-weight:800;cursor:pointer">${lbl}${on?' ✓':''}</button>`; }).join('');
+ const row=(icon,label,fn,danger)=>`<button class="btn sec" style="display:flex;align-items:center;gap:10px;width:100%;justify-content:flex-start;padding:12px 14px;${danger?'color:var(--warn)':''}" onclick="${fn}">${IC(icon,'li sm')}<span>${label}</span></button>`;
+ openModal(`<div style="display:flex;gap:8px;margin-bottom:12px">${chips}</div>
+   <div class="muted" style="font-size:11.5px;margin-bottom:8px;padding:0 2px">"${escAttr((m.text||'').slice(0,40))}${(m.text||'').length>40?'…':''}"</div>
+   <div style="display:flex;flex-direction:column;gap:6px">
+     ${row('copy','복사',`closeModal();copyMsg('${id}')`)}
+     ${mine?row('swap','수정',`closeModal();editMsg('${id}')`):''}
+     ${canDel?row('trash','삭제',`closeModal();askDelMsg('${id}')`,true):''}
      <button class="btn sec" onclick="closeModal()">닫기</button></div>`); }
+
+function copyMsg(id){ const m=roomMsgs(chatRoom).find(x=>x.id===id); if(!m)return;
+ const t=m.text||'';
+ if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(()=>toast('복사했어요')).catch(()=>toast('복사 실패'));
+ else { try{ const ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); toast('복사했어요'); }catch(e){ toast('복사 실패'); } } }
+
+function editMsg(id){ const m=roomMsgs(chatRoom).find(x=>x.id===id); if(!m||m.uid!==CUR)return;
+ openModal(`<h3 style="color:var(--ink)">메시지 수정</h3>
+   <textarea class="inp" id="emText" style="min-height:90px">${escAttr(m.text||'')}</textarea>
+   <div class="row" style="margin-top:12px"><button class="btn sec" onclick="closeModal()">취소</button>
+     <button class="btn" onclick="saveMsgEdit('${id}')">저장</button></div>`);
+ setTimeout(()=>{const el=$('emText'); if(el){el.focus(); el.setSelectionRange(el.value.length,el.value.length);}},60); }
+
+function saveMsgEdit(id){
+ const el=$('emText'), txt=(el?el.value:'').trim();
+ if(!txt){toast('내용을 입력하세요');return;}
+ const m=roomMsgs(chatRoom).find(x=>x.id===id); if(!m)return;
+ if(!_fsDb||!_chatApi||!chatRoom){toast('채팅 연결 준비 중이에요');return;}
+ const {doc,updateDoc}=_chatApi, old=m.text;
+ m.text=txt.slice(0,1000); m.edited=true;                 // 즉시 반영
+ closeModal(); const lst=$('chatList'); if(lst)lst.innerHTML=chatListHTML();
+ updateDoc(doc(_fsDb,'rooms',chatRoom,'messages',id),{text:m.text,edited:true})
+   .then(()=>toast('수정했어요'))
+   .catch(e=>{ m.text=old; m.edited=false; if(lst)lst.innerHTML=chatListHTML();
+     toast('수정 실패: '+((e&&(e.code||e.message))||e)); }); }
+
+function askDelMsg(id){ askConfirm('이 메시지를 삭제할까요?<br>모두에게서 사라져요.','삭제',()=>delMsg(id)); }
+function delMsg(id){
+ if(!_fsDb||!_chatApi||!chatRoom)return;
+ const {doc,deleteDoc}=_chatApi;
+ const arr=CHATR[chatRoom]||[], i=arr.findIndex(x=>x.id===id), bak=arr[i];
+ if(i>=0)arr.splice(i,1);                                  // 즉시 반영
+ const lst=$('chatList'); if(lst)lst.innerHTML=chatListHTML();
+ deleteDoc(doc(_fsDb,'rooms',chatRoom,'messages',id))
+   .then(()=>toast('삭제했어요'))
+   .catch(e=>{ if(i>=0&&bak)arr.splice(i,0,bak); if(lst)lst.innerHTML=chatListHTML();
+     toast('삭제 실패: '+((e&&(e.code||e.message))||e)); }); }
 function toggleReact(msgId,type){ // 넵/숙지 토글
  if(!_fsDb||!_chatApi||!_fbUid||!chatRoom)return;
  if(!REACTS.some(r=>r[0]===type))return;
