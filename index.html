@@ -199,6 +199,22 @@ input.inp{min-height:auto}
 /* 모달·토스트·네비 */
 .modal{position:absolute;inset:0;background:rgba(20,35,25,.4);display:none;align-items:flex-end;justify-content:center;z-index:30}
 /* 카톡식 메시지 메뉴 — 떠 있는 카드 + 아래 리액션 바 */
+.hpwrap{position:absolute;inset:0;background:rgba(20,35,25,.42);display:none;align-items:center;justify-content:center;z-index:45;padding:20px}
+.hpwrap.show{display:flex}
+.hpcard{width:100%;max-width:340px;background:#fff;border-radius:18px;padding:22px 20px 18px;box-shadow:0 14px 40px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.hpnum{width:34px;height:34px;border-radius:11px;background:var(--deep);color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;flex:none}
+.hph{font-size:16px;font-weight:800;color:var(--ink);margin:0}
+.hpbody{font-size:13px;line-height:1.85;color:var(--sub);margin-top:14px;min-height:150px}
+.hpbody b{color:var(--ink)}
+.hpdots{display:flex;gap:5px;justify-content:center;margin:16px 0 12px}
+.hpdots i{width:6px;height:6px;border-radius:50%;background:#d7ded8;display:block}
+.hpdots i.on{background:var(--deep);width:16px;border-radius:4px}
+.hpdev{display:flex;flex-direction:column;gap:10px;margin-top:16px}
+.hpdev button{display:flex;align-items:center;gap:12px;width:100%;padding:16px 18px;border-radius:14px;border:1.5px solid var(--edge);background:#fff;font-size:15px;font-weight:800;color:var(--ink);cursor:pointer}
+.hpdev button:active{background:#f4f6f3}
+.hpstep{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #f0f2ef}
+.hpstep:last-child{border-bottom:none}
+.hpsn{width:22px;height:22px;border-radius:7px;background:#EDF1EA;color:var(--deep);font-size:11.5px;font-weight:800;display:flex;align-items:center;justify-content:center;flex:none}
 .mmwrap{position:absolute;inset:0;background:rgba(20,35,25,.32);display:none;flex-direction:column;align-items:center;justify-content:center;z-index:40;padding:0 28px}
 .mmwrap.show{display:flex}
 .mmcard{width:100%;max-width:330px;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.18)}
@@ -258,6 +274,10 @@ input.inp{min-height:auto}
  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9v11.5h13V9"/></symbol>
  <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 9.5h17M8 3v3.5M16 3v3.5"/></symbol>
  <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="m8.5 12.2 2.4 2.4 4.6-5"/></symbol>
+ <symbol id="i-apple" viewBox="0 0 24 24"><path d="M16.4 12.6c0-2.2 1.8-3.2 1.9-3.3-1-1.5-2.6-1.7-3.2-1.7-1.4-.1-2.7.8-3.4.8-.7 0-1.8-.8-2.9-.8-1.5 0-2.9.9-3.6 2.2-1.6 2.7-.4 6.7 1.1 8.9.7 1.1 1.6 2.3 2.7 2.2 1.1 0 1.5-.7 2.8-.7s1.6.7 2.8.7c1.2 0 1.9-1.1 2.6-2.1.8-1.2 1.2-2.4 1.2-2.5-.1 0-2.3-.9-2.3-3.5z"/><path d="M14.3 6.1c.6-.7 1-1.7.9-2.7-.9 0-2 .6-2.6 1.3-.6.6-1 1.6-.9 2.6 1 .1 2-.5 2.6-1.2z"/></symbol>
+ <symbol id="i-android" viewBox="0 0 24 24"><path d="M5 11.5h14v6a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 17.5z"/><path d="M5 11.5a7 7 0 0 1 14 0"/><path d="M8.5 8 7 5.6M15.5 8 17 5.6"/><circle cx="9.5" cy="9" r=".5" fill="currentColor" stroke="none"/><circle cx="14.5" cy="9" r=".5" fill="currentColor" stroke="none"/><path d="M2.8 12.6v4M21.2 12.6v4"/></symbol>
+ <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 15V4"/><path d="M8.5 7.5 12 4l3.5 3.5"/><path d="M6 12.5v6.5a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-6.5"/></symbol>
+ <symbol id="i-dots" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.3" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.3" fill="currentColor" stroke="none"/></symbol>
  <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 1 1 3.4 2.3c-.7.3-1 .9-1 1.6v.3"/><circle cx="12" cy="17" r=".6" fill="currentColor" stroke="none"/></symbol>
  <symbol id="i-book" viewBox="0 0 24 24"><path d="M12 6.5C10.5 5 8.5 4.5 3.5 4.5v14c5 0 7 .5 8.5 2 1.5-1.5 3.5-2 8.5-2v-14c-5 0-7 .5-8.5 2z"/><path d="M12 6.5v14"/></symbol>
  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></symbol>
@@ -297,6 +317,7 @@ input.inp{min-height:auto}
 <div class="toast" id="toast"></div>
 <div class="modal" id="modal" onclick="if(event.target.id==='modal')closeModal()"><div class="mbox" id="mbox"></div></div>
 <div class="mmwrap" id="msgMenu" onclick="if(event.target.id==='msgMenu')closeMsgMenu()"></div>
+<div class="hpwrap" id="helpPop"></div>
 <div id="authOverlay">
   <div class="ttl">FARM PLANET</div>
   <div class="sub">매장 앱 · 구글 계정으로 로그인</div>
@@ -421,7 +442,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.27.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.28.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -2670,74 +2691,106 @@ async function docDelete(emp,t){
 }
 
 
-/* ═══════════ 도움말 (처음 로그인 시 자동 · 상단 ? 로 다시 보기) ═══════════ */
-const HELP_KEY='farmplanet.helpseen', HELP_VER=2; // 숫자를 올리면 모두에게 다시 1회 표시
+/* ═══════════ 도움말 — 중앙 팝업 · 한 화면씩 넘기기 ═══════════ */
+const HELP_KEY='farmplanet.helpseen', HELP_VER=3; // 숫자를 올리면 모두에게 다시 1회 표시
 function helpIsIOS(){ return /iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1); }
-let helpTab=null; // 'ios' | 'and' | null(자동)
-function setHelpTab(t){ helpTab=t; openHelp(true); }
-function helpSection(title,body){ return `<div style="margin-top:14px"><div style="font-size:13.5px;font-weight:800;color:var(--ink);margin-bottom:6px">${title}</div>
-  <div style="font-size:12.5px;line-height:1.75;color:var(--sub)">${body}</div></div>`; }
-function openHelp(keepScroll){
- const ios = helpTab? helpTab==='ios' : helpIsIOS();
- const tabBtn=(k,label,on)=>`<button class="btn ${on?'':'sec'}" style="flex:1;padding:9px 4px;font-size:12.5px" onclick="setHelpTab('${k}')">${label}</button>`;
+let helpDev=null, helpIdx=-1;   // 기기 선택(-1=선택 화면), 현재 단계
+
+function helpSteps(){
+ const ios=helpDev==='ios';
+ const st=(n,t)=>`<div class="hpstep"><span class="hpsn">${n}</span><span>${t}</span></div>`;
  const install = ios
-  ? `<b>1.</b> <b>사파리</b>로 앱 주소를 엽니다 <span class="muted">(크롬·카톡 브라우저는 안 돼요)</span><br>
-     <b>2.</b> 화면 <b>아래 가운데 공유 버튼</b>(⬆️ 네모에 화살표)을 누릅니다<br>
-     <b>3.</b> 메뉴를 내려 <b>"홈 화면에 추가"</b>를 누릅니다<br>
-     <b>4.</b> 오른쪽 위 <b>"추가"</b>를 누릅니다<br>
-     <b>5.</b> 이제부터는 <b>홈 화면 아이콘</b>으로 앱을 여세요<br>
-     <div class="warnbox" style="margin-top:8px;font-size:11.5px">아이폰은 <b>홈 화면에 추가해야만 알림</b>을 받을 수 있어요. 사파리 탭으로 열어두면 알림이 오지 않아요.</div>`
-  : `<b>1.</b> <b>크롬</b>으로 앱 주소를 엽니다<br>
-     <b>2.</b> 주소창 오른쪽 <b>⋮</b> 를 누릅니다<br>
-     <b>3.</b> <b>"앱 설치"</b> 또는 <b>"홈 화면에 추가"</b>를 누릅니다<br>
-     <b>4.</b> <b>설치</b>를 누릅니다<br>
-     <b>5.</b> 이제부터는 <b>홈 화면 아이콘</b>으로 앱을 여세요`;
- openModal(`<h3 style="color:var(--ink)">${IC('help','li sm')} FarmPlanet 사용 안내</h3>
-   <div class="muted" style="font-size:11.5px;margin:-4px 0 10px">언제든 위쪽 <b>?</b> 버튼으로 다시 볼 수 있어요.</div>
-
-   <div style="display:flex;gap:6px;margin-bottom:4px">${tabBtn('ios','🍎 아이폰',ios)}${tabBtn('and','🤖 안드로이드',!ios)}</div>
-   ${helpSection('① 홈 화면에 앱 설치하기', install)}
-
-   ${helpSection('② 알림 켜기', `앱을 <b>홈 화면 아이콘</b>으로 연 뒤, 화면 <b>맨 위 종 모양(🔔)</b>을 누르고 <b>"허용"</b>을 선택하세요.<br>
-     켜지면 종이 진하게 바뀌고, 다음이 폰으로 옵니다:<br>
-     · 새 <b>채팅</b> 메시지 · 새 <b>공지</b> · <b>발주 요청</b> · <b>대타 요청</b><br>
-     · <b>출근·퇴근 5분 전</b> 알림 <span class="muted">(시간표 기준)</span><br>
-     <span class="muted">끄고 싶으면 같은 종을 눌러 "알림 끄기"</span>`)}
-
-   ${helpSection('③ 출퇴근 찍기', `<b>근태</b> 탭에서 <b>출근하기</b> / <b>퇴근</b>을 누릅니다.<br>
-     · 출근은 <b>매장 와이파이</b>에서만 됩니다 <span class="muted">(밖이면 관리자 승인 요청 가능)</span><br>
-     · 퇴근은 어디서나 됩니다<br>
-     · 시각이 틀렸으면 <b>기록 수정 요청</b>으로 출근·퇴근·<b>휴게</b>를 고쳐 요청하세요. 관리자가 승인하면 반영돼요.`)}
-
-   ${helpSection('④ 시간표 보기', `<b>홈 → 시간표</b><br>
-     · <b>내 근무만</b> 버튼으로 내 일정만 볼 수 있어요<br>
-     · 일정 변경·대타가 필요하면 <b>홈 → 공지·게시판</b>에 <b>${BOARD_LEAD_DAYS}일 전까지</b> 올려주세요`)}
-
-   ${helpSection('⑤ 채팅', `아래 <b>채팅</b> 탭 → 방을 골라 들어갑니다.<br>
-     · 메시지를 <b>꾹 누르면</b> 복사·선택 복사·수정·삭제와 <b>넵/숙지</b> 표시가 나와요<br>
-     · 공지를 확인했다는 뜻으로 <b>넵</b> 또는 <b>숙지</b>를 눌러주세요<br>
-     · 폰에서 <b>엔터는 줄바꿈</b>, 보내기는 <b>↑ 버튼</b>이에요<br>
-     · 채팅 탭을 <b>다시 누르면</b> 방 목록으로 나옵니다`)}
-
-   ${helpSection('⑥ 발주 · 재고', `<b>발주</b> 탭: 필요한 물건을 적고 <b>등록</b><br>
-     <b>홈 → 재고관리</b>: 품목의 <b>＋ / −</b> 로 수량을 바로 조절, <b>수량 입력</b>으로 실제 개수를 맞춰요.<br>
-     <span class="muted">쓰다 보면 기준보다 적어져도 목록 순서는 그대로예요. 위의 "정렬 새로고침"을 누르면 부족한 품목이 위로 올라옵니다.</span>`)}
-
-   ${helpSection('⑦ 내 서류', `<b>홈 → 내 서류</b>에서 주민등록등본·통장사본·보건증·근로계약서를 <b>직접 등록</b>할 수 있어요.<br>
-     <span class="muted">본인 것만 보이고, 관리자만 전체를 확인합니다.</span>`)}
-
-   ${helpSection('자주 묻는 것', `<b>Q. 알림이 안 와요</b><br>→ 홈 화면 아이콘으로 열었는지, 종(🔔)이 켜져 있는지 확인하세요. 아이폰은 설치가 필수예요.<br>
-     <b>Q. 화면이 옛날 그대로예요</b><br>→ 위쪽 <b>새로고침</b> 버튼을 눌러주세요.<br>
-     <b>Q. 출근이 안 눌려요</b><br>→ 매장 와이파이에 연결됐는지 확인하고, 그래도 안 되면 <b>관리자에게 출근 요청</b>을 보내세요.`)}
-
-   <button class="btn" style="width:100%;margin-top:16px" onclick="closeHelp()">확인했어요</button>`);
+  ? st(1,'<b>사파리</b>로 앱 주소를 엽니다')
+   +st(2,'화면 아래 가운데 '+IC('share','li sm')+' <b>공유</b> 버튼을 누릅니다')
+   +st(3,'메뉴를 내려 <b>“홈 화면에 추가”</b>를 누릅니다')
+   +st(4,'오른쪽 위 <b>“추가”</b>를 누릅니다')
+   +st(5,'이제부터 <b>홈 화면 아이콘</b>으로 여세요')
+   +`<div class="warnbox" style="margin-top:10px;font-size:11.5px">아이폰은 <b>홈 화면에 추가해야만 알림</b>을 받을 수 있어요. 사파리 탭으로 열어두면 알림이 오지 않아요.</div>`
+  : st(1,'<b>크롬</b>으로 앱 주소를 엽니다')
+   +st(2,'주소창 오른쪽 '+IC('dots','li sm')+' 를 누릅니다')
+   +st(3,'<b>“앱 설치”</b> 또는 <b>“홈 화면에 추가”</b>를 누릅니다')
+   +st(4,'<b>설치</b>를 누릅니다')
+   +st(5,'이제부터 <b>홈 화면 아이콘</b>으로 여세요');
+ return [
+  { icon: ios?'apple':'android', title:'홈 화면에 설치하기', body: install },
+  { icon:'bell', title:'알림 켜기', body:
+     st(1,'앱을 <b>홈 화면 아이콘</b>으로 엽니다')
+    +st(2,'화면 맨 위 '+IC('bell','li sm')+' <b>종</b>을 누릅니다')
+    +st(3,'<b>“허용”</b>을 선택하면 끝이에요')
+    +`<div style="margin-top:12px;font-size:12.5px;line-height:1.8">켜지면 이런 알림이 폰으로 옵니다<br>
+       · 새 <b>채팅</b> · 새 <b>공지</b> · <b>발주 요청</b> · <b>대타 요청</b><br>
+       · <b>출근·퇴근 5분 전</b> <span class="muted">(시간표 기준)</span></div>` },
+  { icon:'clock', title:'출퇴근 찍기', body:
+     `<div style="font-size:12.5px;line-height:1.9"><b>근태</b> 탭에서 <b>출근하기</b> / <b>퇴근</b>을 누릅니다.</div>`
+    +st('!','출근은 <b>매장 와이파이</b>에서만 됩니다')
+    +st('·','퇴근은 <b>어디서나</b> 가능해요')
+    +st('·','시각이 틀리면 <b>기록 수정 요청</b>으로 출근·퇴근·<b>휴게</b>를 고쳐 요청하세요')
+    +`<div class="muted" style="margin-top:10px;font-size:11.5px">관리자가 승인하면 반영됩니다.</div>` },
+  { icon:'cal', title:'시간표', body:
+     st('·','<b>홈 → 시간표</b>에서 이번 주 근무를 봅니다')
+    +st('·','<b>내 근무만</b> 버튼으로 내 일정만 볼 수 있어요')
+    +st('·','일정 변경·대타는 <b>홈 → 공지·게시판</b>에 <b>'+BOARD_LEAD_DAYS+'일 전까지</b> 올려주세요') },
+  { icon:'chat', title:'채팅', body:
+     st('·','아래 <b>채팅</b> 탭에서 방을 골라 들어갑니다')
+    +st('·','메시지를 <b>꾹 누르면</b> 복사·수정·삭제와 <b>넵/숙지</b>가 나와요')
+    +st('·','공지를 봤다는 뜻으로 <b>넵</b> 또는 <b>숙지</b>를 눌러주세요')
+    +st('·','폰에서 <b>엔터는 줄바꿈</b>, 보내기는 <b>↑ 버튼</b>이에요')
+    +st('·','채팅 탭을 <b>다시 누르면</b> 방 목록으로 나옵니다') },
+  { icon:'box', title:'발주 · 재고', body:
+     st('·','<b>발주</b> 탭: 필요한 물건을 적고 <b>등록</b>')
+    +st('·','<b>홈 → 재고관리</b>: <b>＋ / −</b> 로 수량을 바로 조절')
+    +st('·','<b>수량 입력</b>으로 실제 개수를 맞춰요')
+    +`<div class="muted" style="margin-top:10px;font-size:11.5px">기준보다 적어져도 목록 순서는 그대로예요. 위의 <b>정렬 새로고침</b>을 누르면 부족한 품목이 위로 올라옵니다.</div>` },
+  { icon:'book', title:'내 서류', body:
+     st('·','<b>홈 → 내 서류</b>에서 직접 등록할 수 있어요')
+    +st('·','주민등록등본 · 통장사본 · 보건증 · 근로계약서')
+    +`<div class="muted" style="margin-top:10px;font-size:11.5px">본인 것만 보이고, 관리자만 전체를 확인합니다.</div>` },
+  { icon:'help', title:'이럴 땐 이렇게', body:
+     `<div style="font-size:12.5px;line-height:1.85">
+      <b>알림이 안 와요</b><br><span class="muted">홈 화면 아이콘으로 열었는지, 종이 켜져 있는지 확인하세요. 아이폰은 설치가 필수예요.</span><br><br>
+      <b>화면이 옛날 그대로예요</b><br><span class="muted">위쪽 새로고침 버튼을 눌러주세요.</span><br><br>
+      <b>출근이 안 눌려요</b><br><span class="muted">매장 와이파이 연결을 확인하고, 그래도 안 되면 관리자에게 출근 요청을 보내세요.</span></div>` },
+ ];
 }
-function closeHelp(){ try{ localStorage.setItem(HELP_KEY,String(HELP_VER)); }catch(e){} helpTab=null; closeModal(); }
-function maybeShowHelp(){ // 처음 로그인한 사람에게 1회 자동
+
+function openHelp(){ helpDev=null; helpIdx=-1; renderHelp(); }
+function helpPick(d){ helpDev=d; helpIdx=0; renderHelp(); }
+function helpGo(d){ const n=helpSteps().length;
+ if(helpIdx+d<0){ helpDev=null; helpIdx=-1; renderHelp(); return; }
+ if(helpIdx+d>=n){ closeHelp(); return; }
+ helpIdx+=d; renderHelp(); }
+function renderHelp(){
+ const el=$('helpPop'); if(!el)return;
+ el.classList.add('show');
+ if(helpIdx<0){ // 기기 선택 화면
+   el.innerHTML=`<div class="hpcard">
+     <div style="display:flex;align-items:center;gap:10px"><span class="hpnum">${IC('help','li sm')}</span>
+       <h3 class="hph">FarmPlanet 사용 안내</h3></div>
+     <div class="muted" style="font-size:12px;margin-top:10px;line-height:1.7">먼저 쓰시는 폰을 골라주세요.<br>설치 방법이 달라요.</div>
+     <div class="hpdev">
+       <button onclick="helpPick('ios')">${IC('apple','li lg')}<span>아이폰 (iPhone)</span></button>
+       <button onclick="helpPick('and')">${IC('android','li lg')}<span>안드로이드</span></button></div>
+     <button class="btn sec" style="margin-top:14px" onclick="closeHelp()">나중에 볼게요</button></div>`;
+   return; }
+ const steps=helpSteps(), st=steps[helpIdx], last=helpIdx===steps.length-1;
+ const dots=steps.map((_,i)=>`<i class="${i===helpIdx?'on':''}"></i>`).join('');
+ el.innerHTML=`<div class="hpcard">
+   <div style="display:flex;align-items:center;gap:10px">
+     <span class="hpnum">${helpIdx+1}</span>
+     <h3 class="hph">${st.title}</h3>
+     <span style="flex:1"></span>${IC(st.icon,'li lg')}</div>
+   <div class="hpbody">${st.body}</div>
+   <div class="hpdots">${dots}</div>
+   <div class="row"><button class="btn sec" onclick="helpGo(-1)">${helpIdx===0?'기기 다시 선택':'이전'}</button>
+     <button class="btn" onclick="helpGo(1)">${last?'다 봤어요':'다음'}</button></div></div>`;
+}
+function closeHelp(){ try{ localStorage.setItem(HELP_KEY,String(HELP_VER)); }catch(e){}
+ const el=$('helpPop'); if(el){ el.classList.remove('show'); el.innerHTML=''; } helpDev=null; helpIdx=-1; }
+function maybeShowHelp(){ // 처음 접속한 사람에게 1회 자동
  if(!CUR)return;
  let seen=null; try{ seen=localStorage.getItem(HELP_KEY); }catch(e){}
  if(String(seen)===String(HELP_VER))return;
- setTimeout(()=>{ if(CUR && !($('modal')&&$('modal').classList.contains('show'))) openHelp(); },700);
+ setTimeout(()=>{ const el=$('helpPop'); if(CUR&&el&&!el.classList.contains('show')) openHelp(); },700);
 }
 
 /* ═══════════ 앱 외부 푸시 알림 (Cloudflare Worker) ═══════════ */
