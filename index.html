@@ -454,7 +454,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.29.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.30.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -1180,7 +1180,7 @@ function screenHome(){
    <div class="qbtn" style="position:relative" onclick="go('sched')">${IC('cal')}시간표${u.sched?'<span class="bdotn" style="position:absolute;top:10px;right:10px;margin:0"></span>':''}</div>
    <div class="qbtn" onclick="go('inv')">${IC('box')}재고관리</div>
    <div class="qbtn" style="position:relative" onclick="go('plan')">${IC('cal')}일정${planTodoCount()?`<span class="bdotn" style="position:absolute;top:10px;right:10px;margin:0"></span>`:''}</div>
-   <div class="qbtn" style="position:relative" onclick="go('comm')">${IC('bell')}공지·게시판${(u.n||u.b)?'<span class="bdotn" style="position:absolute;top:10px;right:10px;margin:0"></span>':''}</div>
+   <div class="qbtn" style="position:relative" onclick="go('comm')">${IC('swap')}대타·시간조정${u.b?'<span class="bdotn" style="position:absolute;top:10px;right:10px;margin:0"></span>':''}</div>
    <div class="qbtn" onclick="go('close')">${IC('check')}오픈·마감 체크</div>
    <div class="qbtn" onclick="go('manual')">${IC('book')}매뉴얼·레시피</div>
    <div class="qbtn" onclick="openMyDocs()">${IC('book')}내 서류</div>
@@ -1813,13 +1813,8 @@ function boardDaysLeft(target){ if(!target)return null; const t=new Date(target+
 function screenBoard(){ return `<h2 class="title">${IC('swap')}일정 게시판</h2>${boardBody()}`; }
 let commSub='notice'; // 공지·게시판 하위탭: notice / board
 function setCommSub(s){ commSub=s; render(); }
-function screenComm(){
- const u=unread();
- const dot=`<span class="bdotn" style="position:relative;top:-1px;margin-left:4px"></span>`;
- const seg=`<div class="seg" style="margin:6px 0 12px">
-   <button class="${commSub==='notice'?'on':''}" onclick="setCommSub('notice')">공지·인수인계${u.n?dot:''}</button>
-   <button class="${commSub==='board'?'on':''}" onclick="setCommSub('board')">일정 게시판${u.b?dot:''}</button></div>`;
- return `<h2 class="title">${IC('bell')}공지·게시판</h2>${seg}${commSub==='board'?boardBody():noticeBody()}`;
+function screenComm(){ // 공지는 일정·채팅으로 대체 — 대타·시간조정 요청만 유지
+ return `<h2 class="title">${IC('swap')}대타·시간조정</h2>${boardBody()}`;
 }
 function boardBody(){
  const admin=isAdmin(curUser());
@@ -2123,8 +2118,8 @@ let invView='stock';   // 'stock'=재고 기입 · 'flow'=입출고 현황
 function setInvView(v){ invView=v; invFreezeReset(); render(); }
 function screenInventory(){
  const tabs=`<div class="row" style="margin:2px 0 8px;gap:6px">
-   <button class="btn ${invView==='stock'?'':'sec'}" onclick="setInvView('stock')">재고 기입</button>
-   <button class="btn ${invView==='flow'?'':'sec'}" onclick="setInvView('flow')">입출고 현황</button></div>`;
+   <button class="btn ${invView==='flow'?'':'sec'}" onclick="setInvView('flow')">입출고 현황</button>
+   <button class="btn ${invView==='stock'?'':'sec'}" onclick="setInvView('stock')">재고 기입</button></div>`;
  if(invView==='flow') return `<h2 class="title">${IC('box')}재고관리</h2>${tabs}${invFlowBody()}`;
  const selISO=invDate||todayK(), sd=new Date(selISO+'T00:00:00'), isToday=selISO===todayK();
  const selMD=(sd.getMonth()+1)+'/'+sd.getDate();
@@ -2809,7 +2804,7 @@ function planOccurs(p,iso){ // 그 날 해야 하는 일인가
  if(p.type==='weekly')return (p.days||[]).includes(new Date(iso+'T00:00:00').getDay());
  if(p.type==='interval'){ const n=Math.max(1,p.every||1); const d=daysBetween(p.from,iso); return d>=0 && d%n===0; }
  return false; }
-function plansOn(iso){ return (PLANS||[]).filter(p=>planOccurs(p,iso)).sort((a,b)=>(a.ts||0)-(b.ts||0)); }
+function plansOn(iso){ return (PLANS||[]).filter(p=>planOccurs(p,iso)).sort((a,b)=>((a.time||'99')<(b.time||'99')?-1:(a.time||'99')>(b.time||'99')?1:0)||((a.ts||0)-(b.ts||0))); }
 function planRepeatLabel(p){
  if(p.type==='once')return '한 번 · '+p.from.slice(5).replace('-','/');
  if(p.type==='weekly')return '매주 '+(p.days||[]).slice().sort().map(d=>WD[d]).join('·');
@@ -2835,7 +2830,7 @@ function screenPlan(){
  const rows= list.length? list.map(p=>{ const dn=planDone(p.id,sel);
    return `<div class="ck" style="${dn?'background:#F4F8F3;border-color:#cfe3d4':''}">
      <button class="pchk ${dn?'on':''}" onclick="planToggle('${p.id}','${sel}')" aria-label="완료">${dn?'✓':''}</button>
-     <div class="tx"><b style="${dn?'color:#6a7d70':''}">${escAttr(p.title)}</b>
+     <div class="tx"><b style="${dn?'color:#6a7d70':''}">${p.time?`<span style="color:var(--deep);font-size:11.5px">${p.time}</span> `:''}${escAttr(p.title)}</b>
        <div class="muted" style="font-size:10.5px">${planRepeatLabel(p)}${p.memo?' · '+escAttr(p.memo):''}${dn?` · <b style="color:var(--deep)">${escAttr(dn.name)} ${fmtT(dn.ts)}</b>`:''}</div></div>
      <span class="oact del" onclick="planAskDel('${p.id}')">삭제</span></div>`; }).join('')
    : `<p class="muted" style="text-align:center;padding:20px 2px">이 날은 등록된 일정이 없어요.</p>`;
@@ -2867,7 +2862,12 @@ function planForm(){
  planType='weekly'; planDays=[new Date((planSel||todayK())+'T00:00:00').getDay()];
  openModal(planFormHTML());
  setTimeout(()=>{const el=$('plTitle');if(el)el.focus();},60); }
-function planTypeSet(t){ planType=t; const box=$('plBox'); if(box)box.innerHTML=planTypeHTML(); }
+function planKeep(){ // 다시 그릴 때 입력값 보존
+ const g=id=>{const e=$(id);return e?e.value:undefined;};
+ return {title:g('plTitle'),memo:g('plMemo'),from:g('plFrom'),time:g('plTime'),every:g('plEvery')}; }
+function planRestore(v){ const set=(id,val)=>{const e=$(id); if(e&&val!==undefined)e.value=val;};
+ set('plTitle',v.title); set('plMemo',v.memo); set('plFrom',v.from); set('plTime',v.time); set('plEvery',v.every); }
+function planTypeSet(t){ const v=planKeep(); planType=t; openModal(planFormHTML()); planRestore(v); }
 function planDayTog(d){ d=+d; const i=planDays.indexOf(d); if(i<0)planDays.push(d); else planDays.splice(i,1);
  const box=$('plBox'); if(box)box.innerHTML=planTypeHTML(); }
 function planTypeHTML(){
@@ -2883,8 +2883,10 @@ function planFormHTML(){
  return `<h3>일정 추가</h3>
    <div class="fld"><label>할 일</label><input id="plTitle" class="tsel" placeholder="예: 화분 물주기" autocomplete="off"></div>
    <div class="fld" style="margin-top:8px"><label>메모 <span class="muted">(선택)</span></label><input id="plMemo" class="tsel" placeholder="예: 창가 화분 3개" autocomplete="off"></div>
-   <div class="fld" style="margin-top:10px"><label>시작일</label><input id="plFrom" class="tsel" type="date" value="${sel}"></div>
-   <div style="display:flex;gap:6px;margin-top:12px">${tb('weekly','매주')}${tb('interval','N일마다')}${tb('once','한 번')}</div>
+   <div style="display:flex;gap:8px;margin-top:10px">
+     <div class="fld" style="flex:1"><label>시작일</label><input id="plFrom" class="tsel" type="date" value="${sel}"></div>
+     <div class="fld" style="flex:none;width:120px"><label>시간 <span class="muted">(선택)</span></label><input id="plTime" class="tsel" type="time"></div></div>
+   <div style="display:flex;gap:6px;margin-top:12px">${tb('once','한 번')}${tb('weekly','매주')}${tb('interval','N일마다')}</div>
    <div id="plBox" style="margin-top:10px">${planTypeHTML()}</div>
    <div class="row" style="margin-top:14px"><button class="btn sec" onclick="closeModal()">취소</button>
      <button class="btn" onclick="planSave()">등록</button></div>`; }
@@ -2892,14 +2894,18 @@ function planSave(){
  const title=($('plTitle')?$('plTitle').value:'').trim(); if(!title){toast('할 일을 입력하세요');return;}
  const memo=($('plMemo')?$('plMemo').value:'').trim();
  const from=($('plFrom')?$('plFrom').value:'')||todayK();
- const p={id:planId(),title:title.slice(0,40),memo:memo.slice(0,60),type:planType,from,by:CUR,ts:Date.now(),mt:Date.now()};
+ const time=($('plTime')?$('plTime').value:'')||'';
+ const p={id:planId(),title:title.slice(0,40),memo:memo.slice(0,60),type:planType,from,time,by:CUR,ts:Date.now(),mt:Date.now()};
  if(planType==='weekly'){ if(!planDays.length){toast('요일을 하나 이상 고르세요');return;} p.days=planDays.slice().sort(); }
  else if(planType==='interval'){ const n=parseInt($('plEvery')?$('plEvery').value:'0',10); if(!n||n<1){toast('며칠마다인지 입력하세요');return;} p.every=n; }
- PLANS.push(p); planSel=from; save(); closeModal(); render(); toast('일정을 등록했습니다'); }
+ PLANS.push(p); planSel=from; save(); closeModal(); render();
+ pushSend('📅 새 일정 · '+((curUser()&&curUser().name)||''),
+   `${p.title}${p.time?' '+p.time:''} · ${planRepeatLabel(p)}${p.memo?' — '+p.memo:''}`, {tag:'plan'});
+ toast('일정을 등록하고 모두에게 알렸습니다'); }
 function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDone(p.id,t)).length; }
 
 /* ═══════════ 도움말 — 중앙 팝업 · 한 화면씩 넘기기 ═══════════ */
-const HELP_KEY='farmplanet.helpseen', HELP_VER=4; // 숫자를 올리면 모두에게 다시 1회 표시
+const HELP_KEY='farmplanet.helpseen', HELP_VER=5; // 숫자를 올리면 모두에게 다시 1회 표시
 function helpIsIOS(){ return /iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1); }
 let helpDev=null, helpIdx=-1;   // 기기 선택(-1=선택 화면), 현재 단계
 
@@ -2927,6 +2933,11 @@ function helpSteps(){
     +`<div style="margin-top:12px;font-size:12.5px;line-height:1.8">켜지면 이런 알림이 폰으로 옵니다<br>
        · 새 <b>채팅</b> · 새 <b>공지</b> · <b>발주 요청</b> · <b>대타 요청</b><br>
        · <b>출근·퇴근 5분 전</b> <span class="muted">(시간표 기준)</span></div>` },
+  { icon:'cal', title:'일정 확인·체크', body:
+     st('·','<b>홈 → 일정</b>에서 달력을 봅니다')
+    +st('·','물주기·청소처럼 <b>반복되는 일</b>이 등록돼 있어요')
+    +st('·','한 사람이 하면 <b>체크</b>해서 남기면 됩니다')
+    +st('·','누구나 새 일정을 등록할 수 있어요 <span class="muted">(등록하면 모두에게 알림)</span>') },
   { icon:'clock', title:'출퇴근 찍기', body:
      `<div style="font-size:12.5px;line-height:1.9"><b>근태</b> 탭에서 <b>출근하기</b> / <b>퇴근</b>을 누릅니다.</div>`
     +st('!','출근은 <b>매장 와이파이</b>에서만 됩니다')
@@ -2936,7 +2947,7 @@ function helpSteps(){
   { icon:'cal', title:'시간표', body:
      st('·','<b>홈 → 시간표</b>에서 이번 주 근무를 봅니다')
     +st('·','<b>내 근무만</b> 버튼으로 내 일정만 볼 수 있어요')
-    +st('·','일정 변경·대타는 <b>홈 → 공지·게시판</b>에 <b>'+BOARD_LEAD_DAYS+'일 전까지</b> 올려주세요') },
+    +st('·','일정 변경·대타는 <b>홈 → 대타·시간조정</b>에 <b>'+BOARD_LEAD_DAYS+'일 전까지</b> 올려주세요') },
   { icon:'box', title:'발주 · 재고', body:
      st('·','<b>발주</b> 탭: 필요한 물건을 적고 <b>등록</b>')
     +st('·','<b>홈 → 재고관리</b>: <b>＋ / −</b> 로 수량을 바로 조절')
