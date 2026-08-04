@@ -454,7 +454,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.30.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.30.2'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -2142,17 +2142,34 @@ function flowSpan(){ // {from,to,label,future}
  const n=parseInt(flowRange,10)||7;
  return {from:shift(-(n-1)),to:t,label:'최근 '+n+'일'};
 }
-function flowStats(sp){ // 품목별 입고·사용 합계 (기간 내 로그)
+function dvParse(txt){ // "24개" "2박스" "24" → {q,unit} · "오배송"이면 null
+ const t=String(txt||'').trim(); if(!t||/오배송/.test(t))return null;
+ const m=t.match(/(\d+(?:\.\d+)?)\s*([가-힣a-zA-Z]*)/);
+ if(!m)return null; const q=parseFloat(m[1]); if(!q)return null;
+ return {q, unit:(m[2]||'개')}; }
+function flowStats(sp){ // 품목별 입고·사용 합계 (재고 로그 + 배송 도착)
  const from=new Date(sp.from+'T00:00:00').getTime(), to=new Date(sp.to+'T00:00:00').getTime()+86399999;
  const map={};
+ const get=(key,name,unit)=>{ const m=map[key]||(map[key]={name,unit:unit||'개',onHand:null,inQ:0,outQ:0}); return m; };
+ // ① 재고 기입(입고·사용·실사)
  (INV||[]).forEach(v=>{ (v.log||[]).forEach(l=>{
    if(!l.ts||l.ts<from||l.ts>to)return;
-   const m=map[v.id]||(map[v.id]={v,inQ:0,outQ:0});
+   const m=get('inv:'+v.id, v.name, v.unit); m.onHand=v.onHand||0;
    if(l.ty==='입고') m.inQ+=Math.abs(l.delta||0);
    else if(l.ty==='사용') m.outQ+=Math.abs(l.delta||0);
    else if(l.ty==='실사'&&(l.delta||0)<0) m.outQ+=Math.abs(l.delta);   // 실사로 줄어든 만큼도 소진으로 봄
    else if(l.ty==='실사'&&(l.delta||0)>0) m.inQ+=l.delta;
  }); });
+ // ② 배송 도착(발주 → 실제 배송 수량) — 재고 품목과 이름이 같으면 합치고, 없으면 새 줄
+ (ORDERS||[]).forEach(o=>{
+   if(!o.dvqty||!o.rcvts||o.rcvts<from||o.rcvts>to)return;
+   const d=dvParse(o.dvqty); if(!d)return;
+   const nm=productName(o.txt);
+   const hit=(INV||[]).find(v=>(v.name||'').trim()===nm);
+   const m=hit? get('inv:'+hit.id, hit.name, hit.unit) : get('ord:'+nm, nm, d.unit);
+   if(hit) m.onHand=hit.onHand||0;
+   m.inQ+=d.q; m.arrived=true;
+ });
  return Object.values(map).filter(m=>m.inQ||m.outQ).sort((a,b)=>(b.inQ+b.outQ)-(a.inQ+a.outQ));
 }
 function flowOrders(sp){ // 기간 내 발주(요청·발주됨) / 도착
@@ -2187,10 +2204,10 @@ function invFlowBody(){
  const bars= stats.length? `<div class="muted" style="font-size:10.5px;margin:2px 0 6px">막대는 이 목록에서 가장 큰 값(${max})을 기준으로 한 상대 길이예요.</div>`
    + stats.map(m=>`<div style="padding:8px 0;border-bottom:1px solid #f0f2ef">
      <div style="display:flex;align-items:center;gap:6px">
-       <b style="font-size:12.5px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(m.v.name)}</b>
-       <span class="muted" style="font-size:10.5px;flex:none">현재 ${m.v.onHand||0}${m.v.unit}</span></div>
-     ${m.inQ?line('입고',m.inQ+m.v.unit,Math.round(m.inQ/max*100),'#2c7a4b','#8FD1A6','+'):''}
-     ${m.outQ?line('사용',m.outQ+m.v.unit,Math.round(m.outQ/max*100),'#b5793a','#EFB27A','−'):''}
+       <b style="font-size:12.5px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(m.name)}${m.arrived?'<span style="font-size:9.5px;font-weight:800;color:#2f6fd0;background:#e9f1fb;border-radius:10px;padding:1px 6px;margin-left:5px">도착</span>':''}</b>
+       ${m.onHand!==null?`<span class="muted" style="font-size:10.5px;flex:none">현재 ${m.onHand}${m.unit}</span>`:''}</div>
+     ${m.inQ?line('입고',m.inQ+m.unit,Math.round(m.inQ/max*100),'#2c7a4b','#8FD1A6','+'):''}
+     ${m.outQ?line('사용',m.outQ+m.unit,Math.round(m.outQ/max*100),'#b5793a','#EFB27A','−'):''}
    </div>`).join('')
   : `<p class="muted" style="text-align:center;padding:20px 2px">${sp.label}에 입고·사용 기록이 없어요.</p>`;
  const olist=(arr,empty)=> arr.length? arr.map(x=>`<div class="lrow"><span>${escAttr(x.txt)}</span><span class="muted" style="font-size:11px">${x.who||''}</span></div>`).join('') : `<p class="muted" style="text-align:center;padding:14px 2px">${empty}</p>`;
@@ -2907,6 +2924,8 @@ function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDon
 /* ═══════════ 업데이트 내역 (새로고침 후 무엇이 바뀌었는지) ═══════════ */
 const VER_KEY='farmplanet.lastver';
 const CHANGELOG=[
+ {v:'2.30.2', d:'2026-07-29', items:[
+   '입출고 그래프에 <b>배송 도착분</b>이 함께 나와요 (우유 24개처럼 실제 받은 수량)' ]},
  {v:'2.30.1', d:'2026-07-29', items:[
    '재고 <b>입출고 현황</b>을 가로 막대 그래프로 정리 — 수량이 커져도 화면을 넘지 않아요',
    '업데이트하면 <b>무엇이 바뀌었는지</b> 이 화면으로 알려드려요' ]},
