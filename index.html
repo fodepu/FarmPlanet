@@ -454,7 +454,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.30.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.30.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -2177,22 +2177,21 @@ function invFlowBody(){
      <div class="muted" style="font-size:11px;margin-bottom:6px">발주했지만 아직 도착 확인이 안 된 품목이에요.</div>${rows}</div>`;
  }
  const stats=flowStats(sp);
+ // 가장 큰 값을 100%로 잡는 상대 막대 — 수량이 커져도 화면을 넘지 않는다
  const max=stats.reduce((m,x)=>Math.max(m,x.inQ,x.outQ),0)||1;
- const bars= stats.length? stats.map(m=>{
-   const pin=Math.round(m.inQ/max*100), pout=Math.round(m.outQ/max*100);
-   return `<div style="padding:9px 0;border-bottom:1px solid #f0f2ef">
-     <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">
-       <b style="font-size:12.5px;flex:1">${escAttr(m.v.name)}</b>
-       <span class="muted" style="font-size:10.5px">현재 ${m.v.onHand||0}${m.v.unit}</span></div>
-     ${m.inQ?`<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
-       <span style="font-size:10px;color:#2c7a4b;width:26px;flex:none">입고</span>
-       <div style="flex:1;height:14px;background:#f1f4f0;border-radius:7px;overflow:hidden"><div style="width:${pin}%;height:100%;background:#8FD1A6;border-radius:7px"></div></div>
-       <b style="font-size:11.5px;color:#2c7a4b;width:44px;text-align:right;flex:none">+${m.inQ}${m.v.unit}</b></div>`:''}
-     ${m.outQ?`<div style="display:flex;align-items:center;gap:6px">
-       <span style="font-size:10px;color:#b5793a;width:26px;flex:none">사용</span>
-       <div style="flex:1;height:14px;background:#f1f4f0;border-radius:7px;overflow:hidden"><div style="width:${pout}%;height:100%;background:#EFB27A;border-radius:7px"></div></div>
-       <b style="font-size:11.5px;color:#b5793a;width:44px;text-align:right;flex:none">−${m.outQ}${m.v.unit}</b></div>`:''}
-   </div>`; }).join('')
+ const line=(label,qty,pct,color,bg,sign)=>`<div style="display:flex;align-items:center;gap:7px;margin-top:4px">
+     <span style="font-size:10px;color:${color};width:24px;flex:none">${label}</span>
+     <div style="flex:1;min-width:0;height:13px;background:#f1f4f0;border-radius:7px;overflow:hidden">
+       <div style="width:${Math.max(pct,3)}%;height:100%;background:${bg};border-radius:7px"></div></div>
+     <b style="font-size:11.5px;color:${color};width:52px;text-align:right;flex:none">${sign}${qty}</b></div>`;
+ const bars= stats.length? `<div class="muted" style="font-size:10.5px;margin:2px 0 6px">막대는 이 목록에서 가장 큰 값(${max})을 기준으로 한 상대 길이예요.</div>`
+   + stats.map(m=>`<div style="padding:8px 0;border-bottom:1px solid #f0f2ef">
+     <div style="display:flex;align-items:center;gap:6px">
+       <b style="font-size:12.5px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(m.v.name)}</b>
+       <span class="muted" style="font-size:10.5px;flex:none">현재 ${m.v.onHand||0}${m.v.unit}</span></div>
+     ${m.inQ?line('입고',m.inQ+m.v.unit,Math.round(m.inQ/max*100),'#2c7a4b','#8FD1A6','+'):''}
+     ${m.outQ?line('사용',m.outQ+m.v.unit,Math.round(m.outQ/max*100),'#b5793a','#EFB27A','−'):''}
+   </div>`).join('')
   : `<p class="muted" style="text-align:center;padding:20px 2px">${sp.label}에 입고·사용 기록이 없어요.</p>`;
  const olist=(arr,empty)=> arr.length? arr.map(x=>`<div class="lrow"><span>${escAttr(x.txt)}</span><span class="muted" style="font-size:11px">${x.who||''}</span></div>`).join('') : `<p class="muted" style="text-align:center;padding:14px 2px">${empty}</p>`;
  return `${bar}
@@ -2904,6 +2903,51 @@ function planSave(){
  toast('일정을 등록하고 모두에게 알렸습니다'); }
 function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDone(p.id,t)).length; }
 
+
+/* ═══════════ 업데이트 내역 (새로고침 후 무엇이 바뀌었는지) ═══════════ */
+const VER_KEY='farmplanet.lastver';
+const CHANGELOG=[
+ {v:'2.30.1', d:'2026-07-29', items:[
+   '재고 <b>입출고 현황</b>을 가로 막대 그래프로 정리 — 수량이 커져도 화면을 넘지 않아요',
+   '업데이트하면 <b>무엇이 바뀌었는지</b> 이 화면으로 알려드려요' ]},
+ {v:'2.30.0', d:'2026-07-29', items:[
+   '공지 게시판을 없애고 <b>대타·시간조정</b>만 남겼어요',
+   '<b>일정</b>을 등록하면 모두에게 알림이 갑니다',
+   '일정에 <b>시간</b>을 넣을 수 있어요',
+   '반복 종류(한 번·매주·N일마다) 선택이 안 되던 문제 수정' ]},
+ {v:'2.29.0', d:'2026-07-29', items:[
+   '<b>일정</b> 달력 추가 — 물주기·청소 같은 반복 업무를 등록하고 체크',
+   '재고에 <b>입출고 현황</b> 탭 추가 — 어제·오늘·내일·최근 N일' ]},
+ {v:'2.28.0', d:'2026-07-29', items:[
+   '<b>도움말</b> 추가 — 상단 ? 버튼에서 언제든 볼 수 있어요' ]},
+];
+function verNum(v){ return String(v).split('.').map(n=>+n||0); }
+function verGT(a,b){ const x=verNum(a),y=verNum(b);
+ for(let i=0;i<3;i++){ if((x[i]||0)!==(y[i]||0)) return (x[i]||0)>(y[i]||0); } return false; }
+function openWhatsNew(list){
+ const el=$('helpPop'); if(!el)return;
+ const body=list.map(c=>`<div style="margin-bottom:12px">
+   <div style="font-size:11.5px;font-weight:800;color:var(--deep);margin-bottom:4px">v${c.v}</div>
+   ${c.items.map(t=>`<div class="hpstep" style="padding:6px 0"><span class="hpsn">·</span><span>${t}</span></div>`).join('')}
+ </div>`).join('');
+ el.innerHTML=`<div class="hpcard">
+   <div style="display:flex;align-items:center;gap:10px"><span class="hpnum">${IC('refresh','li sm')}</span>
+     <h3 class="hph">업데이트되었어요</h3></div>
+   <div class="hpbody" style="min-height:0;max-height:52vh;overflow-y:auto">${body}</div>
+   <button class="btn" style="width:100%;margin-top:6px" onclick="closeWhatsNew()">확인</button></div>`;
+ el.classList.add('show'); }
+function closeWhatsNew(){ try{ localStorage.setItem(VER_KEY,APP_VER); }catch(e){}
+ const el=$('helpPop'); if(el){ el.classList.remove('show'); el.innerHTML=''; } }
+function maybeWhatsNew(){
+ if(!CUR)return false;
+ let last=null; try{ last=localStorage.getItem(VER_KEY); }catch(e){}
+ if(!last){ try{ localStorage.setItem(VER_KEY,APP_VER); }catch(e){} return false; } // 첫 사용자는 도움말만
+ if(last===APP_VER)return false;
+ const list=CHANGELOG.filter(c=>verGT(c.v,last));
+ if(!list.length){ try{ localStorage.setItem(VER_KEY,APP_VER); }catch(e){} return false; }
+ setTimeout(()=>{ const el=$('helpPop'); if(CUR&&el&&!el.classList.contains('show')) openWhatsNew(list); },600);
+ return true; }
+
 /* ═══════════ 도움말 — 중앙 팝업 · 한 화면씩 넘기기 ═══════════ */
 const HELP_KEY='farmplanet.helpseen', HELP_VER=5; // 숫자를 올리면 모두에게 다시 1회 표시
 function helpIsIOS(){ return /iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1); }
@@ -3227,7 +3271,7 @@ function render(){
  maybeChatSubscribe(); // 로그인 후 최초 1회 구독(이미 구독됐으면 즉시 반환)
  pushMaybeResync();    // 로그인 확정 후 알림 구독을 내 계정으로 재등록(1회)
  pushUploadSched();    // 오늘 근무 일정을 알림 서버에 올림(관리자·매니저, 30분 간격)
- maybeShowHelp();      // 처음 접속한 사람에게 사용 안내 1회
+ if(!maybeWhatsNew()) maybeShowHelp();   // 업데이트 안내 우선, 없으면 첫 사용 안내
  pushUpdateBtn();      // 상단바 벨 상태 반영
  save();
 }
