@@ -454,7 +454,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.30.2'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.30.3'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -2194,21 +2194,25 @@ function invFlowBody(){
      <div class="muted" style="font-size:11px;margin-bottom:6px">발주했지만 아직 도착 확인이 안 된 품목이에요.</div>${rows}</div>`;
  }
  const stats=flowStats(sp);
- // 가장 큰 값을 100%로 잡는 상대 막대 — 수량이 커져도 화면을 넘지 않는다
+ // 가운데 품목명 기준으로 왼쪽=사용(빨강) · 오른쪽=입고(초록). 가장 큰 값이 100%인 상대 길이라 화면을 넘지 않음
  const max=stats.reduce((m,x)=>Math.max(m,x.inQ,x.outQ),0)||1;
- const line=(label,qty,pct,color,bg,sign)=>`<div style="display:flex;align-items:center;gap:7px;margin-top:4px">
-     <span style="font-size:10px;color:${color};width:24px;flex:none">${label}</span>
-     <div style="flex:1;min-width:0;height:13px;background:#f1f4f0;border-radius:7px;overflow:hidden">
-       <div style="width:${Math.max(pct,3)}%;height:100%;background:${bg};border-radius:7px"></div></div>
-     <b style="font-size:11.5px;color:${color};width:52px;text-align:right;flex:none">${sign}${qty}</b></div>`;
- const bars= stats.length? `<div class="muted" style="font-size:10.5px;margin:2px 0 6px">막대는 이 목록에서 가장 큰 값(${max})을 기준으로 한 상대 길이예요.</div>`
-   + stats.map(m=>`<div style="padding:8px 0;border-bottom:1px solid #f0f2ef">
-     <div style="display:flex;align-items:center;gap:6px">
-       <b style="font-size:12.5px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(m.name)}${m.arrived?'<span style="font-size:9.5px;font-weight:800;color:#2f6fd0;background:#e9f1fb;border-radius:10px;padding:1px 6px;margin-left:5px">도착</span>':''}</b>
-       ${m.onHand!==null?`<span class="muted" style="font-size:10.5px;flex:none">현재 ${m.onHand}${m.unit}</span>`:''}</div>
-     ${m.inQ?line('입고',m.inQ+m.unit,Math.round(m.inQ/max*100),'#2c7a4b','#8FD1A6','+'):''}
-     ${m.outQ?line('사용',m.outQ+m.unit,Math.round(m.outQ/max*100),'#b5793a','#EFB27A','−'):''}
-   </div>`).join('')
+ const row=(m)=>{
+   const pin=m.inQ?Math.max(Math.round(m.inQ/max*100),4):0, pout=m.outQ?Math.max(Math.round(m.outQ/max*100),4):0;
+   return `<div style="display:flex;align-items:center;gap:4px;padding:7px 0;border-bottom:1px solid #f4f6f3">
+     <b style="width:46px;flex:none;text-align:right;font-size:11px;color:#c0392b">${m.outQ?'−'+m.outQ+m.unit:''}</b>
+     <div style="flex:1;min-width:0;display:flex;justify-content:flex-end">
+       <div style="width:${pout}%;height:14px;background:#E4796B;border-radius:7px 0 0 7px"></div></div>
+     <div style="width:74px;flex:none;text-align:center;font-size:11.5px;font-weight:800;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+          title="${escAttr(m.name)}">${escAttr(m.name)}</div>
+     <div style="flex:1;min-width:0;display:flex;justify-content:flex-start">
+       <div style="width:${pin}%;height:14px;background:#7BC49A;border-radius:0 7px 7px 0"></div></div>
+     <b style="width:46px;flex:none;text-align:left;font-size:11px;color:#2c7a4b">${m.inQ?'+'+m.inQ+m.unit:''}</b>
+   </div>`; };
+ const legend=`<div style="display:flex;align-items:center;justify-content:center;gap:14px;margin:2px 0 8px;font-size:10.5px;color:var(--sub)">
+     <span><span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:#E4796B;vertical-align:-1px;margin-right:4px"></span>나간 것(사용)</span>
+     <span><span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:#7BC49A;vertical-align:-1px;margin-right:4px"></span>들어온 것(입고·도착)</span></div>`;
+ const bars= stats.length? legend+stats.map(row).join('')
+   +`<div class="muted" style="font-size:10.5px;text-align:center;margin-top:8px">막대는 가장 큰 값(${max})을 기준으로 한 상대 길이예요.</div>`
   : `<p class="muted" style="text-align:center;padding:20px 2px">${sp.label}에 입고·사용 기록이 없어요.</p>`;
  const olist=(arr,empty)=> arr.length? arr.map(x=>`<div class="lrow"><span>${escAttr(x.txt)}</span><span class="muted" style="font-size:11px">${x.who||''}</span></div>`).join('') : `<p class="muted" style="text-align:center;padding:14px 2px">${empty}</p>`;
  return `${bar}
@@ -2924,6 +2928,8 @@ function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDon
 /* ═══════════ 업데이트 내역 (새로고침 후 무엇이 바뀌었는지) ═══════════ */
 const VER_KEY='farmplanet.lastver';
 const CHANGELOG=[
+ {v:'2.30.3', d:'2026-07-29', items:[
+   '입출고 그래프를 <b>한 줄</b>로 — 품목 기준 왼쪽 빨강(나간 것)·오른쪽 초록(들어온 것)' ]},
  {v:'2.30.2', d:'2026-07-29', items:[
    '입출고 그래프에 <b>배송 도착분</b>이 함께 나와요 (우유 24개처럼 실제 받은 수량)' ]},
  {v:'2.30.1', d:'2026-07-29', items:[
