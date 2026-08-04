@@ -130,6 +130,18 @@ input.inp{min-height:auto}
 .ocalhd{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px;font-weight:800;font-size:14.5px;color:var(--ink)}
 .ocalhd button{flex:none;width:32px;height:32px;border:0;background:#F0F4EE;border-radius:8px;font-size:17px;color:var(--deep);cursor:pointer;line-height:1}
 .ocalgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.pcgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.pcdow{text-align:center;font-size:10.5px;font-weight:800;padding:3px 0}
+.pcday{position:relative;aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border-radius:9px;font-size:12.5px;color:var(--ink);cursor:pointer}
+.pcday.today{font-weight:800;color:var(--deep)}
+.pcday.sel{background:var(--deep);color:#fff;font-weight:800}
+.pcdot{width:5px;height:5px;border-radius:50%;background:#e0913a;display:block}
+.pcdot.ok{background:#7bbd8e}
+.pcday.sel .pcdot{background:#fff}
+.pchk{width:26px;height:26px;flex:none;border-radius:8px;border:1.5px solid var(--edge);background:#fff;color:#fff;font-size:14px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+.pchk.on{background:var(--deep);border-color:var(--deep)}
+.pday{flex:1;padding:9px 0;border-radius:9px;border:1.5px solid var(--edge);background:#fff;font-size:12.5px;font-weight:800;color:var(--sub);cursor:pointer}
+.pday.on{background:var(--deep);border-color:var(--deep);color:#fff}
 .ocaldow{text-align:center;font-size:10.5px;color:var(--sub);font-weight:700;padding:2px 0}
 .ocell{position:relative;aspect-ratio:1;border:0;background:transparent;border-radius:9px;font-size:13px;color:var(--ink);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
 .ocell.empty{cursor:default}
@@ -442,7 +454,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.28.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.29.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -473,7 +485,7 @@ const CHAT_LIMIT=200;
 let _fsDb=null,_chatApi=null,_chatErr='',_fbUid=null;
 let CHATR={},_roomUnsub={},chatRoom=null;   // 방별 메시지 / 방별 구독 / 열려있는 방
 let _docApi=null;
-let STAFF, SHIFTS, ORDERS, NOTICES, CK, SUBMITS, CUR, REFS, READS, SCHED_TS=0, DELETED=[], ODEL=[], PATTERN=null, ATT={}, STORE_LOC=null, WAGE=0, ATTREQ=[], ATTLOG={}, BOARD=[], STORE_IP=null, INV=[], CATS=[], HOL=[], WIFILOCK=false, ROOMS=[], IDEL=[], CDEL=[];
+let STAFF, SHIFTS, ORDERS, NOTICES, CK, SUBMITS, CUR, REFS, READS, SCHED_TS=0, DELETED=[], ODEL=[], PATTERN=null, ATT={}, STORE_LOC=null, WAGE=0, ATTREQ=[], ATTLOG={}, BOARD=[], STORE_IP=null, INV=[], CATS=[], HOL=[], WIFILOCK=false, ROOMS=[], IDEL=[], CDEL=[], PLANS=[], PDONE={};
 function touchSched(){SCHED_TS=Date.now();} // 시간표 변경 시각 기록(신규 표시용)
 /* ── 시간표 일괄 작업 되돌리기 (지난주 복사·기본패턴·초기화) ── */
 const UKEY='farmplanet.schedundo';
@@ -512,7 +524,7 @@ function defaults(){
  SHIFTS={}; seedWeek(buildWeek(0));
  ORDERS=[]; SUBMITS=[]; CK={}; REFS={}; READS={};
  NOTICES=[{tag:"공지",gold:true,who:"대표님",dt:fmtDT(),ts:Date.now(),bd:"FarmPlanet 앱 사용을 시작합니다. 공지·발주·시간표·마감을 여기서 관리해요."}];
- CUR=null; SCHED_TS=0; DELETED=[]; ODEL=[]; PATTERN=null; ATT={}; STORE_LOC=null; WAGE=MINWAGE; ATTREQ=[]; ATTLOG={}; BOARD=[]; STORE_IP=null; INV=[]; CATS=[]; HOL=[]; WIFILOCK=false; ROOMS=defaultRooms(); IDEL=[]; CDEL=[];
+ CUR=null; SCHED_TS=0; DELETED=[]; ODEL=[]; PATTERN=null; ATT={}; STORE_LOC=null; WAGE=MINWAGE; ATTREQ=[]; ATTLOG={}; BOARD=[]; STORE_IP=null; INV=[]; CATS=[]; HOL=[]; WIFILOCK=false; ROOMS=defaultRooms(); IDEL=[]; CDEL=[]; PLANS=[]; PDONE={};
 }
 /* 주간 기본 패턴 (2026-07 확정, 화면 편성 기준)
    월: 예흔08~14·미루11~14·지한12:30~16·효원16~19
@@ -532,13 +544,13 @@ function seedWeek(week){
   else if(i===5){set('gh',d,'12:00','18:00');}
   });
 }
-function save(){try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,INV,CATS,HOL,WIFILOCK,ROOMS,IDEL,CDEL}));}catch(e){}
+function save(){try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,INV,CATS,HOL,WIFILOCK,ROOMS,IDEL,CDEL,PLANS,PDONE}));}catch(e){}
  if(SYNC_ENABLED&&typeof pushSync==='function')pushSync();}
 /* ── 실시간 공유 (Firestore 단일 문서, 사진 제외) ── */
 function syncPayload(){
  const ckLite={};
  Object.keys(CK).forEach(k=>{const d=CK[k]||{};ckLite[k]={open:d.open||{},mid:d.mid||{},close:d.close||{}};});
- return {STAFF,SHIFTS,ORDERS,NOTICES,SUBMITS,READS,CK:ckLite,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,INV,CATS,HOL,WIFILOCK,ROOMS,IDEL,CDEL};
+ return {STAFF,SHIFTS,ORDERS,NOTICES,SUBMITS,READS,CK:ckLite,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,INV,CATS,HOL,WIFILOCK,ROOMS,IDEL,CDEL,PLANS,PDONE};
 }
 async function syncBoot(){
  try{
@@ -605,6 +617,9 @@ function applyRemote(data){
   if(d.BOARD){ const m={}; [...d.BOARD,...(BOARD||[])].forEach(b=>{const k=b&&b.id; if(!k)return; // 게시판: id 기준, 최근 수정(mt) 우선 병합
       if(!m[k] || (b.mt||0)>(m[k].mt||0)) m[k]=b; });
     BOARD=Object.values(m).sort((a,b)=>(b.ts||0)-(a.ts||0)); }
+  if(Array.isArray(d.PLANS)){ const m={}; [...d.PLANS,...(PLANS||[])].forEach(x=>{const k=x&&x.id; if(!k)return;
+      if(!m[k]||(x.mt||0)>(m[k].mt||0))m[k]=x; }); PLANS=Object.values(m).filter(x=>!x.del).sort((a,b)=>(a.ts||0)-(b.ts||0)); }
+  if(d.PDONE){ PDONE=Object.assign({},d.PDONE,PDONE||{}); }   // 완료기록: 합집합(먼저 찍힌 것 유지)
   if(Array.isArray(d.IDEL)) IDEL=[...new Set([...(IDEL||[]),...d.IDEL])]; // 삭제된 재고 표식 합집합
   if(Array.isArray(d.CDEL)) CDEL=[...new Set([...(CDEL||[]),...d.CDEL])]; // 삭제된 분류 표식 합집합
   if(d.INV){ const m={}; [...d.INV,...(INV||[])].forEach(v=>{const k=v&&v.id; if(!k)return; // 재고: id 기준, 최근 수정(mt) 우선 병합
@@ -614,7 +629,7 @@ function applyRemote(data){
   if(d.HOL){ HOL=[...new Set([...(d.HOL||[]),...(HOL||[])])]; } // 수동 휴무일: 합집합
   if(d.CK){ const merged={}; Object.keys(d.CK).forEach(k=>{merged[k]=Object.assign({},d.CK[k]); if(CK[k]&&CK[k].photos)merged[k].photos=CK[k].photos;});
     Object.keys(CK).forEach(k=>{if(!merged[k])merged[k]=CK[k];}); CK=merged; }
-  try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,INV,CATS,HOL,WIFILOCK,ROOMS,IDEL,CDEL}));}catch(e){}
+  try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,INV,CATS,HOL,WIFILOCK,ROOMS,IDEL,CDEL,PLANS,PDONE}));}catch(e){}
   const _ae=document.activeElement; // 입력 중(텍스트 칸 포커스)이면 화면 갱신 미룸 → 타이핑 안 끊김
   if(_ae && (_ae.tagName==='INPUT'||_ae.tagName==='TEXTAREA') && _ae.type!=='date'){ /* 다음 사용자 동작 때 반영 */ }
   else render();
@@ -632,8 +647,8 @@ function shareSchedule(){
 function load(){
  try{const d=JSON.parse(localStorage.getItem(SKEY));
   if(!d||!d.STAFF)throw 0;
-  ({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,INV,CATS,HOL,WIFILOCK,ROOMS,IDEL,CDEL}=Object.assign({ORDERS:[],NOTICES:[],CK:{},SUBMITS:[],CUR:null,REFS:{},READS:{},SCHED_TS:0,DELETED:[],ODEL:[],PATTERN:null,ATT:{},STORE_LOC:null,WAGE:MINWAGE,ATTREQ:[],ATTLOG:{},BOARD:[],STORE_IP:null,INV:[],CATS:[],HOL:[],WIFILOCK:false,ROOMS:defaultRooms(),IDEL:[],CDEL:[]},d));
-  INV=INV||[]; CATS=CATS||[]; HOL=HOL||[]; IDEL=IDEL||[]; CDEL=CDEL||[];
+  ({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,INV,CATS,HOL,WIFILOCK,ROOMS,IDEL,CDEL,PLANS,PDONE}=Object.assign({ORDERS:[],NOTICES:[],CK:{},SUBMITS:[],CUR:null,REFS:{},READS:{},SCHED_TS:0,DELETED:[],ODEL:[],PATTERN:null,ATT:{},STORE_LOC:null,WAGE:MINWAGE,ATTREQ:[],ATTLOG:{},BOARD:[],STORE_IP:null,INV:[],CATS:[],HOL:[],WIFILOCK:false,ROOMS:defaultRooms(),IDEL:[],CDEL:[],PLANS:[],PDONE:{}},d));
+  INV=INV||[]; CATS=CATS||[]; HOL=HOL||[]; IDEL=IDEL||[]; CDEL=CDEL||[]; PLANS=PLANS||[]; PDONE=PDONE||{};
   if(IDEL.length){INV=INV.filter(v=>!IDEL.includes(v.id));} if(CDEL.length){CATS=CATS.filter(c=>!CDEL.includes(c));}
   REFS=REFS||{}; READS=READS||{}; SCHED_TS=SCHED_TS||0; DELETED=DELETED||[]; ODEL=ODEL||[]; ATT=ATT||{}; WAGE=WAGE||MINWAGE; ATTREQ=ATTREQ||[]; ATTLOG=ATTLOG||{}; BOARD=BOARD||[];
   NOTICES.forEach(n=>{if(n.ts===undefined)n.ts=0;}); ORDERS.forEach(o=>{if(o.ts===undefined)o.ts=0; o.st=(o.st==='ordered'||o.st==='done'||o.done)?'ordered':'wait';});
@@ -1164,6 +1179,7 @@ function screenHome(){
  <div class="grid2" style="margin-bottom:12px">
    <div class="qbtn" style="position:relative" onclick="go('sched')">${IC('cal')}시간표${u.sched?'<span class="bdotn" style="position:absolute;top:10px;right:10px;margin:0"></span>':''}</div>
    <div class="qbtn" onclick="go('inv')">${IC('box')}재고관리</div>
+   <div class="qbtn" style="position:relative" onclick="go('plan')">${IC('cal')}일정${planTodoCount()?`<span class="bdotn" style="position:absolute;top:10px;right:10px;margin:0"></span>`:''}</div>
    <div class="qbtn" style="position:relative" onclick="go('comm')">${IC('bell')}공지·게시판${(u.n||u.b)?'<span class="bdotn" style="position:absolute;top:10px;right:10px;margin:0"></span>':''}</div>
    <div class="qbtn" onclick="go('close')">${IC('check')}오픈·마감 체크</div>
    <div class="qbtn" onclick="go('manual')">${IC('book')}매뉴얼·레시피</div>
@@ -2103,14 +2119,100 @@ function invItemCard(v,i,admin,pos){ const lowF=isLow(v);
      ${admin?`<span class="oact" onclick="invForm(${i})">수정</span><span class="oact del" onclick="delInvItem(${i})">삭제</span>`:''}
    </div></div>`;
 }
+let invView='stock';   // 'stock'=재고 기입 · 'flow'=입출고 현황
+function setInvView(v){ invView=v; invFreezeReset(); render(); }
 function screenInventory(){
+ const tabs=`<div class="row" style="margin:2px 0 8px;gap:6px">
+   <button class="btn ${invView==='stock'?'':'sec'}" onclick="setInvView('stock')">재고 기입</button>
+   <button class="btn ${invView==='flow'?'':'sec'}" onclick="setInvView('flow')">입출고 현황</button></div>`;
+ if(invView==='flow') return `<h2 class="title">${IC('box')}재고관리</h2>${tabs}${invFlowBody()}`;
  const selISO=invDate||todayK(), sd=new Date(selISO+'T00:00:00'), isToday=selISO===todayK();
  const selMD=(sd.getMonth()+1)+'/'+sd.getDate();
  const nav=`<div class="onav" style="margin-top:4px">
    <button class="onbtn" onclick="invDateShift(-1)" aria-label="이전 날">‹</button>
    <div class="ondate"><span>${selMD} (${WD[sd.getDay()]})${isToday?' · 오늘':''}</span><input type="date" value="${selISO}" max="${todayK()}" onchange="invDatePick(this.value)"></div>
    <button class="onbtn" onclick="invDateShift(1)" aria-label="다음 날" ${isToday?'disabled style="opacity:.35"':''}>›</button></div>`;
- return `<h2 class="title">${IC('box')}재고관리</h2>${nav}${isToday?invStockBody():invLogBody()}`;
+ return `<h2 class="title">${IC('box')}재고관리</h2>${tabs}${nav}${isToday?invStockBody():invLogBody()}`;
+}
+
+/* ── 입출고 현황: 기간별로 발주·입고·사용을 한눈에 (가로 막대) ── */
+let flowRange='today';  // yday | today | tomo | 7 | 15 | 30
+function setFlowRange(r){ flowRange=r; render(); }
+function flowSpan(){ // {from,to,label,future}
+ const t=todayK(), d=iso=>new Date(iso+'T00:00:00');
+ const shift=(n)=>{ const b=d(t); b.setDate(b.getDate()+n); return dk(b); };
+ if(flowRange==='yday') return {from:shift(-1),to:shift(-1),label:'어제'};
+ if(flowRange==='today')return {from:t,to:t,label:'오늘'};
+ if(flowRange==='tomo') return {from:shift(1),to:shift(1),label:'내일',future:true};
+ const n=parseInt(flowRange,10)||7;
+ return {from:shift(-(n-1)),to:t,label:'최근 '+n+'일'};
+}
+function flowStats(sp){ // 품목별 입고·사용 합계 (기간 내 로그)
+ const from=new Date(sp.from+'T00:00:00').getTime(), to=new Date(sp.to+'T00:00:00').getTime()+86399999;
+ const map={};
+ (INV||[]).forEach(v=>{ (v.log||[]).forEach(l=>{
+   if(!l.ts||l.ts<from||l.ts>to)return;
+   const m=map[v.id]||(map[v.id]={v,inQ:0,outQ:0});
+   if(l.ty==='입고') m.inQ+=Math.abs(l.delta||0);
+   else if(l.ty==='사용') m.outQ+=Math.abs(l.delta||0);
+   else if(l.ty==='실사'&&(l.delta||0)<0) m.outQ+=Math.abs(l.delta);   // 실사로 줄어든 만큼도 소진으로 봄
+   else if(l.ty==='실사'&&(l.delta||0)>0) m.inQ+=l.delta;
+ }); });
+ return Object.values(map).filter(m=>m.inQ||m.outQ).sort((a,b)=>(b.inQ+b.outQ)-(a.inQ+a.outQ));
+}
+function flowOrders(sp){ // 기간 내 발주(요청·발주됨) / 도착
+ const from=new Date(sp.from+'T00:00:00').getTime(), to=new Date(sp.to+'T00:00:00').getTime()+86399999;
+ const inRange=t=>t&&t>=from&&t<=to;
+ return {
+   req:(ORDERS||[]).filter(o=>inRange(o.ts)),                         // 그 기간에 올린 발주 요청
+   ord:(ORDERS||[]).filter(o=>o.st==='ordered'&&inRange(o.odts)),     // 그 기간에 발주된 것
+   arr:(ORDERS||[]).filter(o=>o.dvqty&&inRange(o.rcvts)),             // 그 기간에 도착한 것
+   pending:(ORDERS||[]).filter(o=>o.st==='ordered'&&o.odts&&!o.dvqty) // 아직 안 온 것(기간 무관)
+ };
+}
+function invFlowBody(){
+ const sp=flowSpan();
+ const chip=(k,l)=>`<button class="dchip ${flowRange===k?'on':''}" onclick="setFlowRange('${k}')">${l}</button>`;
+ const bar=`<div class="dsel" style="margin-bottom:10px">${chip('yday','어제')}${chip('today','오늘')}${chip('tomo','내일')}${chip('7','7일')}${chip('15','15일')}${chip('30','30일')}</div>`;
+ const o=flowOrders(sp);
+ if(sp.future){ // 내일 = 아직 안 온 발주(도착 예정)
+   const rows= o.pending.length? o.pending.map(x=>`<div class="lrow"><span>${escAttr(x.txt)}</span><span class="muted" style="font-size:11px">${x.od||''} 발주</span></div>`).join('')
+     : `<p class="muted" style="text-align:center;padding:18px 2px">도착 예정인 발주가 없어요.</p>`;
+   return `${bar}<div class="card"><h3>${IC('cart','li sm')}도착 예정 <span class="muted" style="font-size:12px;font-weight:600">· ${o.pending.length}건</span></h3>
+     <div class="muted" style="font-size:11px;margin-bottom:6px">발주했지만 아직 도착 확인이 안 된 품목이에요.</div>${rows}</div>`;
+ }
+ const stats=flowStats(sp);
+ const max=stats.reduce((m,x)=>Math.max(m,x.inQ,x.outQ),0)||1;
+ const bars= stats.length? stats.map(m=>{
+   const pin=Math.round(m.inQ/max*100), pout=Math.round(m.outQ/max*100);
+   return `<div style="padding:9px 0;border-bottom:1px solid #f0f2ef">
+     <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">
+       <b style="font-size:12.5px;flex:1">${escAttr(m.v.name)}</b>
+       <span class="muted" style="font-size:10.5px">현재 ${m.v.onHand||0}${m.v.unit}</span></div>
+     ${m.inQ?`<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+       <span style="font-size:10px;color:#2c7a4b;width:26px;flex:none">입고</span>
+       <div style="flex:1;height:14px;background:#f1f4f0;border-radius:7px;overflow:hidden"><div style="width:${pin}%;height:100%;background:#8FD1A6;border-radius:7px"></div></div>
+       <b style="font-size:11.5px;color:#2c7a4b;width:44px;text-align:right;flex:none">+${m.inQ}${m.v.unit}</b></div>`:''}
+     ${m.outQ?`<div style="display:flex;align-items:center;gap:6px">
+       <span style="font-size:10px;color:#b5793a;width:26px;flex:none">사용</span>
+       <div style="flex:1;height:14px;background:#f1f4f0;border-radius:7px;overflow:hidden"><div style="width:${pout}%;height:100%;background:#EFB27A;border-radius:7px"></div></div>
+       <b style="font-size:11.5px;color:#b5793a;width:44px;text-align:right;flex:none">−${m.outQ}${m.v.unit}</b></div>`:''}
+   </div>`; }).join('')
+  : `<p class="muted" style="text-align:center;padding:20px 2px">${sp.label}에 입고·사용 기록이 없어요.</p>`;
+ const olist=(arr,empty)=> arr.length? arr.map(x=>`<div class="lrow"><span>${escAttr(x.txt)}</span><span class="muted" style="font-size:11px">${x.who||''}</span></div>`).join('') : `<p class="muted" style="text-align:center;padding:14px 2px">${empty}</p>`;
+ return `${bar}
+   <div class="grid2" style="margin-bottom:10px">
+     <div class="qbtn" style="cursor:default"><b style="font-size:19px;color:var(--deep)">${o.req.length}</b><span style="font-size:11px">발주 요청</span></div>
+     <div class="qbtn" style="cursor:default"><b style="font-size:19px;color:#2f6fd0">${o.arr.length}</b><span style="font-size:11px">도착 확인</span></div>
+   </div>
+   <div class="card"><h3>${IC('box','li sm')}${sp.label} 입고·사용</h3>
+     <div class="muted" style="font-size:11px;margin-bottom:4px">${sp.from===sp.to?sp.from.slice(5).replace('-','/'):sp.from.slice(5).replace('-','/')+' ~ '+sp.to.slice(5).replace('-','/')}</div>
+     ${bars}</div>
+   <div class="card" style="margin-top:10px"><h3>${IC('cart','li sm')}${sp.label} 발주 요청 ${o.req.length?`<span class="muted" style="font-size:12px;font-weight:600">· ${o.req.length}건</span>`:''}</h3>
+     ${olist(o.req,'발주 요청이 없어요.')}</div>
+   <div class="card" style="margin-top:10px"><h3>${IC('check','li sm')}${sp.label} 도착 ${o.arr.length?`<span class="muted" style="font-size:12px;font-weight:600">· ${o.arr.length}건</span>`:''}</h3>
+     ${olist(o.arr,'도착 확인된 품목이 없어요.')}
+     ${o.pending.length?`<div class="muted" style="font-size:11px;margin-top:8px;padding-top:8px;border-top:1px solid var(--edge)">아직 안 온 발주 <b>${o.pending.length}건</b></div>`:''}</div>`;
 }
 function invListHTML(admin){ // 수동 순서 평면 목록 (검색·분류필터 반영, 그룹 헤더 없음)
  if(!INV.length) return `<p class="muted" style="text-align:center;padding:22px 2px">등록된 품목이 없어요.${admin?' 아래 <b>+ 품목 추가</b>로 시작하세요.':''}</p>`;
@@ -2691,6 +2793,111 @@ async function docDelete(emp,t){
 }
 
 
+
+/* ═══════════ 일정 게시판 (달력 · 반복 업무 체크) ═══════════ */
+let planMonth=null, planSel=null;   // 보는 달(그달 1일 ISO) · 고른 날짜
+function planId(){ return 'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,5); }
+function planKey(id,iso){ return id+'|'+iso; }
+function planDone(id,iso){ return PDONE[planKey(id,iso)]||null; }
+function daysBetween(a,b){ return Math.round((new Date(b+'T00:00:00')-new Date(a+'T00:00:00'))/86400000); }
+
+function planOccurs(p,iso){ // 그 날 해야 하는 일인가
+ if(!p||p.del)return false;
+ if(p.from && iso<p.from)return false;
+ if(p.until && iso>p.until)return false;
+ if(p.type==='once')  return iso===p.from;
+ if(p.type==='weekly')return (p.days||[]).includes(new Date(iso+'T00:00:00').getDay());
+ if(p.type==='interval'){ const n=Math.max(1,p.every||1); const d=daysBetween(p.from,iso); return d>=0 && d%n===0; }
+ return false; }
+function plansOn(iso){ return (PLANS||[]).filter(p=>planOccurs(p,iso)).sort((a,b)=>(a.ts||0)-(b.ts||0)); }
+function planRepeatLabel(p){
+ if(p.type==='once')return '한 번 · '+p.from.slice(5).replace('-','/');
+ if(p.type==='weekly')return '매주 '+(p.days||[]).slice().sort().map(d=>WD[d]).join('·');
+ return (p.every||1)+'일마다'; }
+
+function screenPlan(){
+ const base=new Date((planMonth||todayK())+'T00:00:00'), y=base.getFullYear(), mo=base.getMonth();
+ const first=new Date(y,mo,1), last=new Date(y,mo+1,0);
+ const sel=planSel||todayK();
+ const dows=['일','월','화','수','목','금','토'].map((w,i)=>`<div class="pcdow" style="color:${i===0?'#d33a2c':i===6?'#2b6cb0':'#9AA79D'}">${w}</div>`).join('');
+ let cells='';
+ for(let i=0;i<first.getDay();i++) cells+='<div></div>';
+ for(let d=1;d<=last.getDate();d++){
+   const iso=dk(new Date(y,mo,d)), list=plansOn(iso);
+   const doneN=list.filter(p=>planDone(p.id,iso)).length;
+   const isToday=iso===todayK(), isSel=iso===sel;
+   const dot= list.length? `<span class="pcdot ${doneN===list.length?'ok':''}"></span>`:'';
+   cells+=`<div class="pcday ${isSel?'sel':''} ${isToday?'today':''}" onclick="planPick('${iso}')">
+     <span>${d}</span>${dot}</div>`;
+ }
+ const sd=new Date(sel+'T00:00:00');
+ const list=plansOn(sel);
+ const rows= list.length? list.map(p=>{ const dn=planDone(p.id,sel);
+   return `<div class="ck" style="${dn?'background:#F4F8F3;border-color:#cfe3d4':''}">
+     <button class="pchk ${dn?'on':''}" onclick="planToggle('${p.id}','${sel}')" aria-label="완료">${dn?'✓':''}</button>
+     <div class="tx"><b style="${dn?'color:#6a7d70':''}">${escAttr(p.title)}</b>
+       <div class="muted" style="font-size:10.5px">${planRepeatLabel(p)}${p.memo?' · '+escAttr(p.memo):''}${dn?` · <b style="color:var(--deep)">${escAttr(dn.name)} ${fmtT(dn.ts)}</b>`:''}</div></div>
+     <span class="oact del" onclick="planAskDel('${p.id}')">삭제</span></div>`; }).join('')
+   : `<p class="muted" style="text-align:center;padding:20px 2px">이 날은 등록된 일정이 없어요.</p>`;
+ return `<h2 class="title">${IC('cal')}일정</h2>
+   <div class="card">
+     <div class="acalhd"><button onclick="planShift(-1)">‹</button><b style="font-size:15px">${y}년 ${mo+1}월</b><button onclick="planShift(1)">›</button></div>
+     <div class="pcgrid">${dows}${cells}</div>
+     <div class="muted" style="font-size:10.5px;text-align:center;margin-top:8px">● 할 일 있음 · <span style="color:var(--deep)">●</span> 모두 완료</div>
+   </div>
+   <div class="card" style="margin-top:10px">
+     <h3>${sd.getMonth()+1}월 ${sd.getDate()}일 (${WD[sd.getDay()]}) 할 일 ${list.length?`<span class="muted" style="font-size:12px;font-weight:600">· ${list.filter(p=>planDone(p.id,sel)).length}/${list.length}</span>`:''}</h3>
+     ${rows}
+     <button class="btn" style="margin-top:10px" onclick="planForm()">+ 일정 추가</button>
+   </div>`;
+}
+function planShift(d){ const b=new Date((planMonth||todayK())+'T00:00:00'); b.setMonth(b.getMonth()+d); planMonth=dk(new Date(b.getFullYear(),b.getMonth(),1)); render(); }
+function planPick(iso){ planSel=iso; render(); }
+function planToggle(id,iso){
+ const k=planKey(id,iso);
+ if(PDONE[k]) delete PDONE[k];
+ else PDONE[k]={uid:CUR,name:(curUser()&&curUser().name)||'',ts:Date.now()};
+ save(); render(); }
+function planAskDel(id){ const p=(PLANS||[]).find(x=>x.id===id); if(!p)return;
+ askConfirm(`<b>${escAttr(p.title)}</b> 일정을 삭제할까요?<br>앞으로 이 일정은 달력에 나오지 않아요.`,'삭제',()=>{
+   p.del=true; p.mt=Date.now(); PLANS=PLANS.filter(x=>x.id!==id); save(); render(); toast('삭제했습니다'); }); }
+
+let planType='weekly', planDays=[];
+function planForm(){
+ planType='weekly'; planDays=[new Date((planSel||todayK())+'T00:00:00').getDay()];
+ openModal(planFormHTML());
+ setTimeout(()=>{const el=$('plTitle');if(el)el.focus();},60); }
+function planTypeSet(t){ planType=t; const box=$('plBox'); if(box)box.innerHTML=planTypeHTML(); }
+function planDayTog(d){ d=+d; const i=planDays.indexOf(d); if(i<0)planDays.push(d); else planDays.splice(i,1);
+ const box=$('plBox'); if(box)box.innerHTML=planTypeHTML(); }
+function planTypeHTML(){
+ if(planType==='weekly') return `<div class="muted" style="font-size:11.5px;margin-bottom:6px">반복할 요일</div>
+   <div style="display:flex;gap:5px">${['일','월','화','수','목','금','토'].map((w,i)=>
+     `<button class="pday ${planDays.includes(i)?'on':''}" onclick="planDayTog(${i})">${w}</button>`).join('')}</div>`;
+ if(planType==='interval') return `<div class="muted" style="font-size:11.5px;margin-bottom:6px">며칠마다</div>
+   <div style="display:flex;align-items:center;gap:8px"><input id="plEvery" class="tsel" type="number" inputmode="numeric" value="3" min="1" style="width:90px"><span style="font-size:13px">일마다</span></div>`;
+ return `<div class="muted" style="font-size:11.5px">고른 날짜에 한 번만 표시돼요.</div>`; }
+function planFormHTML(){
+ const sel=planSel||todayK();
+ const tb=(k,l)=>`<button class="btn ${planType===k?'':'sec'}" style="flex:1;padding:9px 4px;font-size:12.5px" onclick="planTypeSet('${k}')">${l}</button>`;
+ return `<h3>일정 추가</h3>
+   <div class="fld"><label>할 일</label><input id="plTitle" class="tsel" placeholder="예: 화분 물주기" autocomplete="off"></div>
+   <div class="fld" style="margin-top:8px"><label>메모 <span class="muted">(선택)</span></label><input id="plMemo" class="tsel" placeholder="예: 창가 화분 3개" autocomplete="off"></div>
+   <div class="fld" style="margin-top:10px"><label>시작일</label><input id="plFrom" class="tsel" type="date" value="${sel}"></div>
+   <div style="display:flex;gap:6px;margin-top:12px">${tb('weekly','매주')}${tb('interval','N일마다')}${tb('once','한 번')}</div>
+   <div id="plBox" style="margin-top:10px">${planTypeHTML()}</div>
+   <div class="row" style="margin-top:14px"><button class="btn sec" onclick="closeModal()">취소</button>
+     <button class="btn" onclick="planSave()">등록</button></div>`; }
+function planSave(){
+ const title=($('plTitle')?$('plTitle').value:'').trim(); if(!title){toast('할 일을 입력하세요');return;}
+ const memo=($('plMemo')?$('plMemo').value:'').trim();
+ const from=($('plFrom')?$('plFrom').value:'')||todayK();
+ const p={id:planId(),title:title.slice(0,40),memo:memo.slice(0,60),type:planType,from,by:CUR,ts:Date.now(),mt:Date.now()};
+ if(planType==='weekly'){ if(!planDays.length){toast('요일을 하나 이상 고르세요');return;} p.days=planDays.slice().sort(); }
+ else if(planType==='interval'){ const n=parseInt($('plEvery')?$('plEvery').value:'0',10); if(!n||n<1){toast('며칠마다인지 입력하세요');return;} p.every=n; }
+ PLANS.push(p); planSel=from; save(); closeModal(); render(); toast('일정을 등록했습니다'); }
+function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDone(p.id,t)).length; }
+
 /* ═══════════ 도움말 — 중앙 팝업 · 한 화면씩 넘기기 ═══════════ */
 const HELP_KEY='farmplanet.helpseen', HELP_VER=4; // 숫자를 올리면 모두에게 다시 1회 표시
 function helpIsIOS(){ return /iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1); }
@@ -2991,6 +3198,7 @@ function render(){
  else if(tab==="order") html=screenNotice();
  else if(tab==="board") html=screenBoard();
  else if(tab==="comm") html=screenComm();
+ else if(tab==="plan") html=screenPlan();
  else if(tab==="inv") html=screenInventory();
  else if(tab==="chat") html=screenChat();
  else if(tab==="sdocs") html=screenDocs();
@@ -2999,7 +3207,7 @@ function render(){
  if(tab==="manual") renderManual($("msearch")?.value||"");
  if(tab==="inv") setTimeout(initInvSort,0);
  if(tab==="chat") setTimeout(chatAfterRender,0);
- const navTab=(tab==='close'||tab==='manual'||tab==='closeAdmin'||tab==='notice'||tab==='board'||tab==='comm'||tab==='inv'||tab==='sched'||tab==='sdocs')?'home':tab;
+ const navTab=(tab==='close'||tab==='manual'||tab==='closeAdmin'||tab==='notice'||tab==='board'||tab==='comm'||tab==='inv'||tab==='sched'||tab==='sdocs'||tab==='plan')?'home':tab;
  const u=CUR?unread():{n:0,o:0,sched:0,c:0};
  $("nav").innerHTML=NAV.map(n=>{
    const dot=(n[0]==='order'&&u.o)||(n[0]==='chat'&&u.c)||(n[0]==='att'&&isAdmin(curUser())&&attReqCount());
