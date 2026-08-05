@@ -454,7 +454,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.31.2'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.32.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -1731,6 +1731,15 @@ let ordTab='order'; // 발주 하위탭: order(발주) / deliver(배송)
 function setOrdTab(t){ ordTab=t; render(); }
 function escAttr(s){ return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 function productName(t){ const s=String(t||'').replace(/\s*\d+(\.\d+)?\s*[가-힣a-zA-Z]*\s*$/,'').trim(); return s || String(t||'').trim(); } // 끝의 재고수량(숫자+단위) 제거 → 제품명만
+function orderUnit(o){ // 재고에서 담은 발주면 그 품목의 단위
+ if(!o)return '';
+ if(o.invId){ const v=(INV||[]).find(x=>x.id===o.invId); if(v)return v.unit||''; }
+ return o.unit||''; }
+function setDeliveredQ(i,val){ // 숫자만 입력해도 재고 단위를 붙여 저장
+ const o=ORDERS[i]; if(!o)return;
+ let t=String(val||'').trim(); const u=orderUnit(o);
+ if(u&&t&&/^\d+(\.\d+)?$/.test(t)) t=t+u;
+ setDelivered(i,t); }
 function setDelivered(i,val){ const o=ORDERS[i]; if(!o||o.st!=='ordered')return;
  o.dvqty=(val||'').trim(); o.rcv=!!o.dvqty; o.rcvts=o.dvqty?Date.now():null; o.bad=/오배송/.test(o.dvqty);
  o.mt=Date.now();
@@ -1796,7 +1805,8 @@ function invResetToday(){
  (ORDERS||[]).forEach(o=>{
    if(!o.dvqty||!o.rcvts||dk(new Date(o.rcvts))!==t)return;
    const d=dvParse(o.dvqty); if(!d)return;
-   const nm=productName(o.txt), v=invFindByName(nm);
+   const nm=productName(o.txt);
+   const v=(o.invId?(INV||[]).find(x=>x.id===o.invId):null) || invFindByName(nm);
    if(!v){ skip.push(nm+' — 재고에 없음'); return; }
    if((d.unit||'').trim()!==(v.unit||'').trim()){ skip.push(`${nm} — 단위 ${d.unit}↔${v.unit}`); return; }
    stockApply(o,v,d.q,true); ok++; });
@@ -1813,7 +1823,8 @@ function stockFromDelivery(i){
  const o=ORDERS[i]; if(!o)return;
  const d=o.dvqty?dvParse(o.dvqty):null;
  if(!d){ stockUndo(o); render(); return; }              // 비우거나 '오배송' → 반영 취소
- const nm=productName(o.txt), v=invFindByName(nm);
+ const nm=productName(o.txt);
+ const v=(o.invId?(INV||[]).find(x=>x.id===o.invId):null) || invFindByName(nm);
  if(!v){ toast(`재고에 '${nm}' 품목이 없어 재고 반영은 건너뜁니다`); return; }
  const same=(d.unit||'').trim()===(v.unit||'').trim();
  if(same){ stockApply(o,v,d.q); return; }
@@ -1864,13 +1875,16 @@ function deliverBody(){
      </div></div>`;
    }
    const carried=isToday && odMD && odMD!==selMD;
-   let ph=''; if(!hintShown){ ph="실제 배송된 수량 (예: 24개 · 문제 시 '오배송')"; hintShown=true; }
+   const ou=orderUnit(o);
+   let ph=''; if(!hintShown){ ph= ou? `숫자만 적으면 돼요 (문제 시 '오배송')` : "실제 배송된 수량 (예: 24개 · 문제 시 '오배송')"; hintShown=true; }
    return `<div class="omsg"><div class="obub">
      <div class="obx"></div>
      <div class="otx">${o.txt}${carried?`<span style="font-size:10px;font-weight:700;color:#c07d3a;background:#fdf1e3;border-radius:10px;padding:1px 6px;margin-left:5px;white-space:nowrap">이월 ${odMD}</span>`:(odMD?`<span style="font-size:9.5px;color:var(--sub);margin-left:5px">${odMD} 발주</span>`:'')}</div>
      <span class="ost" style="color:#ff7d59;white-space:nowrap">배송중</span>
    </div>
-   <div style="margin:4px 0 9px 6px"><input class="tsel" style="width:100%;padding:8px 10px;font-size:12.5px" value="" placeholder="${ph}" autocomplete="off" inputmode="text" onchange="setDelivered(${i},this.value)"></div>
+   <div style="margin:4px 0 9px 6px;display:flex;align-items:center;gap:6px">
+     <input class="tsel" style="flex:1;min-width:0;padding:8px 10px;font-size:12.5px" value="" placeholder="${ph}" autocomplete="off" inputmode="${ou?'decimal':'text'}" onchange="setDeliveredQ(${i},this.value)">
+     ${ou?`<span style="flex:none;font-size:12.5px;font-weight:800;color:var(--deep);background:#EDF1EA;border-radius:8px;padding:8px 10px">${escAttr(ou)}</span>`:''}</div>
    </div>`;
  }).join('') : `<p class="muted" style="text-align:center;padding:22px 2px">${isToday?'배송중이거나 오늘 배송된 물건이 없어요.':'이 날 배송된 물건이 없어요.'}</p>`;
  const nav=`<div class="onav">
@@ -2168,7 +2182,7 @@ function invResort(){ invFreeze=null; render(); toast('정렬을 새로고침했
 function invSet(i){ const v=INV[i]; if(!v)return; // 실사·입고 통합: 지금 실제 수량을 입력
  invNumModal(`${v.name} · 수량`, `지금 실제 수량 (${v.unit})`, v.onHand||0, n=>{ const delta=n-(v.onHand||0); v.onHand=n; invLog(v,'실사',delta,n); v.mt=Date.now(); save();render();toast(`${v.name} ${n}${v.unit}로 맞췄습니다`); }); }
 function invOrder(i){ const v=INV[i]; if(!v)return;
- ORDERS.push({id:'o'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),who:curUser().name,txt:v.name,dt:fmtDT(),ts:Date.now(),mt:Date.now(),st:'wait'});
+ ORDERS.push({id:'o'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),who:curUser().name,txt:v.name,dt:fmtDT(),ts:Date.now(),mt:Date.now(),st:'wait',invId:v.id,unit:v.unit});
  save();render();toast(`${v.name}을(를) 발주방에 담았습니다`); }
 /* 분류 관리 (생성 후 여러 품목을 한 번에 담기) */
 function openCatMgr(){ if(!isAdmin(curUser())){toast('분류 관리는 대표님·매니저만 가능해요');return;}
@@ -3038,6 +3052,8 @@ function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDon
 /* ═══════════ 업데이트 내역 (새로고침 후 무엇이 바뀌었는지) ═══════════ */
 const VER_KEY='farmplanet.lastver';
 const CHANGELOG=[
+ {v:'2.32.0', d:'2026-07-29', items:[
+   '재고에서 담은 발주는 배송 입력칸 뒤에 <b>단위가 미리 표시</b>돼요 — 숫자만 적으면 됩니다' ]},
  {v:'2.31.2', d:'2026-07-29', items:[
    '입출고 기록 <b>전체 초기화</b> 추가 — 잘못 쌓인 기록을 한 번에 정리' ]},
  {v:'2.31.1', d:'2026-07-29', items:[
