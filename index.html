@@ -454,7 +454,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.31.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.31.2'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -1748,10 +1748,29 @@ function stockApply(o,v,q,quiet){ // v 품목에 q(재고 단위)로 맞춤
  const prev=o.stockQty||0, delta=rnd(q-prev);
  if(!delta){ o.stockId=v.id; o.stockQty=q; if(!quiet)save(); return; }
  v.onHand=rnd((v.onHand||0)+delta); invLog(v,'입고',delta,v.onHand); v.mt=Date.now();
- o.stockId=v.id; o.stockQty=q; o.mt=Date.now();
+ o.stockId=v.id; o.stockQty=q; o.skipFlow=false; o.mt=Date.now();
  if(quiet)return;
  invFreezeReset(); save(); render();
  toast(`${v.name} 재고에 ${delta>0?'+':''}${delta}${v.unit} 반영 (현재 ${v.onHand}${v.unit})`); }
+
+/* ── 입출고 기록 전체 초기화 (관리자) ── */
+function invResetAllAsk(){
+ if(!isAdmin(curUser())){toast('대표님·매니저만 가능해요');return;}
+ let logs=0; (INV||[]).forEach(v=>{ logs+=(v.log||[]).length; });
+ openModal(`<h3>입출고 기록 전체 초기화</h3>
+   <div class="muted" style="font-size:12px;line-height:1.85;margin-bottom:12px">
+     지금까지 쌓인 입고·사용 기록 <b>${logs}건</b>을 모두 지워 그래프를 비웁니다.<br>
+     품목 목록과 분류는 그대로예요.</div>
+   <div style="display:flex;flex-direction:column;gap:8px">
+     <button class="btn sec" onclick="closeModal();invResetAll(false)">기록만 지우기 <span class="muted" style="font-weight:600">· 현재 재고 수량 유지</span></button>
+     <button class="btn sec" style="color:var(--warn);border-color:#f0d9bd" onclick="closeModal();invResetAll(true)">기록 + 현재 재고 0으로</button>
+     <button class="btn sec" onclick="closeModal()">취소</button></div>`); }
+function invResetAll(zero){
+ let logs=0;
+ (INV||[]).forEach(v=>{ logs+=(v.log||[]).length; v.log=[]; if(zero)v.onHand=0; v.mt=Date.now(); });
+ (ORDERS||[]).forEach(o=>{ if(o.stockId||o.stockQty||o.dvqty){ o.stockId=null; o.stockQty=0; o.skipFlow=true; o.mt=Date.now(); } });
+ invFreezeReset(); save(); render();
+ toast(`입출고 기록 ${logs}건을 지웠어요${zero?' · 재고 수량도 0으로':''}`); }
 
 /* ── 오늘 입고·사용 기록 초기화 후, 오늘 배송분만 다시 반영 (관리자) ── */
 function invResetTodayAsk(){
@@ -2248,7 +2267,7 @@ function flowStats(sp){ // 품목별 입고·사용 합계 (재고 로그 + 배�
  }); });
  // ② 배송 도착(발주 → 실제 배송 수량) — 재고 품목과 이름이 같으면 합치고, 없으면 새 줄
  (ORDERS||[]).forEach(o=>{
-   if(o.stockId)return;                                   // 재고에 반영된 건 INV 로그로 이미 집계됨
+   if(o.stockId||o.skipFlow)return;                        // 재고 로그로 집계됐거나 정리로 제외된 건 건너뜀
    if(!o.dvqty||!o.rcvts||o.rcvts<from||o.rcvts>to)return;
    const d=dvParse(o.dvqty); if(!d)return;
    const nm=productName(o.txt);
@@ -2304,7 +2323,9 @@ function invFlowBody(){
  const olist=(arr,empty)=> arr.length? arr.map(x=>`<div class="lrow"><span>${escAttr(x.txt)}</span><span class="muted" style="font-size:11px">${x.who||''}</span></div>`).join('') : `<p class="muted" style="text-align:center;padding:14px 2px">${empty}</p>`;
  const admin=isAdmin(curUser());
  return `${bar}
-   ${(admin&&flowRange==='today')?`<button class="btn sec" style="width:100%;margin-bottom:10px;border-color:#f0d9bd;color:var(--warn)" onclick="invResetTodayAsk()">${IC('refresh','li sm')} 오늘 입고·사용 초기화 → 배송분만 반영</button>`:''}
+   ${admin?`<div class="row" style="margin-bottom:10px;gap:6px">
+     ${flowRange==='today'?`<button class="btn sec" style="font-size:11.5px;padding:9px 4px" onclick="invResetTodayAsk()">오늘만 정리</button>`:''}
+     <button class="btn sec" style="font-size:11.5px;padding:9px 4px;border-color:#f0d9bd;color:var(--warn)" onclick="invResetAllAsk()">전체 초기화</button></div>`:''}
    <div class="grid2" style="margin-bottom:10px">
      <div class="qbtn" style="cursor:default"><b style="font-size:19px;color:var(--deep)">${o.req.length}</b><span style="font-size:11px">발주 요청</span></div>
      <div class="qbtn" style="cursor:default"><b style="font-size:19px;color:#2f6fd0">${o.arr.length}</b><span style="font-size:11px">도착 확인</span></div>
@@ -3017,6 +3038,8 @@ function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDon
 /* ═══════════ 업데이트 내역 (새로고침 후 무엇이 바뀌었는지) ═══════════ */
 const VER_KEY='farmplanet.lastver';
 const CHANGELOG=[
+ {v:'2.31.2', d:'2026-07-29', items:[
+   '입출고 기록 <b>전체 초기화</b> 추가 — 잘못 쌓인 기록을 한 번에 정리' ]},
  {v:'2.31.1', d:'2026-07-29', items:[
    '입출고 현황(오늘)에 <b>오늘 기록 초기화</b> 버튼 — 잘못 쌓인 입고·사용을 지우고 배송분만 다시 반영' ]},
  {v:'2.31.0', d:'2026-07-29', items:[
