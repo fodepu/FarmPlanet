@@ -454,7 +454,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.30.4'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.31.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -1735,7 +1735,53 @@ function setDelivered(i,val){ const o=ORDERS[i]; if(!o||o.st!=='ordered')return;
  o.dvqty=(val||'').trim(); o.rcv=!!o.dvqty; o.rcvts=o.dvqty?Date.now():null; o.bad=/오배송/.test(o.dvqty);
  o.mt=Date.now();
  try{ const ae=document.activeElement; if(ae&&ae.blur)ae.blur(); }catch(e){} // 입력칸 blur → iOS 스크롤 잠김 방지
- save(); render(); toast(o.dvqty?'배송 내용을 저장했습니다':'배송중으로 되돌렸습니다'); }
+ save(); render();
+ stockFromDelivery(i);   // 배송 수량을 재고에 반영
+ toast(o.dvqty?'배송 내용을 저장했습니다':'배송중으로 되돌렸습니다'); }
+
+/* ── 배송 도착 → 재고 자동 입고 ──
+   이미 반영한 양(o.stockQty)과 비교해 차액만 더하므로 수정해도 중복되지 않는다. */
+function invFindByName(nm){ const t=String(nm||'').trim().toLowerCase(); if(!t)return null;
+ return (INV||[]).find(v=>(v.name||'').trim().toLowerCase()===t)
+     || (INV||[]).find(v=>{const n=(v.name||'').trim().toLowerCase(); return n&&(t.includes(n)||n.includes(t));}) || null; }
+function stockApply(o,v,q){ // v 품목에 q(재고 단위)로 맞춤
+ const prev=o.stockQty||0, delta=rnd(q-prev);
+ if(!delta){ o.stockId=v.id; o.stockQty=q; save(); return; }
+ v.onHand=rnd((v.onHand||0)+delta); invLog(v,'입고',delta,v.onHand); v.mt=Date.now();
+ o.stockId=v.id; o.stockQty=q; o.mt=Date.now();
+ invFreezeReset(); save(); render();
+ toast(`${v.name} 재고에 ${delta>0?'+':''}${delta}${v.unit} 반영 (현재 ${v.onHand}${v.unit})`); }
+function stockUndo(o){ // 배송 취소·오배송 시 반영분 되돌리기
+ if(!o.stockId||!o.stockQty)return;
+ const v=(INV||[]).find(x=>x.id===o.stockId); if(v){ v.onHand=rnd((v.onHand||0)-o.stockQty); invLog(v,'입고',-o.stockQty,v.onHand); v.mt=Date.now(); }
+ o.stockId=null; o.stockQty=0; invFreezeReset(); save(); }
+function stockFromDelivery(i){
+ const o=ORDERS[i]; if(!o)return;
+ const d=o.dvqty?dvParse(o.dvqty):null;
+ if(!d){ stockUndo(o); render(); return; }              // 비우거나 '오배송' → 반영 취소
+ const nm=productName(o.txt), v=invFindByName(nm);
+ if(!v){ toast(`재고에 '${nm}' 품목이 없어 재고 반영은 건너뜁니다`); return; }
+ const same=(d.unit||'').trim()===(v.unit||'').trim();
+ if(same){ stockApply(o,v,d.q); return; }
+ // 단위가 다르면 물어본다
+ _sfd={i,vid:v.id,d};
+ openModal(`<h3>단위가 달라요</h3>
+   <div class="muted" style="font-size:12px;line-height:1.8;margin-bottom:10px">
+     배송에 적은 것: <b>${escAttr(o.dvqty)}</b><br>
+     재고 <b>${escAttr(v.name)}</b>의 단위: <b>${escAttr(v.unit)}</b><br>
+     재고에 얼마를 더할지 <b>${escAttr(v.unit)}</b> 기준으로 적어주세요.</div>
+   <div class="fld"><label>재고에 더할 수량 (${escAttr(v.unit)})</label>
+     <input id="sfdQty" class="tsel" type="number" inputmode="decimal" value="${d.q}"></div>
+   <div class="muted" style="font-size:11px;margin-top:6px">예) 600g×2박스가 왔고 재고 단위가 g이면 <b>1200</b></div>
+   <div class="row" style="margin-top:12px"><button class="btn sec" onclick="sfdSkip()">재고 반영 안 함</button>
+     <button class="btn" onclick="sfdOk()">재고에 반영</button></div>`);
+ setTimeout(()=>{const el=$('sfdQty'); if(el){el.focus(); try{el.select();}catch(e){}}},60); }
+let _sfd=null;
+function sfdOk(){ if(!_sfd)return; const {i,vid}=_sfd;
+ const q=parseFloat($('sfdQty')?$('sfdQty').value:''); if(isNaN(q)){toast('숫자를 입력하세요');return;}
+ const o=ORDERS[i], v=(INV||[]).find(x=>x.id===vid); _sfd=null; closeModal();
+ if(o&&v) stockApply(o,v,rnd(q)); }
+function sfdSkip(){ _sfd=null; closeModal(); toast('재고에는 반영하지 않았어요'); }
 function editDelivered(i){ const o=ORDERS[i]; if(!o)return;
  const v=prompt('실제 배송 수량 수정 (문제 시 "오배송"):', o.dvqty||''); if(v===null)return; setDelivered(i,v); }
 let dvDate=null; // 배송 탭에서 보는 날짜(ISO), null=오늘
@@ -2142,11 +2188,16 @@ function flowSpan(){ // {from,to,label,future}
  const n=parseInt(flowRange,10)||7;
  return {from:shift(-(n-1)),to:t,label:'최근 '+n+'일'};
 }
-function dvParse(txt){ // "24개" "2박스" "24" → {q,unit} · "오배송"이면 null
+function rnd(n){ return Math.round((+n||0)*100)/100; }   // 소수 둘째 자리까지
+function dvParse(txt){ // "24개" "2박스" "600g*2" "2*600g" → {q,unit} · "오배송"이면 null
  const t=String(txt||'').trim(); if(!t||/오배송/.test(t))return null;
+ const mul=t.match(/(\d+(?:\.\d+)?)\s*([가-힣a-zA-Z]*)\s*[*xX×]\s*(\d+(?:\.\d+)?)\s*([가-힣a-zA-Z]*)/);
+ if(mul){ const a=parseFloat(mul[1]), b=parseFloat(mul[3]);
+   const unit=(mul[2]||mul[4]||'개');            // 단위가 붙은 쪽을 사용
+   if(a&&b) return {q:rnd(a*b), unit}; }
  const m=t.match(/(\d+(?:\.\d+)?)\s*([가-힣a-zA-Z]*)/);
  if(!m)return null; const q=parseFloat(m[1]); if(!q)return null;
- return {q, unit:(m[2]||'개')}; }
+ return {q:rnd(q), unit:(m[2]||'개')}; }
 function flowStats(sp){ // 품목별 입고·사용 합계 (재고 로그 + 배송 도착)
  const from=new Date(sp.from+'T00:00:00').getTime(), to=new Date(sp.to+'T00:00:00').getTime()+86399999;
  const map={};
@@ -2162,6 +2213,7 @@ function flowStats(sp){ // 품목별 입고·사용 합계 (재고 로그 + 배�
  }); });
  // ② 배송 도착(발주 → 실제 배송 수량) — 재고 품목과 이름이 같으면 합치고, 없으면 새 줄
  (ORDERS||[]).forEach(o=>{
+   if(o.stockId)return;                                   // 재고에 반영된 건 INV 로그로 이미 집계됨
    if(!o.dvqty||!o.rcvts||o.rcvts<from||o.rcvts>to)return;
    const d=dvParse(o.dvqty); if(!d)return;
    const nm=productName(o.txt);
@@ -2199,20 +2251,20 @@ function invFlowBody(){
  const row=(m)=>{
    const pin=m.inQ?Math.max(Math.round(m.inQ/max*100),4):0, pout=m.outQ?Math.max(Math.round(m.outQ/max*100),4):0;
    return `<div style="display:flex;align-items:center;gap:4px;padding:7px 0;border-bottom:1px solid #f4f6f3">
-     <b style="width:46px;flex:none;text-align:right;font-size:11px;color:#c0392b">${m.outQ?'−'+m.outQ+(m.outUnit||m.unit):''}</b>
+     <b style="width:58px;flex:none;text-align:right;font-size:10.5px;color:#c0392b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.outQ?'−'+rnd(m.outQ)+(m.outUnit||m.unit):''}</b>
      <div style="flex:1;min-width:0;display:flex;justify-content:flex-end">
        <div style="width:${pout}%;height:14px;background:#E4796B;border-radius:7px 0 0 7px"></div></div>
-     <div style="width:74px;flex:none;text-align:center;font-size:11.5px;font-weight:800;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+     <div style="width:66px;flex:none;text-align:center;font-size:11.5px;font-weight:800;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
           title="${escAttr(m.name)}">${escAttr(m.name)}</div>
      <div style="flex:1;min-width:0;display:flex;justify-content:flex-start">
        <div style="width:${pin}%;height:14px;background:#7BC49A;border-radius:0 7px 7px 0"></div></div>
-     <b style="width:46px;flex:none;text-align:left;font-size:11px;color:#2c7a4b">${m.inQ?'+'+m.inQ+(m.inUnit||m.unit):''}</b>
+     <b style="width:58px;flex:none;text-align:left;font-size:10.5px;color:#2c7a4b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.inQ?'+'+rnd(m.inQ)+(m.inUnit||m.unit):''}</b>
    </div>`; };
  const legend=`<div style="display:flex;align-items:center;justify-content:center;gap:14px;margin:2px 0 8px;font-size:10.5px;color:var(--sub)">
      <span><span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:#E4796B;vertical-align:-1px;margin-right:4px"></span>나간 것(사용)</span>
      <span><span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:#7BC49A;vertical-align:-1px;margin-right:4px"></span>들어온 것(입고·도착)</span></div>`;
  const bars= stats.length? legend+stats.map(row).join('')
-   +`<div class="muted" style="font-size:10.5px;text-align:center;margin-top:8px">막대는 가장 큰 값(${max})을 기준으로 한 상대 길이예요.</div>`
+   +`<div class="muted" style="font-size:10.5px;text-align:center;margin-top:8px">막대는 가장 큰 값(${rnd(max)})을 기준으로 한 상대 길이예요.</div>`
   : `<p class="muted" style="text-align:center;padding:20px 2px">${sp.label}에 입고·사용 기록이 없어요.</p>`;
  const olist=(arr,empty)=> arr.length? arr.map(x=>`<div class="lrow"><span>${escAttr(x.txt)}</span><span class="muted" style="font-size:11px">${x.who||''}</span></div>`).join('') : `<p class="muted" style="text-align:center;padding:14px 2px">${empty}</p>`;
  return `${bar}
@@ -2928,6 +2980,10 @@ function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDon
 /* ═══════════ 업데이트 내역 (새로고침 후 무엇이 바뀌었는지) ═══════════ */
 const VER_KEY='farmplanet.lastver';
 const CHANGELOG=[
+ {v:'2.31.0', d:'2026-07-29', items:[
+   '<b>배송 수량이 재고에 자동 반영</b>돼요 — 단위가 다르면 물어봅니다',
+   '<b>600g*2</b> 처럼 곱하기로 적으면 1200g으로 계산해요',
+   '그래프 숫자 반올림 · 배송분 중복 집계 수정' ]},
  {v:'2.30.4', d:'2026-07-29', items:[
    '입출고 그래프의 <b>단위</b>를 배송에 적은 그대로 표시 (박스·팩 등)' ]},
  {v:'2.30.3', d:'2026-07-29', items:[
