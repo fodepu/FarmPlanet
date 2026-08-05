@@ -454,7 +454,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.32.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.33.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -1849,6 +1849,43 @@ function sfdOk(){ if(!_sfd)return; const {i,vid}=_sfd;
 function sfdSkip(){ _sfd=null; closeModal(); toast('재고에는 반영하지 않았어요'); }
 function editDelivered(i){ const o=ORDERS[i]; if(!o)return;
  const v=prompt('실제 배송 수량 수정 (문제 시 "오배송"):', o.dvqty||''); if(v===null)return; setDelivered(i,v); }
+/* ── 그 날 입고분을 채팅방으로 보내기 ── */
+function dvSummaryText(iso){
+ const d=new Date(iso+'T00:00:00');
+ const head=`${d.getMonth()+1}/${d.getDate()} (${WD[d.getDay()]})`;
+ const items=(ORDERS||[]).filter(o=>o.dvqty&&rcvKey(o)===iso)
+   .sort((a,b)=>(a.rcvts||0)-(b.rcvts||0))
+   .map(o=>`· ${productName(o.txt)} ${o.dvqty}`);
+ if(!items.length)return null;
+ return head+'\n'+items.join('\n')+'\n입고완료되었습니다.'; }
+function dvSendAsk(){
+ const iso=dvDate||todayK();
+ const txt=dvSummaryText(iso);
+ if(!txt){toast('이 날 입고된 물건이 없어요');return;}
+ const rooms=roomList();
+ openModal(`<h3>채팅방으로 보내기</h3>
+   <div class="fld"><label>보낼 방</label><select id="dvRoom" class="tsel">
+     ${rooms.map(r=>`<option value="${r.id}">${escAttr(r.name)}</option>`).join('')}</select></div>
+   <div class="fld" style="margin-top:8px"><label>내용 <span class="muted">(고쳐도 돼요)</span></label>
+     <textarea class="inp" id="dvMsg" style="min-height:150px">${escAttr(txt)}</textarea></div>
+   <div class="row" style="margin-top:12px"><button class="btn sec" onclick="dvCopyMsg()">복사</button>
+     <button class="btn" onclick="dvSendMsg()">보내기</button></div>`); }
+function dvCopyMsg(){ const el=$('dvMsg'); if(!el)return; clipWrite(el.value,'복사했어요 — 카톡에 붙여넣으세요'); }
+function dvSendMsg(){
+ const el=$('dvMsg'), rid=$('dvRoom')?$('dvRoom').value:'';
+ const txt=(el?el.value:'').trim(); if(!txt){toast('내용이 비어 있어요');return;}
+ if(!rid){toast('보낼 방을 고르세요');return;}
+ if(!_fsDb||!_chatApi){toast('채팅 연결 준비 중이에요');return;}
+ if(!_fbUid){toast('로그인 후 이용할 수 있어요');return;}
+ const {collection,addDoc,serverTimestamp}=_chatApi;
+ const r=roomById(rid);
+ const payload={auth:_fbUid,uid:CUR,name:(curUser()&&curUser().name)||'',text:txt.slice(0,1000),cts:Date.now(),ts:serverTimestamp(),nep:{},sook:{}};
+ closeModal();
+ addDoc(collection(_fsDb,'rooms',rid,'messages'),payload)
+   .then(()=>{ pushSend(`${payload.name||'FarmPlanet'} · ${r?r.name:''}`,txt.slice(0,120),{tag:'chat-'+rid,onlyUids:roomMembers(r)});
+     toast((r?r.name:'채팅')+'에 보냈어요'); })
+   .catch(e=>toast('전송 실패: '+((e&&(e.code||e.message))||e))); }
+
 let dvDate=null; // 배송 탭에서 보는 날짜(ISO), null=오늘
 function dvShift(d){ const b=new Date((dvDate||todayK())+'T00:00:00'); b.setDate(b.getDate()+d); dvDate=dk(b); render(); }
 function dvPick(iso){ if(iso)dvDate=iso; render(); }
@@ -1891,7 +1928,10 @@ function deliverBody(){
    <button class="onbtn" onclick="dvShift(-1)" aria-label="이전 날">‹</button>
    <div class="ondate"><span>${selMD} (${WD[sd.getDay()]})</span>${shipN?`<span class="odbadge">배송중 ${shipN}</span>`:''}<input type="date" value="${selISO}" onchange="dvPick(this.value)"></div>
    <button class="onbtn" onclick="dvShift(1)" aria-label="다음 날">›</button></div>`;
- return `${nav}<p class="muted" style="font-size:11px;margin:0 0 10px;text-align:center">물건이 오면 칸에 실제 배송 수량 입력 → 배송완료 · 문제 시 '오배송' · 배송중은 오늘로 이월돼요</p><div class="ordday">${rows}</div>`; }
+ const doneN=all.filter(x=>x.o.dvqty&&rcvKey(x.o)===selISO).length;
+ return `${nav}<p class="muted" style="font-size:11px;margin:0 0 10px;text-align:center">물건이 오면 칸에 실제 배송 수량 입력 → 배송완료 · 문제 시 '오배송' · 배송중은 오늘로 이월돼요</p>
+   ${doneN?`<button class="btn sec" style="width:100%;margin-bottom:10px" onclick="dvSendAsk()">${IC('chat','li sm')} 입고 내역 채팅으로 보내기 (${doneN}건)</button>`:''}
+   <div class="ordday">${rows}</div>`; }
 /* 대기 발주 복사 → 카톡 붙여넣기용 텍스트만 생성 (발주됨 체크는 별도 수동) */
 function copyOrders(){
  const wait=ORDERS.filter(o=>o.st==='wait');
@@ -3052,6 +3092,8 @@ function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDon
 /* ═══════════ 업데이트 내역 (새로고침 후 무엇이 바뀌었는지) ═══════════ */
 const VER_KEY='farmplanet.lastver';
 const CHANGELOG=[
+ {v:'2.33.0', d:'2026-07-29', items:[
+   '배송 화면에서 <b>입고 내역을 채팅으로</b> 바로 보낼 수 있어요 (날짜 → 항목 → 입고완료)' ]},
  {v:'2.32.0', d:'2026-07-29', items:[
    '재고에서 담은 발주는 배송 입력칸 뒤에 <b>단위가 미리 표시</b>돼요 — 숫자만 적으면 됩니다' ]},
  {v:'2.31.2', d:'2026-07-29', items:[
