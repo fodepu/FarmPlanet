@@ -454,7 +454,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.30.3'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.30.4'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -2150,15 +2150,15 @@ function dvParse(txt){ // "24개" "2박스" "24" → {q,unit} · "오배송"이�
 function flowStats(sp){ // 품목별 입고·사용 합계 (재고 로그 + 배송 도착)
  const from=new Date(sp.from+'T00:00:00').getTime(), to=new Date(sp.to+'T00:00:00').getTime()+86399999;
  const map={};
- const get=(key,name,unit)=>{ const m=map[key]||(map[key]={name,unit:unit||'개',onHand:null,inQ:0,outQ:0}); return m; };
+ const get=(key,name,unit)=>{ const m=map[key]||(map[key]={name,unit:unit||'개',inUnit:'',outUnit:'',onHand:null,inQ:0,outQ:0}); return m; };
  // ① 재고 기입(입고·사용·실사)
  (INV||[]).forEach(v=>{ (v.log||[]).forEach(l=>{
    if(!l.ts||l.ts<from||l.ts>to)return;
    const m=get('inv:'+v.id, v.name, v.unit); m.onHand=v.onHand||0;
-   if(l.ty==='입고') m.inQ+=Math.abs(l.delta||0);
-   else if(l.ty==='사용') m.outQ+=Math.abs(l.delta||0);
-   else if(l.ty==='실사'&&(l.delta||0)<0) m.outQ+=Math.abs(l.delta);   // 실사로 줄어든 만큼도 소진으로 봄
-   else if(l.ty==='실사'&&(l.delta||0)>0) m.inQ+=l.delta;
+   if(l.ty==='입고'){ m.inQ+=Math.abs(l.delta||0); m.inUnit=m.inUnit||v.unit; }
+   else if(l.ty==='사용'){ m.outQ+=Math.abs(l.delta||0); m.outUnit=m.outUnit||v.unit; }
+   else if(l.ty==='실사'&&(l.delta||0)<0){ m.outQ+=Math.abs(l.delta); m.outUnit=m.outUnit||v.unit; }   // 실사로 줄어든 만큼도 소진으로 봄
+   else if(l.ty==='실사'&&(l.delta||0)>0){ m.inQ+=l.delta; m.inUnit=m.inUnit||v.unit; }
  }); });
  // ② 배송 도착(발주 → 실제 배송 수량) — 재고 품목과 이름이 같으면 합치고, 없으면 새 줄
  (ORDERS||[]).forEach(o=>{
@@ -2168,7 +2168,7 @@ function flowStats(sp){ // 품목별 입고·사용 합계 (재고 로그 + 배�
    const hit=(INV||[]).find(v=>(v.name||'').trim()===nm);
    const m=hit? get('inv:'+hit.id, hit.name, hit.unit) : get('ord:'+nm, nm, d.unit);
    if(hit) m.onHand=hit.onHand||0;
-   m.inQ+=d.q; m.arrived=true;
+   m.inQ+=d.q; m.inUnit=d.unit; m.arrived=true;   // 배송에 적은 단위를 그대로 표시(박스·팩 등)
  });
  return Object.values(map).filter(m=>m.inQ||m.outQ).sort((a,b)=>(b.inQ+b.outQ)-(a.inQ+a.outQ));
 }
@@ -2199,14 +2199,14 @@ function invFlowBody(){
  const row=(m)=>{
    const pin=m.inQ?Math.max(Math.round(m.inQ/max*100),4):0, pout=m.outQ?Math.max(Math.round(m.outQ/max*100),4):0;
    return `<div style="display:flex;align-items:center;gap:4px;padding:7px 0;border-bottom:1px solid #f4f6f3">
-     <b style="width:46px;flex:none;text-align:right;font-size:11px;color:#c0392b">${m.outQ?'−'+m.outQ+m.unit:''}</b>
+     <b style="width:46px;flex:none;text-align:right;font-size:11px;color:#c0392b">${m.outQ?'−'+m.outQ+(m.outUnit||m.unit):''}</b>
      <div style="flex:1;min-width:0;display:flex;justify-content:flex-end">
        <div style="width:${pout}%;height:14px;background:#E4796B;border-radius:7px 0 0 7px"></div></div>
      <div style="width:74px;flex:none;text-align:center;font-size:11.5px;font-weight:800;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
           title="${escAttr(m.name)}">${escAttr(m.name)}</div>
      <div style="flex:1;min-width:0;display:flex;justify-content:flex-start">
        <div style="width:${pin}%;height:14px;background:#7BC49A;border-radius:0 7px 7px 0"></div></div>
-     <b style="width:46px;flex:none;text-align:left;font-size:11px;color:#2c7a4b">${m.inQ?'+'+m.inQ+m.unit:''}</b>
+     <b style="width:46px;flex:none;text-align:left;font-size:11px;color:#2c7a4b">${m.inQ?'+'+m.inQ+(m.inUnit||m.unit):''}</b>
    </div>`; };
  const legend=`<div style="display:flex;align-items:center;justify-content:center;gap:14px;margin:2px 0 8px;font-size:10.5px;color:var(--sub)">
      <span><span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:#E4796B;vertical-align:-1px;margin-right:4px"></span>나간 것(사용)</span>
@@ -2928,6 +2928,8 @@ function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDon
 /* ═══════════ 업데이트 내역 (새로고침 후 무엇이 바뀌었는지) ═══════════ */
 const VER_KEY='farmplanet.lastver';
 const CHANGELOG=[
+ {v:'2.30.4', d:'2026-07-29', items:[
+   '입출고 그래프의 <b>단위</b>를 배송에 적은 그대로 표시 (박스·팩 등)' ]},
  {v:'2.30.3', d:'2026-07-29', items:[
    '입출고 그래프를 <b>한 줄</b>로 — 품목 기준 왼쪽 빨강(나간 것)·오른쪽 초록(들어온 것)' ]},
  {v:'2.30.2', d:'2026-07-29', items:[
