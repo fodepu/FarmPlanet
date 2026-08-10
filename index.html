@@ -454,7 +454,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.33.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.33.2'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -711,21 +711,58 @@ function getGeo(ok,err){
  }, {enableHighAccuracy:true,timeout:12000,maximumAge:30000});
 }
 /* 공인 IP 조회 — 같은 와이파이면 같은 공인 IP. IPv4 전용 엔드포인트(api.ipify.org) 우선, 실패 시 폴백 */
-function getPublicIP(ok,err){
- fetch('https://api.ipify.org?format=json',{cache:'no-store'})
-  .then(r=>r.json()).then(d=>{ if(d&&d.ip)ok(String(d.ip).trim()); else throw 0; })
-  .catch(()=>{ fetch('https://ipv4.icanhazip.com',{cache:'no-store'})
-    .then(r=>r.text()).then(t=>{ const ip=(t||'').trim(); if(ip)ok(ip); else (err&&err()); })
-    .catch(()=>err&&err()); });
+function fetchT(url,ms){ // 응답이 없으면 끊어준다(무한 대기 방지)
+ return new Promise((res,rej)=>{
+   let done=false;
+   const t=setTimeout(()=>{ if(!done){done=true;rej(new Error('timeout'));} },ms||6000);
+   fetch(url,{cache:'no-store'}).then(r=>{ if(done)return; done=true; clearTimeout(t); res(r); })
+     .catch(e=>{ if(done)return; done=true; clearTimeout(t); rej(e); }); }); }
+function getPublicIP(ok,err){ // 두 곳을 동시에 물어보고 먼저 오는 답을 쓴다(최대 5초)
+ let called=false; const done=f=>(v)=>{ if(called)return; called=true; f&&f(v); };
+ const good=done(ok), bad=done(err);
+ let left=2; const miss=()=>{ if(--left<=0) bad(); };
+ fetchT('https://api.ipify.org?format=json',5000)
+   .then(r=>r.json()).then(d=>{ const ip=d&&d.ip?String(d.ip).trim():''; ip?good(ip):miss(); }).catch(miss);
+ fetchT('https://ipv4.icanhazip.com',5000)
+   .then(r=>r.text()).then(t=>{ const ip=(t||'').trim(); ip?good(ip):miss(); }).catch(miss);
+ setTimeout(()=>bad(),6000);   // 최후 안전장치 — 어떤 경우에도 응답이 온다
 }
 /* 와이파이 게이트 — 현재 공인 IP가 매장 IP와 같아야 통과 */
+let _wifiBusy=false, _wifiRetry=null, _wifiFail=null, _wifiIp=null;
 function wifiGate(actName, ok, onFail){
  if(!STORE_IP){ ok(); return; } // 매장 와이파이 미등록 시 확인 없이 진행
- toast('와이파이 확인 중…');
- getPublicIP(ip=>{ if(ip===STORE_IP){ ok(); }
-   else { const m=`매장 와이파이가 아니에요 — ${actName}은 매장 와이파이에 연결하고 해주세요`; onFail?onFail(m):toast(m); } },
-   ()=>{ const m='네트워크 확인 실패 — 인터넷 연결을 확인해 주세요'; onFail?onFail(m):toast(m); });
+ if(_wifiBusy){ toast('와이파이 확인 중이에요'); return; }
+ _wifiBusy=true; toast('와이파이 확인 중…');
+ _wifiRetry=()=>{ _wifiBusy=false; wifiGate(actName,ok,onFail); };
+ getPublicIP(ip=>{ _wifiBusy=false;
+     if(ip===STORE_IP){ ok(); return; }
+     wifiFailModal(actName, ip, onFail); },
+   ()=>{ _wifiBusy=false; wifiFailModal(actName, null, onFail); });
 }
+function wifiFailModal(actName, ip, onFail){
+ const admin=isAdmin(curUser());
+ const body = ip
+   ? `<div class="muted" style="font-size:12px;line-height:1.85">지금 연결된 곳이 매장 와이파이로 확인되지 않아요.<br>
+        지금 IP <b style="color:var(--ink)">${escAttr(ip)}</b><br>등록된 매장 IP <b style="color:var(--ink)">${escAttr(STORE_IP)}</b><br>
+        <span style="font-size:11px">매장에 계신데 다르다면, 인터넷 사업자가 IP를 바꾼 것일 수 있어요.</span></div>`
+   : `<div class="muted" style="font-size:12px;line-height:1.85">네트워크 확인에 실패했어요.<br>
+        와이파이/데이터 연결을 확인하고 다시 시도해 주세요.</div>`;
+ openModal(`<h3>${actName} 확인이 안 됐어요</h3>${body}
+   <div style="display:flex;flex-direction:column;gap:8px;margin-top:14px">
+     <button class="btn" onclick="closeModal();_wifiRetry&&_wifiRetry()">다시 확인</button>
+     ${(admin&&ip)?`<button class="btn sec" onclick="wifiAdopt('${escAttr(ip)}')">이 와이파이를 매장으로 등록하고 계속</button>`:''}
+     ${onFail?`<button class="btn sec" onclick="wifiAskAdmin()">관리자에게 ${actName} 요청</button>`:''}
+     <button class="btn sec" onclick="closeModal()">닫기</button></div>`);
+ _wifiFail=onFail; _wifiIp=ip;
+}
+function wifiAskAdmin(){ const f=_wifiFail, ip=_wifiIp; closeModal();
+ if(f)f(ip?`매장 와이파이가 아니에요 (지금 IP ${ip})`:'네트워크 확인 실패 — 인터넷 연결을 확인해 주세요'); }
+function wifiAdopt(ip){
+ if(!isAdmin(curUser())){toast('대표님·매니저만 가능해요');return;}
+ if(WIFILOCK){ toast('와이파이 설정이 🔒 고정돼 있어요 — 근태 화면에서 해제 후 다시 시도하세요'); return; }
+ STORE_IP=ip; save(); closeModal();
+ toast('매장 와이파이를 지금 IP로 갱신했어요');
+ if(_wifiRetry)_wifiRetry(); }
 /* 관리자: 현재 접속한 와이파이(공인 IP)를 매장으로 등록 */
 function openWifiSetup(){ if(!isAdmin(curUser())){toast('와이파이 설정은 대표님·매니저만 가능해요');return;}
  const locked=!!WIFILOCK;
@@ -3092,6 +3129,9 @@ function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDon
 /* ═══════════ 업데이트 내역 (새로고침 후 무엇이 바뀌었는지) ═══════════ */
 const VER_KEY='farmplanet.lastver';
 const CHANGELOG=[
+ {v:'2.33.2', d:'2026-07-29', items:[
+   '출근이 눌리지 않던 문제 수정 — 와이파이 확인이 <b>멈추지 않고</b> 결과를 알려줘요',
+   '매장 IP가 바뀌면 <b>현재 IP를 보여주고</b> 관리자가 바로 갱신할 수 있어요' ]},
  {v:'2.33.1', d:'2026-07-29', items:[
    '입고 내역 메시지 형식 정리 — 점 제거, 날짜·항목·마무리 사이 빈 줄' ]},
  {v:'2.33.0', d:'2026-07-29', items:[
