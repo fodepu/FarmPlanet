@@ -32,6 +32,7 @@ svg.li.lg{width:20px;height:20px} svg.li.sm{width:13px;height:13px}
 .screen{flex:1;overflow-y:auto;padding:6px 16px 20px}
 .screen.chatmode{display:flex;flex-direction:column;padding:0;overflow:hidden}
 /* 채팅 입력창: input 대신 contenteditable — iOS의 form 보조바(∧ ∨ ✓)를 띄우지 않음 */
+*{touch-action:manipulation}
 .chatin{flex:1;min-width:0;border:1px solid var(--edge);background:#fff;border-radius:20px;padding:10px 14px;
   font-size:16px;line-height:1.45;color:var(--ink);max-height:110px;overflow-y:auto;outline:none;
   -webkit-user-select:text;user-select:text;word-break:break-word;white-space:pre-wrap}
@@ -454,7 +455,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.35.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.36.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -678,8 +679,10 @@ let onlyMine=false, noticeView='notice', schedFocus=null;
 /* ═══════════ 공통 ═══════════ */
 const $=id=>document.getElementById(id);
 function toast(m){const t=$("toast");t.textContent=m;t.classList.add("show");clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove("show"),1800);}
+let _navTap=false;
+function navGo(t){ _navTap=true; try{ go(t); } finally { _navTap=false; } }
 function go(t){ if(t==='inv'&&tab!=='inv')invFreezeReset();
- if(t==='chat'&&tab==='chat'&&chatRoom){ chatRoom=null; }   // 채팅 탭 다시 누르면 방 목록으로
+ if(t==='chat'&&tab==='chat'&&chatRoom&&_navTap){ chatRoom=null; }   // 하단 채팅 탭을 직접 눌렀을 때만 목록으로
  tab=t;render();const sc=$("screen");if(sc.scrollTo)sc.scrollTo(0,0);}
 function curUser(){return STAFF.find(s=>s.id===CUR);}
 function hon(n){return /님$/.test(n||'')?n:(n||'')+'님';} // 이미 '님'으로 끝나면 중복 안 붙임
@@ -859,7 +862,7 @@ function attHistoryHTML(){
      <button onclick="attCalShift(1)" aria-label="다음 달">›</button></div>
    <div class="asumrow"><span class="apill">총 ${fmtDur(totW)}</span><span class="muted" style="font-size:12px">휴게 ${fmtDur(totB)}</span></div>
    <div class="acalgrid">${dows}${cells}</div>
-   <div class="muted" style="font-size:11px;text-align:center;margin-top:8px">날짜를 누르면 그날 출·퇴근·휴게를 볼 수 있어요</div></div>`;
+   <div class="muted" style="font-size:11px;text-align:center;margin-top:8px">날짜를 누르면 그날 기록을 보고 <b>수정 요청</b>도 할 수 있어요</div></div>`;
 }
 function attDayModal(iso){ const r=attRecFor(CUR,iso); if(!r||!r.in){toast('기록이 없어요');return;}
  const live=iso===todayK()&&!r.out, end=r.out||(live?Date.now():0);
@@ -869,7 +872,8 @@ function attDayModal(iso){ const r=attRecFor(CUR,iso); if(!r||!r.in){toast('기�
    <div style="font-size:15px;margin:10px 0 6px"><b>출근</b> ${fmtT(r.in)} <span class="muted">·</span> <b>퇴근</b> ${r.out?fmtT(r.out):(live?'근무 중':'—')}</div>
    <div style="margin:6px 0 10px">${brk}</div>
    <div style="border-top:1px solid var(--edge);padding-top:9px;font-size:13.5px">근무 <b>${fmtDur(recWorkedMs(r,live))}</b> <span class="muted">·</span> 휴게 ${fmtDur(recBreakMs(r,end))}</div>
-   <button class="btn sec" style="margin-top:12px" onclick="closeModal()">닫기</button>`); }
+   <div class="row" style="margin-top:12px"><button class="btn sec" onclick="closeModal()">닫기</button>
+     <button class="btn" onclick="reqAtt('${iso}')">${IC('swap','li sm')} 수정 요청</button></div>`); }
 function fmtHMS(ms){ const m=Math.max(0,Math.floor(ms/60000)); return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); } // 시:분 (초 미표시)
 function attElapsed(){ const a=attToday(); if(!a)return 0; const st=attStatus(a);
  if(st==='work')return workedMs(a); if(st==='break'){const b=attOpenBreak(a);return b?Date.now()-b.s:0;} return 0; }
@@ -901,8 +905,12 @@ function parseBrk(v){ // "12~13, 15~15:30" → [{s,e}] · 빈칸이면 []
    if(e&&e<=s)return null;
    out.push({s,e}); }
  return out; }
-function reqAtt(){ const a=attToday(); if(!a){toast('오늘 출근 기록이 없어요');return;}
- openModal(`<h3>근태 수정 요청 · ${curUser().name}</h3>
+let _reqDate=null;
+function reqAtt(iso){ _reqDate=iso||todayK();
+ const a=attRecFor(CUR,_reqDate);
+ if(!a||!a.in){toast('그 날 출근 기록이 없어요');return;}
+ const dd=new Date(_reqDate+'T00:00:00');
+ openModal(`<h3>근태 수정 요청 · ${dd.getMonth()+1}/${dd.getDate()}(${WD[dd.getDay()]})</h3>
    <div class="muted" style="font-size:11.5px;margin-bottom:10px">고칠 시각을 입력해 관리자에게 요청하세요. <b>승인되면 반영</b>됩니다.</div>
    <div class="fld"><label>출근 시각 <span class="muted">(예: 9 또는 9:30)</span></label><input id="atIn" class="tsel" value="${fmtT(a.in)}" placeholder="9:00" autocomplete="off" inputmode="numeric"></div>
    <div class="fld" style="margin-top:8px"><label>퇴근 시각 <span class="muted">(예: 2 → 오후 2시 · 비우면 '근무 중')</span></label><input id="atOut" class="tsel" value="${a.out?fmtT(a.out):''}" placeholder="14:00" autocomplete="off" inputmode="numeric"></div>
@@ -911,17 +919,17 @@ function reqAtt(){ const a=attToday(); if(!a){toast('오늘 출근 기록이 없
    <div class="fld" style="margin-top:8px"><label>메모 <span class="muted">(선택)</span></label><input id="atNote" class="tsel" placeholder="예: 실수로 퇴근을 눌렀어요" autocomplete="off"></div>
    <div class="row" style="margin-top:12px"><button class="btn sec" onclick="go('att')">취소</button><button class="btn" onclick="sendAttReq()">관리자에게 요청 보내기</button></div>`);
  setTimeout(()=>{const el=$('atIn');if(el)el.focus();},50); }
-function sendAttReq(){ const a=attToday(); if(!a)return;
+function sendAttReq(){ const date=_reqDate||todayK(); const a=attRecFor(CUR,date); if(!a)return;
  const ti=parseTs($('atIn').value); if(!ti){toast('출근 시각 형식 확인 (예: 9 · 9:30)');return;}
  const ov=($('atOut')?$('atOut').value:'').trim(); let to=null; if(ov){to=parseTs(ov); if(!to){toast('퇴근 시각 형식 확인 (예: 2 · 14:00)');return;}}
  const brks=parseBrk($('atBrk')?$('atBrk').value:'');
  if(brks===null){toast('휴게 형식 확인 (예: 12~13 · 여러 번은 쉼표)');return;}
  const note=($('atNote')?$('atNote').value:'').trim();
- ATTREQ=(ATTREQ||[]).filter(r=>!(r.uid===CUR&&r.date===todayK())); // 같은 날 이전 요청은 대체
- ATTREQ.push({id:'r'+Date.now().toString(36),uid:CUR,name:curUser().name,date:todayK(),in:ti,out:to,breaks:brks,note,ts:Date.now()});
+ ATTREQ=(ATTREQ||[]).filter(r=>!(r.uid===CUR&&r.date===date)); // 같은 날 이전 요청은 대체
+ ATTREQ.push({id:'r'+Date.now().toString(36),uid:CUR,name:curUser().name,date,in:ti,out:to,breaks:brks,note,ts:Date.now()});
  save(); go('att');
  pushSend('🕒 근태 수정 요청 · '+curUser().name,
-   `${fmtT(ti)}~${to?fmtT(to):'근무 중'}${brks.length?' · 휴게 '+brks.length+'회':''}${note?' — '+note:''}`,
+   `${date.slice(5).replace('-','/')} ${fmtT(ti)}~${to?fmtT(to):'근무 중'}${brks.length?' · 휴게 '+brks.length+'회':''}${note?' — '+note:''}`,
    {tag:'attreq', onlyUids:adminUids()});
  toast('관리자에게 수정 요청을 보냈습니다'); }
 function adminUids(){ return (STAFF||[]).filter(s=>!s.pending&&isAdmin(s)).map(s=>s.id); }
@@ -1015,7 +1023,7 @@ function screenAtt(){
      <div class="atimer done"><div class="albl">오늘 근무</div><div class="aclock">${fmtDur(workedMs(a))}</div></div>
      <div class="asum">출근 ${fmtT(a.in)} · 퇴근 ${fmtT(a.out)} · 휴게 ${a.breaks.length}회</div>`;
  }
- const editBtn = a? `<button class="btn sec" style="margin-top:14px" onclick="reqAtt()">${IC('swap','li sm')} 기록 수정 요청</button>`:'';
+ const editBtn = a? `<button class="btn sec" style="margin-top:14px" onclick="reqAtt(todayK())">${IC('swap','li sm')} 오늘 기록 수정 요청</button>`:'';
  const reqBox = (admin && attReqCount())? `<div class="card" style="margin-top:12px;border-color:#bcd7f0"><h3>${IC('bell','li sm')}근태 요청 ${attReqCount()}건</h3>${ATTREQ.map(r=>`<div style="border-top:1px solid var(--edge);padding:8px 0"><div style="font-size:13px"><b>${r.name}</b> <span class="pill" style="background:${r.kind==='in'?'#e7f0ff':'#F0F4EE'};color:${r.kind==='in'?'#2f6fd0':'var(--deep)'};font-size:10px">${r.kind==='in'?'출근 요청':'기록 수정'}</span> <span class="muted" style="font-size:11px">${r.date.slice(5)}</span></div><div class="muted" style="font-size:11.5px">출근 ${fmtT(r.in)}${r.out?' · 퇴근 '+fmtT(r.out):" · '근무 중'으로"}${Array.isArray(r.breaks)?' · 휴게 '+(r.breaks.length?r.breaks.map(b=>fmtT(b.s)+'~'+(b.e?fmtT(b.e):'')).join(', '):'없음'):''}${r.note?' · "'+r.note+'"':''}</div><div class="row" style="gap:6px;margin-top:6px"><button class="btn sec" style="color:var(--warn);border-color:#f0d9bd" onclick="rejectAttReq('${r.id}')">거절</button><button class="btn" onclick="approveAttReq('${r.id}')">승인</button></div></div>`).join('')}</div>`:'';
  const adminBox = admin? `<div class="muted" style="font-size:11px;margin-top:14px">${STORE_IP?(WIFILOCK?'매장 와이파이 고정됨 🔒':'매장 와이파이 등록됨'):'매장 와이파이 미등록 — 출퇴근 확인 안 함'} · <span class="authlink" onclick="openWifiSetup()">와이파이 설정</span></div>`:'';
  return `<h2 class="title">${IC('clock')}근태</h2><div class="card">${body}${editBtn}</div>${admin?currentDutyHTML():''}${attHistoryHTML()}${admin?admSummaryHTML():''}${reqBox}${adminBox}`;
@@ -1692,7 +1700,9 @@ function screenNotice(){
  READS[CUR]=READS[CUR]||{}; READS[CUR][view]=Date.now(); // 읽음 처리
  if(view==='order'){
    const shipN=ORDERS.filter(o=>o.st==='ordered'&&o.odts&&!o.dvqty).length;
-   const seg=`<div class="seg" style="margin:6px 0 11px">
+   const seg=`<div class="muted" style="font-size:11px;text-align:center;margin:4px 0 8px">
+       발주 전에 재고부터 맞춰주세요 · <span class="authlink" onclick="openInvFlowHelp()">재고 → 발주 흐름 보기</span></div>
+     <div class="seg" style="margin:0 0 11px">
      <button class="${ordTab==='order'?'on':''}" onclick="setOrdTab('order')">발주</button>
      <button class="${ordTab==='deliver'?'on':''}" onclick="setOrdTab('deliver')">배송${shipN?` <span style="background:#ff7d59;color:#fff;border-radius:10px;padding:0 6px;font-size:10px;margin-left:4px">${shipN}</span>`:''}</button></div>`;
    if(ordTab==='deliver') return `<h2 class="title">${IC('cart')}발주</h2>${seg}${deliverBody()}`;
@@ -1800,10 +1810,11 @@ let ordTab='order'; // 발주 하위탭: order(발주) / deliver(배송)
 function setOrdTab(t){ ordTab=t; render(); }
 function escAttr(s){ return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 function productName(t){ const s=String(t||'').replace(/\s*\d+(\.\d+)?\s*[가-힣a-zA-Z]*\s*$/,'').trim(); return s || String(t||'').trim(); } // 끝의 재고수량(숫자+단위) 제거 → 제품명만
-function orderUnit(o){ // 재고에서 담은 발주면 그 품목의 단위
+function orderUnit(o){ // 재고 품목과 연결되면 그 단위를 쓴다(직접 적은 발주도 이름으로 찾음)
  if(!o)return '';
  if(o.invId){ const v=(INV||[]).find(x=>x.id===o.invId); if(v)return v.unit||''; }
- return o.unit||''; }
+ if(o.unit)return o.unit;
+ const v=invFindByName(productName(o.txt)); return v?(v.unit||''):''; }
 function setDeliveredQ(i,val){ // 숫자만 입력해도 재고 단위를 붙여 저장
  const o=ORDERS[i]; if(!o)return;
  let t=String(val||'').trim(); const u=orderUnit(o);
@@ -3161,6 +3172,11 @@ function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDon
 /* ═══════════ 업데이트 내역 (새로고침 후 무엇이 바뀌었는지) ═══════════ */
 const VER_KEY='farmplanet.lastver';
 const CHANGELOG=[
+ {v:'2.36.0', d:'2026-07-29', items:[
+   '도움말에 <b>재고 → 발주 흐름</b> 추가 · 발주 화면 첫 진입 시 안내',
+   '<b>지난 날짜 근태도 수정 요청</b> 가능 (근무기록 달력에서 날짜 탭)',
+   '채팅 중 화면이 닫히던 문제 · 두 번 탭하면 확대되던 문제 수정',
+   '배송 단위가 안 뜨던 항목도 재고 단위를 찾아 표시' ]},
  {v:'2.35.0', d:'2026-07-29', items:[
    '출근은 <b>등록된 매장 와이파이에서만</b> — 그 외에는 등록되지 않아요',
    '새 IP 자동 기억을 끄고, 관리자가 직접 등록하도록 변경' ]},
@@ -3235,10 +3251,34 @@ function maybeWhatsNew(){
  return true; }
 
 /* ═══════════ 도움말 — 중앙 팝업 · 한 화면씩 넘기기 ═══════════ */
-const HELP_KEY='farmplanet.helpseen', HELP_VER=5; // 숫자를 올리면 모두에게 다시 1회 표시
+const HELP_KEY='farmplanet.helpseen', HELP_VER=6; // 숫자를 올리면 모두에게 다시 1회 표시
 function helpIsIOS(){ return /iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1); }
 let helpDev=null, helpIdx=-1;   // 기기 선택(-1=선택 화면), 현재 단계
 
+function invFlowHelpHTML(){
+ const st=(n,t)=>`<div class="hpstep"><span class="hpsn">${n}</span><span>${t}</span></div>`;
+ return `<div class="warnbox" style="margin:0 0 10px;font-size:11.5px"><b>발주 전에 재고부터 맞추세요.</b> 실제 수량을 모른 채 발주하면 과·부족이 생겨요.</div>`
+   +st(1,'물건을 쓰면 재고관리에서 <b>−</b> 로 줄입니다 <span class="muted">(＋는 늘리기)</span>')
+   +st(2,'수량이 헷갈리면 <b>수량 입력</b>으로 실제 개수를 맞춥니다')
+   +st(3,'부족하면 그 품목의 <b>발주 담기</b>를 누릅니다')
+   +st(4,'발주 탭에서 주문을 넣고 <b>발주됨</b>으로 체크합니다')
+   +st(5,'<b>배송</b> 탭으로 넘어간 항목에 <b>실제 받은 수량</b>을 적습니다')
+   +st(6,'그 수량만큼 <b>현재고가 자동으로 올라갑니다</b>')
+   +`<div class="muted" style="margin-top:10px;font-size:11.5px">배송에 적으면 재고에 자동 반영되니 <b>재고에 또 적지 마세요</b>(이중 계산).</div>`; }
+function openInvFlowHelp(){
+ const el=$('helpPop'); if(!el)return;
+ el.innerHTML=`<div class="hpcard">
+   <div style="display:flex;align-items:center;gap:10px"><span class="hpnum">${IC('box','li sm')}</span>
+     <h3 class="hph">재고 → 발주 흐름</h3></div>
+   <div class="hpbody" style="min-height:0;max-height:56vh;overflow-y:auto">${invFlowHelpHTML()}</div>
+   <button class="btn" style="width:100%;margin-top:6px" onclick="closeInvFlowHelp()">알겠어요</button></div>`;
+ el.classList.add('show'); }
+function closeInvFlowHelp(){ try{ localStorage.setItem('farmplanet.invflow','1'); }catch(e){}
+ const el=$('helpPop'); if(el){ el.classList.remove('show'); el.innerHTML=''; } }
+function maybeInvFlowHelp(){ // 발주 화면 첫 진입 시 1회
+ let seen=null; try{ seen=localStorage.getItem('farmplanet.invflow'); }catch(e){}
+ if(seen==='1')return;
+ setTimeout(()=>{ const el=$('helpPop'); if(tab==='order'&&el&&!el.classList.contains('show'))openInvFlowHelp(); },500); }
 function helpSteps(){
  const ios=helpDev==='ios';
  const st=(n,t)=>`<div class="hpstep"><span class="hpsn">${n}</span><span>${t}</span></div>`;
@@ -3278,11 +3318,7 @@ function helpSteps(){
      st('·','<b>홈 → 시간표</b>에서 이번 주 근무를 봅니다')
     +st('·','<b>내 근무만</b> 버튼으로 내 일정만 볼 수 있어요')
     +st('·','일정 변경·대타는 <b>홈 → 대타·시간조정</b>에 <b>'+BOARD_LEAD_DAYS+'일 전까지</b> 올려주세요') },
-  { icon:'box', title:'발주 · 재고', body:
-     st('·','<b>발주</b> 탭: 필요한 물건을 적고 <b>등록</b>')
-    +st('·','<b>홈 → 재고관리</b>: <b>＋ / −</b> 로 수량을 바로 조절')
-    +st('·','<b>수량 입력</b>으로 실제 개수를 맞춰요')
-    +`<div class="muted" style="margin-top:10px;font-size:11.5px">기준보다 적어져도 목록 순서는 그대로예요. 위의 <b>정렬 새로고침</b>을 누르면 부족한 품목이 위로 올라옵니다.</div>` },
+  { icon:'box', title:'재고 → 발주 흐름', body: invFlowHelpHTML() },
   { icon:'book', title:'내 서류', body:
      st('·','<b>홈 → 내 서류</b>에서 직접 등록할 수 있어요')
     +st('·','주민등록등본 · 통장사본 · 보건증 · 근로계약서')
@@ -3536,7 +3572,7 @@ function render(){
  else if(tab==="sched") html=screenSched();
  else if(tab==="close") html=screenClose();
  else if(tab==="notice") html=screenNotice();
- else if(tab==="order") html=screenNotice();
+ else if(tab==="order"){ html=screenNotice(); setTimeout(maybeInvFlowHelp,0); }
  else if(tab==="board") html=screenBoard();
  else if(tab==="comm") html=screenComm();
  else if(tab==="plan") html=screenPlan();
@@ -3552,7 +3588,7 @@ function render(){
  const u=CUR?unread():{n:0,o:0,sched:0,c:0};
  $("nav").innerHTML=NAV.map(n=>{
    const dot=(n[0]==='order'&&u.o)||(n[0]==='chat'&&u.c)||(n[0]==='att'&&isAdmin(curUser())&&attReqCount());
-   return `<button class="${navTab===n[0]?'on':''}" onclick="go('${n[0]}')" style="position:relative">
+   return `<button class="${navTab===n[0]?'on':''}" onclick="navGo('${n[0]}')" style="position:relative">
    ${IC(n[1],'li lg')}${n[2]}${dot?'<span class="ndot"></span>':''}</button>`;}).join("");
  maybeChatSubscribe(); // 로그인 후 최초 1회 구독(이미 구독됐으면 즉시 반환)
  pushMaybeResync();    // 로그인 확정 후 알림 구독을 내 계정으로 재등록(1회)
