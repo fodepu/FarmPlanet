@@ -455,7 +455,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.36.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.36.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -3172,6 +3172,8 @@ function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDon
 /* ═══════════ 업데이트 내역 (새로고침 후 무엇이 바뀌었는지) ═══════════ */
 const VER_KEY='farmplanet.lastver';
 const CHANGELOG=[
+ {v:'2.36.1', d:'2026-07-29', items:[
+   '재고 흐름 안내 문구 정리 — 배송 입력 후 재고에서 ＋로 또 올리지 말라는 뜻을 분명히' ]},
  {v:'2.36.0', d:'2026-07-29', items:[
    '도움말에 <b>재고 → 발주 흐름</b> 추가 · 발주 화면 첫 진입 시 안내',
    '<b>지난 날짜 근태도 수정 요청</b> 가능 (근무기록 달력에서 날짜 탭)',
@@ -3251,7 +3253,7 @@ function maybeWhatsNew(){
  return true; }
 
 /* ═══════════ 도움말 — 중앙 팝업 · 한 화면씩 넘기기 ═══════════ */
-const HELP_KEY='farmplanet.helpseen', HELP_VER=6; // 숫자를 올리면 모두에게 다시 1회 표시
+const HELP_KEY='farmplanet.helpseen', HELP_VER=7; // 숫자를 올리면 모두에게 다시 1회 표시
 function helpIsIOS(){ return /iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1); }
 let helpDev=null, helpIdx=-1;   // 기기 선택(-1=선택 화면), 현재 단계
 
@@ -3264,7 +3266,8 @@ function invFlowHelpHTML(){
    +st(4,'발주 탭에서 주문을 넣고 <b>발주됨</b>으로 체크합니다')
    +st(5,'<b>배송</b> 탭으로 넘어간 항목에 <b>실제 받은 수량</b>을 적습니다')
    +st(6,'그 수량만큼 <b>현재고가 자동으로 올라갑니다</b>')
-   +`<div class="muted" style="margin-top:10px;font-size:11.5px">배송에 적으면 재고에 자동 반영되니 <b>재고에 또 적지 마세요</b>(이중 계산).</div>`; }
+   +`<div class="warnbox" style="margin-top:10px;font-size:11.5px">배송 수량을 적으면 <b>현재고에 자동으로 더해집니다.</b><br>
+      그러니 받은 물건을 재고관리에서 <b>＋로 또 올리지 마세요.</b> 두 번 더해져 수량이 틀어져요.</div>`; }
 function openInvFlowHelp(){
  const el=$('helpPop'); if(!el)return;
  el.innerHTML=`<div class="hpcard">
