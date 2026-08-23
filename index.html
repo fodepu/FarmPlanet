@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#FAFCF8">
@@ -455,7 +455,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.37.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.38.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -1930,6 +1930,46 @@ function sfdSkip(){ _sfd=null; closeModal(); toast('재고에는 반영하지 �
 function editDelivered(i){ const o=ORDERS[i]; if(!o)return;
  const v=prompt('실제 배송 수량 수정 (문제 시 "오배송"):', o.dvqty||''); if(v===null)return; setDelivered(i,v); }
 /* ── 그 날 입고분을 채팅방으로 보내기 ── */
+function dvAddForm(){
+ const items=(INV||[]).slice().sort((a,b)=>((a.ord||0)-(b.ord||0)));
+ openModal(`<h3>받은 물건 추가</h3>
+   <div class="muted" style="font-size:11.5px;margin-bottom:10px">발주를 안 거치고 들어온 물건을 바로 입고 처리해요. <b>재고에 자동으로 더해집니다.</b></div>
+   <div class="fld"><label>품목</label><select id="dvItem" class="tsel" onchange="dvAddUnit()">
+     <option value="">직접 입력</option>
+     ${items.map(v=>`<option value="${v.id}">${escAttr(v.name)} (${escAttr(v.unit)})</option>`).join('')}</select></div>
+   <div class="fld" style="margin-top:8px"><label>이름 <span class="muted">(직접 입력할 때만)</span></label>
+     <input id="dvName" class="tsel" placeholder="예: 크루아상" autocomplete="off"></div>
+   <div class="fld" style="margin-top:8px"><label>받은 수량</label>
+     <div style="display:flex;gap:6px;align-items:center">
+       <input id="dvQty" class="tsel" style="flex:1" placeholder="예: 24 · 600g*2" autocomplete="off">
+       <span id="dvUnit" style="flex:none;font-size:12.5px;font-weight:800;color:var(--deep);background:#EDF1EA;border-radius:8px;padding:8px 10px;display:none"></span></div></div>
+   <div class="row" style="margin-top:12px"><button class="btn sec" onclick="closeModal()">취소</button>
+     <button class="btn" onclick="dvAddSave()">추가하고 입고</button></div>`);
+ setTimeout(dvAddUnit,30); }
+function dvAddUnit(){ const sel=$('dvItem'), u=$('dvUnit'), nm=$('dvName');
+ if(!sel||!u)return; const v=(INV||[]).find(x=>x.id===sel.value);
+ if(v){ u.textContent=v.unit||''; u.style.display=''; if(nm){nm.value=''; nm.disabled=true; nm.style.background='#f2f4f0';} }
+ else { u.style.display='none'; if(nm){nm.disabled=false; nm.style.background='';} } }
+function dvAddSave(){
+ const sel=$('dvItem'), v=(INV||[]).find(x=>x.id===(sel?sel.value:''));
+ const name=v? v.name : (($('dvName')?$('dvName').value:'')||'').trim();
+ if(!name){toast('품목을 고르거나 이름을 적어주세요');return;}
+ let q=(($('dvQty')?$('dvQty').value:'')||'').trim();
+ if(!q){toast('받은 수량을 적어주세요');return;}
+ if(v&&/^\d+(\.\d+)?$/.test(q)) q=q+(v.unit||'');
+ const now=Date.now();
+ const o={id:'o'+now.toString(36)+Math.random().toString(36).slice(2,6),who:curUser().name,txt:name,dt:fmtDT(),ts:now,mt:now,
+   st:'ordered',od:fmtDT(),odts:now};
+ if(v){ o.invId=v.id; o.unit=v.unit; }
+ ORDERS.push(o); dvDate=todayK(); save(); closeModal();
+ setDelivered(ORDERS.length-1,q);   // 바로 입고 처리 → 재고 반영
+}
+function dvDelAsk(i){ const o=ORDERS[i]; if(!o)return;
+ askConfirm(`<b>${escAttr(productName(o.txt))}</b>을(를) 배송 목록에서 삭제할까요?${o.stockId?'<br>재고에 반영된 수량도 되돌립니다.':''}`,'삭제',()=>{
+   const oo=ORDERS[i]; if(!oo)return;
+   if(oo.stockId) stockUndo(oo);
+   ODEL=[...new Set([...(ODEL||[]),ordKey(oo)])];
+   ORDERS.splice(i,1); save(); render(); toast('삭제했습니다'); }); }
 function dvSummaryText(iso){
  const d=new Date(iso+'T00:00:00');
  const head=`${d.getMonth()+1}/${d.getDate()} (${WD[d.getDay()]})`;
@@ -1989,6 +2029,7 @@ function deliverBody(){
        <div class="otx" style="${txtStyle}">${productName(o.txt)} ${escAttr(o.dvqty)}</div>
        <span class="ost" style="color:${col};white-space:nowrap">${lbl}</span>
        <span class="oact" onclick="editDelivered(${i})">수정</span>
+       <span class="oact del" onclick="dvDelAsk(${i})">삭제</span>
      </div></div>`;
    }
    const carried=isToday && odMD && odMD!==selMD;
@@ -1998,6 +2039,7 @@ function deliverBody(){
      <div class="obx"></div>
      <div class="otx">${o.txt}${carried?`<span style="font-size:10px;font-weight:700;color:#c07d3a;background:#fdf1e3;border-radius:10px;padding:1px 6px;margin-left:5px;white-space:nowrap">이월 ${odMD}</span>`:(odMD?`<span style="font-size:9.5px;color:var(--sub);margin-left:5px">${odMD} 발주</span>`:'')}</div>
      <span class="ost" style="color:#ff7d59;white-space:nowrap">배송중</span>
+     <span class="oact del" onclick="dvDelAsk(${i})">삭제</span>
    </div>
    <div style="margin:4px 0 9px 6px;display:flex;align-items:center;gap:6px">
      <input class="tsel" style="flex:1;min-width:0;padding:8px 10px;font-size:12.5px" value="" placeholder="${ph}" autocomplete="off" inputmode="${ou?'decimal':'text'}" onchange="setDeliveredQ(${i},this.value)">
@@ -2009,7 +2051,9 @@ function deliverBody(){
    <div class="ondate"><span>${selMD} (${WD[sd.getDay()]})</span>${shipN?`<span class="odbadge">배송중 ${shipN}</span>`:''}<input type="date" value="${selISO}" onchange="dvPick(this.value)"></div>
    <button class="onbtn" onclick="dvShift(1)" aria-label="다음 날">›</button></div>`;
  const doneN=all.filter(x=>x.o.dvqty&&rcvKey(x.o)===selISO).length;
+ const addBtn=`<button class="btn sec" style="width:100%;margin-bottom:10px" onclick="dvAddForm()">${IC('plus','li sm')} 받은 물건 직접 추가 (재고에 바로 반영)</button>`;
  return `${nav}<p class="muted" style="font-size:11px;margin:0 0 10px;text-align:center">물건이 오면 칸에 실제 배송 수량 입력 → 배송완료 · 문제 시 '오배송' · 배송중은 오늘로 이월돼요</p>
+   ${addBtn}
    ${doneN?`<button class="btn sec" style="width:100%;margin-bottom:10px" onclick="dvSendAsk()">${IC('chat','li sm')} 입고 내역 채팅으로 보내기 (${doneN}건)</button>`:''}
    <div class="ordday">${rows}</div>`; }
 /* 대기 발주 복사 → 카톡 붙여넣기용 텍스트만 생성 (발주됨 체크는 별도 수동) */
@@ -2302,8 +2346,18 @@ function invResort(){ invFreeze=null; render(); toast('정렬을 새로고침했
 function invSet(i){ const v=INV[i]; if(!v)return; // 실사·입고 통합: 지금 실제 수량을 입력
  invNumModal(`${v.name} · 수량`, `지금 실제 수량 (${v.unit})`, v.onHand||0, n=>{ const delta=n-(v.onHand||0); v.onHand=n; invLog(v,'실사',delta,n); v.mt=Date.now(); save();render();toast(`${v.name} ${n}${v.unit}로 맞췄습니다`); }); }
 function invOrder(i){ const v=INV[i]; if(!v)return;
- ORDERS.push({id:'o'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),who:curUser().name,txt:v.name,dt:fmtDT(),ts:Date.now(),mt:Date.now(),st:'wait',invId:v.id,unit:v.unit});
- save();render();toast(`${v.name}을(를) 발주방에 담았습니다`); }
+ const now=Date.now();
+ ORDERS.push({id:'o'+now.toString(36)+Math.random().toString(36).slice(2,6),who:curUser().name,txt:v.name,dt:fmtDT(),ts:now,mt:now,
+   st:'ordered',od:fmtDT(),odts:now,invId:v.id,unit:v.unit});   // 재고에서 담으면 바로 발주됨 → 배송 탭에서 수량 입력
+ save();render();toast(`${v.name} — 발주됨으로 담았습니다 (배송 탭에서 수량 입력)`); }
+/* 지난 날짜의 대기 발주는 오늘 자동으로 '발주됨' 처리 → 배송 탭으로 넘어감 */
+function promoteCarried(){
+ const t=todayK(); let n=0;
+ (ORDERS||[]).forEach(o=>{ if(o.st!=='wait'||!o.ts)return;
+   if(dk(new Date(o.ts))>=t)return;                    // 오늘 올린 건 그대로 대기
+   o.st='ordered'; o.od=fmtDT(); o.odts=Date.now(); o.mt=Date.now(); n++; });
+ if(n){ save(); }
+ return n; }
 /* 분류 관리 (생성 후 여러 품목을 한 번에 담기) */
 function openCatMgr(){ if(!isAdmin(curUser())){toast('분류 관리는 대표님·매니저만 가능해요');return;}
  openModal(`<h3>분류 관리</h3>
@@ -3253,6 +3307,11 @@ function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDon
 /* ═══════════ 업데이트 내역 (새로고침 후 무엇이 바뀌었는지) ═══════════ */
 const VER_KEY='farmplanet.lastver';
 const CHANGELOG=[
+ {v:'2.38.0', d:'2026-08-19', items:[
+   '배송 탭에서 <b>받은 물건 직접 추가</b>·<b>삭제</b> 가능 — 발주 없이도 재고에 반영돼요',
+   '재고에서 <b>발주 담기</b>하면 바로 발주됨 처리 → 배송 탭에서 수량만 적으면 됩니다',
+   '어제까지 대기이던 발주는 오늘 자동으로 발주됨으로 넘어가요',
+   '화면이 확대되던 문제 완전 차단' ]},
  {v:'2.37.0', d:'2026-08-19', items:[
    '채팅에 <b>사진 보내기</b> 추가 — 카메라 버튼으로 바로 전송',
    '<b>공지 고정</b> 추가 — 꾹 눌러 고정하면 방 맨 위에 붙어요 (관리자·매니저)',
@@ -3679,6 +3738,7 @@ function render(){
    return `<button class="${navTab===n[0]?'on':''}" onclick="navGo('${n[0]}')" style="position:relative">
    ${IC(n[1],'li lg')}${n[2]}${dot?'<span class="ndot"></span>':''}</button>`;}).join("");
  maybeChatSubscribe(); // 로그인 후 최초 1회 구독(이미 구독됐으면 즉시 반환)
+ promoteCarried();     // 이월된 대기 발주는 발주됨으로
  pushMaybeResync();    // 로그인 확정 후 알림 구독을 내 계정으로 재등록(1회)
  if(tab==='chat'&&chatRoom)chatPurgeOldPhotos();   // 오래된 사진 정리
  pushUploadSched();    // 오늘 근무 일정을 알림 서버에 올림(관리자·매니저, 30분 간격)
