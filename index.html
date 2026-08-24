@@ -455,7 +455,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.38.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.39.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -726,15 +726,16 @@ function fetchT(url,ms){ // 응답이 없으면 끊어준다(무한 대기 방�
 function getPublicIP(ok,err){ // 두 곳을 동시에 물어보고 먼저 오는 답을 쓴다(최대 5초)
  let called=false; const done=f=>(v)=>{ if(called)return; called=true; f&&f(v); };
  const good=done(ok), bad=done(err);
+ const cb='?_='+Date.now();     // 캐시된 옛 IP가 돌아오지 않도록 매번 다른 주소로 요청
  let left=2; const miss=()=>{ if(--left<=0) bad(); };
- fetchT('https://api.ipify.org?format=json',5000)
+ fetchT('https://api.ipify.org?format=json&_='+Date.now(),5000)
    .then(r=>r.json()).then(d=>{ const ip=d&&d.ip?String(d.ip).trim():''; ip?good(ip):miss(); }).catch(miss);
- fetchT('https://ipv4.icanhazip.com',5000)
+ fetchT('https://ipv4.icanhazip.com'+cb,5000)
    .then(r=>r.text()).then(t=>{ const ip=(t||'').trim(); ip?good(ip):miss(); }).catch(miss);
  setTimeout(()=>bad(),6000);   // 최후 안전장치 — 어떤 경우에도 응답이 온다
 }
 /* 와이파이 게이트 — 현재 공인 IP가 매장 IP와 같아야 통과 */
-let _wifiBusy=false, _wifiRetry=null, _wifiFail=null, _wifiIp=null;
+let _wifiBusy=false, _wifiBusyT=null, _wifiRetry=null, _wifiFail=null, _wifiIp=null;
 function ipNet(ip){ const m=String(ip||'').match(/^(\d{1,3}\.\d{1,3}\.\d{1,3})\./); return m?m[1]:''; }
 function wifiList(){ const l=[...(STORE_IPS||[])]; if(STORE_IP&&!l.includes(STORE_IP))l.unshift(STORE_IP); return l; }
 function wifiMatch(ip){ // 등록된 매장 IP와 정확히 같아야 통과(기본). 완화 모드에서만 같은 대역 허용
@@ -746,12 +747,14 @@ function wifiRemember(){ /* 자동 학습 안 함 — 매장 IP는 관리자가 
 function wifiGate(actName, ok, onFail){
  if(!STORE_IP && !(STORE_IPS||[]).length){ ok(); return; } // 매장 와이파이 미등록 시 확인 없이 진행
  if(_wifiBusy){ toast('와이파이 확인 중이에요'); return; }
+ if(navigator.onLine===false){ wifiFailModal(actName,null,onFail); return; }   // 오프라인이면 바로 안내
  _wifiBusy=true; toast('와이파이 확인 중…');
+ clearTimeout(_wifiBusyT); _wifiBusyT=setTimeout(()=>{_wifiBusy=false;},9000);  // 잠금이 남지 않도록
  _wifiRetry=()=>{ _wifiBusy=false; wifiGate(actName,ok,onFail); };
- getPublicIP(ip=>{ _wifiBusy=false;
+ getPublicIP(ip=>{ _wifiBusy=false; clearTimeout(_wifiBusyT);
      if(wifiMatch(ip)){ ok(); return; }
      wifiFailModal(actName, ip, onFail); },
-   ()=>{ _wifiBusy=false; wifiFailModal(actName, null, onFail); });
+   ()=>{ _wifiBusy=false; clearTimeout(_wifiBusyT); wifiFailModal(actName, null, onFail); });
 }
 function wifiFailModal(actName, ip, onFail){
  const admin=isAdmin(curUser());
@@ -759,8 +762,7 @@ function wifiFailModal(actName, ip, onFail){
    ? `<div class="muted" style="font-size:12px;line-height:1.85">지금 연결된 곳이 매장 와이파이로 확인되지 않아요.<br>
         지금 IP <b style="color:var(--ink)">${escAttr(ip)}</b><br>등록된 매장 와이파이 <b style="color:var(--ink)">${escAttr(wifiList().join(', ')||'없음')}</b><br>
         <span style="font-size:11px">매장 와이파이에서만 출근할 수 있어요. 매장에 계신데 다르다면 인터넷 사업자가 IP를 바꾼 것이니, 관리자가 아래에서 등록해 주세요.</span></div>`
-   : `<div class="muted" style="font-size:12px;line-height:1.85">네트워크 확인에 실패했어요.<br>
-        와이파이/데이터 연결을 확인하고 다시 시도해 주세요.</div>`;
+   : `<div class="muted" style="font-size:12px;line-height:1.85">${navigator.onLine===false?'<b style="color:var(--warn)">인터넷에 연결돼 있지 않아요.</b><br>매장 와이파이에 연결한 뒤 <b>다시 확인</b>을 눌러주세요.':'네트워크 확인에 실패했어요.<br>매장 와이파이 연결을 확인하고 <b>다시 확인</b>을 눌러주세요.'}</div>`;
  openModal(`<h3>${actName} 확인이 안 됐어요</h3>${body}
    <div style="display:flex;flex-direction:column;gap:8px;margin-top:14px">
      <button class="btn" onclick="closeModal();_wifiRetry&&_wifiRetry()">다시 확인</button>
@@ -986,6 +988,45 @@ function attLiveStatus(uid){ // 오늘 기준 'work'|'break'|null
  const br=a.breaks||[], last=br[br.length-1];
  return (last&&last.s&&!last.e)?'break':'work';
 }
+/* ── 관리자: 그날 근무 타임라인 (근무=색 · 휴게=회색 빗금) ── */
+let dutyDate=null;
+function dutyShift(d){ const b=new Date((dutyDate||todayK())+'T00:00:00'); b.setDate(b.getDate()+d); const iso=dk(b); if(iso>todayK())return; dutyDate=iso; render(); }
+function dutyTimelineHTML(){
+ const iso=dutyDate||todayK(), isToday=iso===todayK();
+ const rows=[];
+ (STAFF||[]).forEach(s=>{ if(s.pending)return; const r=attRecFor(s.id,iso); if(r&&r.in)rows.push({s,r}); });
+ const sd=new Date(iso+'T00:00:00'), selMD=(sd.getMonth()+1)+'/'+sd.getDate();
+ const nav=`<div class="onav" style="margin:2px 0 8px">
+   <button class="onbtn" onclick="dutyShift(-1)" aria-label="이전 날">‹</button>
+   <div class="ondate"><span>${selMD} (${WD[sd.getDay()]})${isToday?' · 오늘':''}</span><input type="date" value="${iso}" max="${todayK()}" onchange="dutyDate=this.value;render()"></div>
+   <button class="onbtn" onclick="dutyShift(1)" aria-label="다음 날" ${isToday?'disabled style="opacity:.35"':''}>›</button></div>`;
+ if(!rows.length) return `<div class="card" style="margin-top:12px"><h3>${IC('clock','li sm')}근무 타임라인</h3>${nav}
+   <p class="muted" style="text-align:center;padding:16px 2px">이 날은 근무 기록이 없어요.</p></div>`;
+ // 표시 시간 범위 = 기록에 맞춰 자동(최소 매장 운영시간)
+ const hOf=ts=>{ const d=new Date(ts); return d.getHours()+d.getMinutes()/60; };
+ let lo=OPEN_H, hi=CLOSE_H;
+ rows.forEach(({r})=>{ lo=Math.min(lo,hOf(r.in)); const end=r.out||(isToday?Date.now():r.in); hi=Math.max(hi,hOf(end)); });
+ lo=Math.floor(lo); hi=Math.ceil(hi); if(hi-lo<4)hi=lo+4;
+ const span=hi-lo;
+ const ticks=[]; for(let h=lo;h<=hi;h+=Math.max(1,Math.round(span/6))) ticks.push(h);
+ const times=ticks.map(h=>`<span style="top:${(h-lo)/span*100}%">${h}</span>`).join('');
+ const cols=rows.map(({s,r})=>{
+   const live=isToday&&!r.out, end=r.out||(live?Date.now():r.in);
+   const top=(hOf(r.in)-lo)/span*100, hgt=Math.max(1,(hOf(end)-hOf(r.in))/span*100);
+   const brk=(r.breaks||[]).filter(b=>b.s).map(b=>{
+     const be=b.e||end, bt=(hOf(b.s)-lo)/span*100, bh=Math.max(0.8,(hOf(be)-hOf(b.s))/span*100);
+     return `<div class="wsh" style="top:${bt}%;height:${bh}%;left:0;width:100%;background:repeating-linear-gradient(45deg,#c9d2cb,#c9d2cb 4px,#e3e9e4 4px,#e3e9e4 8px);color:#4a544c;font-size:8.5px;z-index:3;border:1px solid #b7c2b9" title="휴게 ${fmtT(b.s)}~${b.e?fmtT(b.e):''}">휴게<span class="wt">${fmtT(b.s)}~${b.e?fmtT(b.e):'…'}</span></div>`; }).join('');
+   return `<div class="wcol">
+     <div class="wch" style="font-size:10px">${escAttr(s.name)}<br><span style="font-weight:400;font-size:8.5px;color:var(--sub)">${fmtDurShort(recWorkedMs(r,live))}</span></div>
+     <div class="wbody">
+       <div class="wsh" style="top:${top}%;height:${hgt}%;left:0;width:100%;background:${s.c};z-index:1">${fmtT(r.in)}<span class="wt">~${r.out?fmtT(r.out):'근무중'}</span></div>
+       ${brk}</div>
+     <div class="wcov"><span style="color:${live?'#639922':'var(--sub)'};font-weight:800">${live?'●':'✓'}</span><span class="wcn">${(r.breaks||[]).length}</span></div>
+   </div>`; }).join('');
+ return `<div class="card" style="margin-top:12px"><h3>${IC('clock','li sm')}근무 타임라인 <span class="muted" style="font-size:11px;font-weight:600">· ${rows.length}명</span></h3>${nav}
+   <div class="wcal" style="grid-template-columns:26px repeat(${rows.length},1fr)"><div class="wtime">${times}</div>${cols}</div>
+   <div class="muted" style="font-size:10.5px;text-align:center;margin-top:8px">색 = 근무 · 빗금 = 휴게 · 맨 아래 숫자 = 휴게 횟수</div></div>`;
+}
 function currentDutyHTML(){ // 오늘 근무한 사람 전체(근무중·휴게중·퇴근) — 관리자용
  const tk=todayK(), list=[]; let onNow=0;
  (STAFF||[]).forEach(s=>{ if(s.pending)return; const r=attRecFor(s.id,tk); if(!r||!r.in)return;
@@ -1026,7 +1067,7 @@ function screenAtt(){
  const editBtn = a? `<button class="btn sec" style="margin-top:14px" onclick="reqAtt(todayK())">${IC('swap','li sm')} 오늘 기록 수정 요청</button>`:'';
  const reqBox = (admin && attReqCount())? `<div class="card" style="margin-top:12px;border-color:#bcd7f0"><h3>${IC('bell','li sm')}근태 요청 ${attReqCount()}건</h3>${ATTREQ.map(r=>`<div style="border-top:1px solid var(--edge);padding:8px 0"><div style="font-size:13px"><b>${r.name}</b> <span class="pill" style="background:${r.kind==='in'?'#e7f0ff':'#F0F4EE'};color:${r.kind==='in'?'#2f6fd0':'var(--deep)'};font-size:10px">${r.kind==='in'?'출근 요청':'기록 수정'}</span> <span class="muted" style="font-size:11px">${r.date.slice(5)}</span></div><div class="muted" style="font-size:11.5px">출근 ${fmtT(r.in)}${r.out?' · 퇴근 '+fmtT(r.out):" · '근무 중'으로"}${Array.isArray(r.breaks)?' · 휴게 '+(r.breaks.length?r.breaks.map(b=>fmtT(b.s)+'~'+(b.e?fmtT(b.e):'')).join(', '):'없음'):''}${r.note?' · "'+r.note+'"':''}</div><div class="row" style="gap:6px;margin-top:6px"><button class="btn sec" style="color:var(--warn);border-color:#f0d9bd" onclick="rejectAttReq('${r.id}')">거절</button><button class="btn" onclick="approveAttReq('${r.id}')">승인</button></div></div>`).join('')}</div>`:'';
  const adminBox = admin? `<div class="muted" style="font-size:11px;margin-top:14px">${STORE_IP?(WIFILOCK?'매장 와이파이 고정됨 🔒':'매장 와이파이 등록됨'):'매장 와이파이 미등록 — 출퇴근 확인 안 함'} · <span class="authlink" onclick="openWifiSetup()">와이파이 설정</span></div>`:'';
- return `<h2 class="title">${IC('clock')}근태</h2><div class="card">${body}${editBtn}</div>${admin?currentDutyHTML():''}${attHistoryHTML()}${admin?admSummaryHTML():''}${reqBox}${adminBox}`;
+ return `<h2 class="title">${IC('clock')}근태</h2><div class="card">${body}${editBtn}</div>${admin?currentDutyHTML():''}${admin?dutyTimelineHTML():''}${attHistoryHTML()}${admin?admSummaryHTML():''}${reqBox}${adminBox}`;
 }
 function setWage(){ const v=prompt('시급(원):',WAGE); if(v===null)return; const n=parseInt(String(v).replace(/[^0-9]/g,''),10); if(!n){toast('숫자를 입력하세요');return;} WAGE=n; save(); reAtt(); toast('시급을 '+won(n)+'(으)로 저장했습니다'); }
 function attView(){
@@ -3309,6 +3350,9 @@ function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDon
 /* ═══════════ 업데이트 내역 (새로고침 후 무엇이 바뀌었는지) ═══════════ */
 const VER_KEY='farmplanet.lastver';
 const CHANGELOG=[
+ {v:'2.39.0', d:'2026-08-19', items:[
+   '관리자 근태에 <b>근무 타임라인</b> 추가 — 시간표처럼 근무·<b>휴게 구간</b>을 한눈에',
+   '와이파이 출근이 연결 후에도 안 되던 문제 수정 (옛 IP 캐시·잠금 해제)' ]},
  {v:'2.38.1', d:'2026-08-19', items:[
    '재고 버튼이 <b>발주 담기 → 발주됨</b>으로 바뀌고, 배송 수량을 넣어 재고가 오르면 다시 <b>발주 담기</b>로 돌아와요',
    '이월된 대기 발주를 자동으로 발주됨 처리하던 것을 되돌렸어요' ]},
