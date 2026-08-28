@@ -456,7 +456,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.39.2'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.40.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -933,7 +933,7 @@ function sendAttReq(){ const date=_reqDate||todayK(); const a=attRecFor(CUR,date
  save(); go('att');
  pushSend('🕒 근태 수정 요청 · '+curUser().name,
    `${date.slice(5).replace('-','/')} ${fmtT(ti)}~${to?fmtT(to):'근무 중'}${brks.length?' · 휴게 '+brks.length+'회':''}${note?' — '+note:''}`,
-   {tag:'attreq', onlyUids:adminUids()});
+   {tag:'attreq', onlyUids:adminUids(), url:deepLinkFor('att')});
  toast('관리자에게 수정 요청을 보냈습니다'); }
 function adminUids(){ return (STAFF||[]).filter(s=>!s.pending&&isAdmin(s)).map(s=>s.id); }
 function approveAttReq(id){ if(!isAdmin(curUser())){toast('승인은 대표님·매니저만 가능해요');return;}
@@ -1826,7 +1826,7 @@ function ordCalHTML(selISO){
 function addOrder(){
  const v=$("odText").value.trim();if(!v){toast('물건을 입력하세요');return;}
  ORDERS.push({id:'o'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),who:curUser().name,txt:v,dt:fmtDT(),ts:Date.now(),mt:Date.now(),st:'wait'});
- pushSend('🛒 발주 요청 · '+curUser().name, v.slice(0,120), {tag:'order'});
+ pushSend('🛒 발주 요청 · '+curUser().name, v.slice(0,120), {tag:'order', url:deepLinkFor('order')});
  ordDate=null; // 등록은 오늘 → 오늘 날짜로 이동해 보이게
  render();toast('발주 요청이 등록되었습니다');
 }
@@ -2044,7 +2044,7 @@ function dvSendMsg(){
  const payload={auth:_fbUid,uid:CUR,name:(curUser()&&curUser().name)||'',text:txt.slice(0,1000),cts:Date.now(),ts:serverTimestamp(),nep:{},sook:{}};
  closeModal();
  addDoc(collection(_fsDb,'rooms',rid,'messages'),payload)
-   .then(()=>{ pushSend(`${payload.name||'FarmPlanet'} · ${r?r.name:''}`,txt.slice(0,120),{tag:'chat-'+rid,onlyUids:roomMembers(r)});
+   .then(()=>{ pushSend(`${payload.name||'FarmPlanet'} · ${r?r.name:''}`,txt.slice(0,120),{tag:'chat-'+rid,onlyUids:roomMembers(r),url:deepLinkFor('chat','room='+rid)});
      toast((r?r.name:'채팅')+'에 보냈어요'); })
    .catch(e=>toast('전송 실패: '+((e&&(e.code||e.message))||e))); }
 
@@ -2212,7 +2212,7 @@ function addBoard(){
  }
  const dleft=boardDaysLeft(dv);
  const post=()=>{ BOARD.unshift({id:boardId(),who:curUser().name,uid:CUR,dt:fmtDT(),ts:Date.now(),mt:Date.now(),target:dv,kind:boardKind,memo,newRanges,status:'open',vols:{},picked:'',pickedName:'',snap:null});
-   pushSend('🙋 '+(boardKind==='sub'?'대타 요청':'시간 조정 요청')+' · '+curUser().name, dv+(memo?' — '+memo.slice(0,80):''), {tag:'board'});
+   pushSend('🙋 '+(boardKind==='sub'?'대타 요청':'시간 조정 요청')+' · '+curUser().name, dv+(memo?' — '+memo.slice(0,80):''), {tag:'board', url:deepLinkFor('comm')});
    save();render();toast('게시판에 등록되었습니다'); };
  if(dleft!==null&&dleft<BOARD_LEAD_DAYS){
    askConfirm(`기준(${BOARD_LEAD_DAYS}일 전)보다 늦은 요청이에요 (D-${dleft}). 그래도 올릴까요? 대신할 사람을 못 구할 수 있어요.`,'그래도 등록',post);
@@ -2883,7 +2883,7 @@ function sendChat(){
  if(el)el.textContent='';
  addDoc(collection(_fsDb,'rooms',chatRoom,'messages'),payload)
    .then(()=>pushSend(`${payload.name||'FarmPlanet'} · ${r?r.name:''}`,txt.slice(0,120),
-     {tag:'chat-'+chatRoom, onlyUids:roomMembers(r)}))
+     {tag:'chat-'+chatRoom, onlyUids:roomMembers(r), url:deepLinkFor('chat','room='+chatRoom)}))
    .catch(e=>{ toast('전송 실패: '+((e&&(e.code||e.message))||e)); if(el)el.textContent=txt; }); }
 
 const REACTS=[['nep','넵'],['sook','숙지']]; // 확인(넵)·숙지 리액션
@@ -3011,7 +3011,7 @@ function sendChatPhoto(data,caption){
  toast('사진 보내는 중…');
  addDoc(collection(_fsDb,'rooms',rid,'messages'),payload)
    .then(()=>{ _photoRoom=null;
-     pushSend(`${payload.name||'FarmPlanet'} · ${r?r.name:''}`,(payload.text||'사진을 보냈어요').slice(0,120),{tag:'chat-'+rid,onlyUids:roomMembers(r)});
+     pushSend(`${payload.name||'FarmPlanet'} · ${r?r.name:''}`,(payload.text||'사진을 보냈어요').slice(0,120),{tag:'chat-'+rid,onlyUids:roomMembers(r),url:deepLinkFor('chat','room='+rid)});
      toast('사진을 보냈어요'); })
    .catch(e=>{ _pendingPhoto=data; renderPhotoBar();   // 실패하면 다시 대기 상태로
      const c=(e&&(e.code||e.message))||String(e);
@@ -3371,7 +3371,7 @@ function planSave(){
  else if(planType==='interval'){ const n=parseInt($('plEvery')?$('plEvery').value:'0',10); if(!n||n<1){toast('며칠마다인지 입력하세요');return;} p.every=n; }
  PLANS.push(p); planSel=from; save(); closeModal(); render();
  pushSend('📅 새 일정 · '+((curUser()&&curUser().name)||''),
-   `${p.title}${p.time?' '+p.time:''} · ${planRepeatLabel(p)}${p.memo?' — '+p.memo:''}`, {tag:'plan'});
+   `${p.title}${p.time?' '+p.time:''} · ${planRepeatLabel(p)}${p.memo?' — '+p.memo:''}`, {tag:'plan', url:deepLinkFor('plan')});
  toast('일정을 등록하고 모두에게 알렸습니다'); }
 function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDone(p.id,t)).length; }
 
@@ -3379,6 +3379,8 @@ function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDon
 /* ═══════════ 업데이트 내역 (새로고침 후 무엇이 바뀌었는지) ═══════════ */
 const VER_KEY='farmplanet.lastver';
 const CHANGELOG=[
+ {v:'2.40.0', d:'2026-08-19', items:[
+   '알림을 누르면 <b>그 화면으로 바로</b> 들어가요 — 채팅은 해당 방까지' ]},
  {v:'2.39.2', d:'2026-08-19', items:[
    '사진을 고르면 <b>입력창 위에서 대기</b> — 전송을 눌러야 보내져요 (글도 함께 가능)',
    '사진 말풍선의 초록 테두리를 없앴어요' ]},
@@ -3602,6 +3604,34 @@ function maybeShowHelp(){ // 처음 접속한 사람에게 1회 자동
  setTimeout(()=>{ const el=$('helpPop'); if(CUR&&el&&!el.classList.contains('show')) openHelp(); },700);
 }
 
+/* ═══════════ 알림 → 해당 화면으로 바로 열기 (딥링크) ═══════════ */
+const APP_URL='https://fodepu.github.io/FarmPlanet/';
+function deepLinkFor(open,extra){ return APP_URL+'?open='+open+(extra?'&'+extra:''); }
+let _deepPending=null;
+function parseDeepLink(u){
+ try{ const q=new URL(u,location.href).searchParams;
+   const open=q.get('open'); if(!open)return null;
+   return {open, room:q.get('room')||''}; }catch(e){ return null; } }
+function applyDeepLink(d){
+ if(!d)return false;
+ const ok=['chat','order','comm','plan','att','inv','sched','home','manual','close'];
+ if(d.open==='chat'){ tab='chat'; if(d.room&&roomById(d.room))chatRoom=d.room; return true; }
+ if(ok.includes(d.open)){ tab=d.open; return true; }
+ return false; }
+function handleNavUrl(u){ const d=parseDeepLink(u); if(!d)return;
+ if(!CUR){ _deepPending=d; return; }
+ if(applyDeepLink(d)){ render(); const sc=$('screen'); if(sc&&sc.scrollTo)sc.scrollTo(0,0); } }
+if('serviceWorker' in navigator && navigator.serviceWorker.addEventListener){
+ navigator.serviceWorker.addEventListener('message',e=>{
+   if(e&&e.data&&e.data.type==='nav') handleNavUrl(e.data.url); }); }
+_deepPending=parseDeepLink(location.href);   // 앱이 꺼진 상태에서 알림으로 열린 경우
+function consumeDeepLink(){
+ if(!_deepPending||!CUR)return false;
+ const d=_deepPending; _deepPending=null;
+ const moved=applyDeepLink(d);
+ try{ history.replaceState(null,'',location.pathname); }catch(e){}
+ return moved; }
+
 /* ═══════════ 앱 외부 푸시 알림 (Cloudflare Worker) ═══════════ */
 const PUSH_URL='https://farmplanet-push.kimjuham1120.workers.dev';
 const VAPID_PUB='BEg3PHpSlx0RL3KBDBUhUA-S8qfPr4H8kbMu_H3yNsGqvGvie1bIAq3d19lPUcxtahsFxfxIFgw-pqpy8NNGako';
@@ -3822,6 +3852,7 @@ function render(){
    return `<button class="${navTab===n[0]?'on':''}" onclick="navGo('${n[0]}')" style="position:relative">
    ${IC(n[1],'li lg')}${n[2]}${dot?'<span class="ndot"></span>':''}</button>`;}).join("");
  maybeChatSubscribe(); // 로그인 후 최초 1회 구독(이미 구독됐으면 즉시 반환)
+ if(consumeDeepLink()){ setTimeout(render,0); }   // 알림으로 들어왔으면 그 화면으로
  pushMaybeResync();    // 로그인 확정 후 알림 구독을 내 계정으로 재등록(1회)
  if(tab==='chat'&&chatRoom)chatPurgeOldPhotos();   // 오래된 사진 정리
  pushUploadSched();    // 오늘 근무 일정을 알림 서버에 올림(관리자·매니저, 30분 간격)
