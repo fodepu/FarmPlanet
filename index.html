@@ -456,7 +456,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.42.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.42.2'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -1014,6 +1014,12 @@ function dutyTimelineHTML(){
  (STAFF||[]).forEach(s=>{ if(s.pending)return;
    const plan=getRanges(s.id+'|'+iso), r=attRecFor(s.id,iso);
    if(plan.length||(r&&r.in)) rows.push({s,r:(r&&r.in)?r:null,plan}); });
+ // 시작이 이른 사람부터 왼쪽에 — 예정과 실제 중 빠른 쪽 기준
+ const startOf=x=>{ let v=99;
+   (x.plan||[]).forEach(pr=>{ v=Math.min(v,t2n(pr.s)); });
+   if(x.r&&x.r.in){ const d=new Date(x.r.in); v=Math.min(v,d.getHours()+d.getMinutes()/60); }
+   return v; };
+ rows.sort((a,b)=>startOf(a)-startOf(b) || ((a.s.ord||0)-(b.s.ord||0)) || (a.s.name<b.s.name?-1:1));
  const sd=new Date(iso+'T00:00:00'), selMD=(sd.getMonth()+1)+'/'+sd.getDate();
  const nav=`<div class="onav" style="margin:2px 0 8px">
    <button class="onbtn" onclick="dutyShift(-1)" aria-label="이전 날">‹</button>
@@ -3515,6 +3521,8 @@ function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDon
 /* ═══════════ 업데이트 내역 (새로고침 후 무엇이 바뀌었는지) ═══════════ */
 const VER_KEY='farmplanet.lastver';
 const CHANGELOG=[
+ {v:'2.42.2', d:'2026-08-28', items:[
+   '타임라인을 <b>출근이 이른 사람부터</b> 왼쪽에 배치' ]},
  {v:'2.42.1', d:'2026-08-28', items:[
    '예정 근무 점선을 회색으로 — 실제 근무 색과 헷갈리지 않게' ]},
  {v:'2.42.0', d:'2026-08-28', items:[
