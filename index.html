@@ -456,7 +456,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.41.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.42.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -1009,46 +1009,75 @@ function r10(ts){ // 10분 단위 반올림 (시간표와 같은 눈금)
  return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'); }
 function dutyTimelineHTML(){
  const iso=dutyDate||todayK(), isToday=iso===todayK();
+ // 근무 예정(시간표) 또는 실제 기록이 있는 사람
  const rows=[];
- (STAFF||[]).forEach(s=>{ if(s.pending)return; const r=attRecFor(s.id,iso); if(r&&r.in)rows.push({s,r}); });
+ (STAFF||[]).forEach(s=>{ if(s.pending)return;
+   const plan=getRanges(s.id+'|'+iso), r=attRecFor(s.id,iso);
+   if(plan.length||(r&&r.in)) rows.push({s,r:(r&&r.in)?r:null,plan}); });
  const sd=new Date(iso+'T00:00:00'), selMD=(sd.getMonth()+1)+'/'+sd.getDate();
  const nav=`<div class="onav" style="margin:2px 0 8px">
    <button class="onbtn" onclick="dutyShift(-1)" aria-label="이전 날">‹</button>
    <div class="ondate"><span>${selMD} (${WD[sd.getDay()]})${isToday?' · 오늘':''}</span><input type="date" value="${iso}" max="${todayK()}" onchange="dutyDate=this.value;render()"></div>
    <button class="onbtn" onclick="dutyShift(1)" aria-label="다음 날" ${isToday?'disabled style="opacity:.35"':''}>›</button></div>`;
  if(!rows.length) return `<div class="card" style="margin-top:12px"><h3>${IC('clock','li sm')}근무 타임라인</h3>${nav}
-   <p class="muted" style="text-align:center;padding:16px 2px">이 날은 근무 기록이 없어요.</p></div>`;
+   <p class="muted" style="text-align:center;padding:16px 2px">이 날은 근무 예정·기록이 없어요.</p></div>`;
  const hOf=ts=>{ const d=new Date(ts); return d.getHours()+d.getMinutes()/60; };
  let lo=OPEN_H, hi=CLOSE_H;
- rows.forEach(({r})=>{ lo=Math.min(lo,hOf(r.in)); const end=r.out||(isToday?Date.now():r.in); hi=Math.max(hi,hOf(end)); });
+ rows.forEach(({r,plan})=>{
+   plan.forEach(pr=>{ lo=Math.min(lo,t2n(pr.s)); hi=Math.max(hi,t2n(pr.e)); });
+   if(r){ lo=Math.min(lo,hOf(r.in)); const end=r.out||(isToday?Date.now():r.in); hi=Math.max(hi,hOf(end)); } });
  lo=Math.floor(lo); hi=Math.ceil(hi); if(hi-lo<4)hi=lo+4;
- const span=hi-lo;
+ const span=hi-lo, pct=h=>(h-lo)/span*100;
  const step=Math.max(1,Math.round(span/6));
  const ticks=[]; for(let h=lo;h<=hi;h+=step) ticks.push(h);
- const times=ticks.map(h=>`<span style="top:${(h-lo)/span*100}%">${h}</span>`).join('');
- const cols=rows.map(({s,r})=>{
-   const live=isToday&&!r.out, end=r.out||(live?Date.now():r.in);
-   const top=(hOf(r.in)-lo)/span*100, hgt=Math.max(2,(hOf(end)-hOf(r.in))/span*100);
-   const onBreak=live&&(r.breaks||[]).some(b=>b.s&&!b.e);
-   const brk=(r.breaks||[]).filter(b=>b.s).map(b=>{
-     const be=b.e||end, bt=(hOf(b.s)-lo)/span*100, bh=Math.max(1.5,(hOf(be)-hOf(b.s))/span*100);
+ const times=ticks.map(h=>`<span style="top:${pct(h)}%">${h}</span>`).join('');
+ const mins=n=>Math.round(n*60);
+ const cols=rows.map(({s,r,plan})=>{
+   const live=isToday&&r&&!r.out, end=r? (r.out||(live?Date.now():r.in)) : 0;
+   // ① 예정 근무 — 점선 빈 칸
+   const planned=plan.map(pr=>{
+     const t=pct(t2n(pr.s)), hgt=Math.max(2,pct(t2n(pr.e))-pct(t2n(pr.s)));
+     return `<div class="wsh" title="예정 ${cT(pr.s)}~${cT(pr.e)}" style="top:${t}%;height:${hgt}%;left:0;width:100%;z-index:0;
+       background:transparent;border:1.5px dashed ${s.c};border-radius:4px;color:#8b978f;font-size:9px;font-weight:700;justify-content:flex-start;padding:2px 1px">
+       <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;width:100%">${cT(pr.s)}~${cT(pr.e)}</span></div>`; }).join('');
+   // ② 실제 근무 — 채워진 칸
+   let actual='', badge='';
+   if(r){
+     const t=pct(hOf(r.in)), hgt=Math.max(2,pct(hOf(end))-pct(hOf(r.in)));
+     actual=`<div class="wsh" style="top:${t}%;height:${hgt}%;left:0;width:100%;background:${s.c};z-index:1;font-size:10px;padding:2px 1px;justify-content:flex-start;border-radius:4px">
+       <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;width:100%">${r10(r.in)}~${r.out?r10(r.out):''}</span></div>`;
+     if(plan.length){
+       const ps=t2n(plan[0].s), pe=t2n(plan[plan.length-1].e);
+       const late=mins(hOf(r.in)-ps), over=r.out? mins(hOf(r.out)-pe) : 0;
+       const tags=[];
+       if(late>=10) tags.push(`<span style="color:#c0392b;font-weight:800">지각 ${late}분</span>`);
+       else if(late<=-10) tags.push(`<span style="color:#2c7a4b;font-weight:800">일찍 ${-late}분</span>`);
+       if(over>=10) tags.push(`<span style="color:#8a6d29;font-weight:800">초과 ${over}분</span>`);
+       else if(r.out&&over<=-10) tags.push(`<span style="color:#8b978f">조퇴 ${-over}분</span>`);
+       if(tags.length) badge=`<div style="font-size:9px;line-height:1.3;margin-top:2px">${tags.join('<br>')}</div>`;
+     }
+   }
+   // ③ 휴게 — 흰 칸
+   const brk=(r?(r.breaks||[]):[]).filter(b=>b.s).map(b=>{
+     const be=b.e||end, bt=pct(hOf(b.s)), bh=Math.max(1.5,pct(hOf(be))-pct(hOf(b.s)));
      const lbl= b.e? `${r10(b.s)}~${r10(b.e)}` : `${r10(b.s)}~ 휴게중`;
-     const wide=bh>=9;   // 칸이 좁으면 글자를 숨겨 근무 시간이 가려지지 않게
+     const wide=bh>=9;
      return `<div class="wsh" title="휴게 ${lbl}" style="top:${bt}%;height:${bh}%;left:0;width:100%;z-index:3;
        background:#fff;border:1px dashed #b3bfb6;border-radius:3px;color:#6b7a70;font-size:9.5px;font-weight:700;padding:0 1px">
        ${wide?`휴게<span class="wt" style="font-size:9px">${lbl}</span>`:''}</div>`; }).join('');
-   const workLbl=`${r10(r.in)}~${r.out?r10(r.out):(live?'':'—')}`;
+   const onBreak=live&&(r.breaks||[]).some(b=>b.s&&!b.e);
+   const state = !r? '<span style="color:#9AA79D">예정</span>'
+     : onBreak? '<span style="color:#8a6d29;font-weight:800">휴게중</span>'
+     : live? '<span style="color:#639922;font-weight:800">근무중</span>'
+     : '<span style="color:var(--sub)">퇴근</span>';
    return `<div class="wcol">
-     <div class="wch" style="font-size:11.5px;padding:4px 0">${escAttr(s.name)}<span style="display:block;font-weight:400;font-size:9.5px;color:var(--sub)">${fmtDurShort(recWorkedMs(r,live))}</span></div>
-     <div class="wbody">
-       <div class="wsh" style="top:${top}%;height:${hgt}%;left:0;width:100%;background:${s.c};z-index:1;font-size:10px;padding:2px 1px;justify-content:flex-start">
-         <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;width:100%">${workLbl}</span></div>
-       ${brk}</div>
-     <div class="wcov" style="font-size:10.5px;padding:3px 0">${onBreak?'<span style="color:#8a6d29;font-weight:800">휴게중</span>':(live?'<span style="color:#639922;font-weight:800">근무중</span>':'<span style="color:var(--sub)">퇴근</span>')}${(r.breaks||[]).length?`<span class="wcn">${(r.breaks||[]).length}</span>`:''}</div>
+     <div class="wch" style="font-size:11.5px;padding:4px 0">${escAttr(s.name)}<span style="display:block;font-weight:400;font-size:9.5px;color:var(--sub)">${r?fmtDurShort(recWorkedMs(r,live)):'미출근'}</span></div>
+     <div class="wbody">${planned}${actual}${brk}</div>
+     <div class="wcov" style="font-size:10.5px;padding:3px 0">${state}${(r&&(r.breaks||[]).length)?`<span class="wcn">${r.breaks.length}</span>`:''}${badge}</div>
    </div>`; }).join('');
  return `<div class="card" style="margin-top:12px"><h3>${IC('clock','li sm')}근무 타임라인 <span class="muted" style="font-size:11px;font-weight:600">· ${rows.length}명</span></h3>${nav}
    <div class="wcal" style="grid-template-columns:26px repeat(${rows.length},1fr)"><div class="wtime">${times}</div>${cols}</div>
-   <div class="muted" style="font-size:10.5px;text-align:center;margin-top:8px">색 = 근무 · <span style="border:1px dashed #b3bfb6;border-radius:3px;padding:0 4px;background:#fff">흰 칸</span> = 휴게 · 10분 단위 표시</div></div>`;
+   <div class="muted" style="font-size:10.5px;text-align:center;margin-top:8px">점선 = 시간표 예정 · 색 = 실제 근무 · 흰 칸 = 휴게 · 10분 단위</div></div>`;
 }
 function screenAtt(){
  const admin=isAdmin(curUser()), a=attToday(), st=attStatus(a);
@@ -3486,6 +3515,9 @@ function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDon
 /* ═══════════ 업데이트 내역 (새로고침 후 무엇이 바뀌었는지) ═══════════ */
 const VER_KEY='farmplanet.lastver';
 const CHANGELOG=[
+ {v:'2.42.0', d:'2026-08-28', items:[
+   '타임라인에 <b>시간표 예정 근무를 점선</b>으로 표시 — 실제 근무가 그 칸을 채워요',
+   '<b>지각·초과·조퇴</b>가 분 단위로 표시돼요' ]},
  {v:'2.41.0', d:'2026-08-28', items:[
    '<b>매뉴얼·레시피를 앱에서 수정</b>할 수 있어요 (관리자·매니저)',
    '홈에 <b>오늘 할 일</b> 카드 — 물주기·재고세기 같은 반복 업무를 바로 체크' ]},
