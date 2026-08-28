@@ -456,7 +456,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.40.2'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.40.3'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -1031,18 +1031,18 @@ function dutyTimelineHTML(){
    const brk=(r.breaks||[]).filter(b=>b.s).map(b=>{
      const be=b.e||end, bt=(hOf(b.s)-lo)/span*100, bh=Math.max(1.5,(hOf(be)-hOf(b.s))/span*100);
      const lbl= b.e? `${r10(b.s)}~${r10(b.e)}` : `${r10(b.s)}~ 휴게중`;
-     const wide=bh>=7;   // 칸이 좁으면 글자를 숨겨 근무 시간이 가려지지 않게
+     const wide=bh>=9;   // 칸이 좁으면 글자를 숨겨 근무 시간이 가려지지 않게
      return `<div class="wsh" title="휴게 ${lbl}" style="top:${bt}%;height:${bh}%;left:0;width:100%;z-index:3;
-       background:#fff;border:1px dashed #b3bfb6;border-radius:3px;color:#6b7a70;font-size:7.5px;font-weight:700;padding:0 1px">
-       ${wide?`휴게<span class="wt" style="font-size:7px">${lbl}</span>`:''}</div>`; }).join('');
+       background:#fff;border:1px dashed #b3bfb6;border-radius:3px;color:#6b7a70;font-size:9.5px;font-weight:700;padding:0 1px">
+       ${wide?`휴게<span class="wt" style="font-size:9px">${lbl}</span>`:''}</div>`; }).join('');
    const workLbl=`${r10(r.in)}~${r.out?r10(r.out):(live?'':'—')}`;
    return `<div class="wcol">
-     <div class="wch" style="font-size:9.5px;padding:3px 0">${escAttr(s.name)}<span style="display:block;font-weight:400;font-size:8px;color:var(--sub)">${fmtDurShort(recWorkedMs(r,live))}</span></div>
+     <div class="wch" style="font-size:11.5px;padding:4px 0">${escAttr(s.name)}<span style="display:block;font-weight:400;font-size:9.5px;color:var(--sub)">${fmtDurShort(recWorkedMs(r,live))}</span></div>
      <div class="wbody">
-       <div class="wsh" style="top:${top}%;height:${hgt}%;left:0;width:100%;background:${s.c};z-index:1;font-size:8px;padding:1px 1px;justify-content:flex-start">
+       <div class="wsh" style="top:${top}%;height:${hgt}%;left:0;width:100%;background:${s.c};z-index:1;font-size:10px;padding:2px 1px;justify-content:flex-start">
          <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;width:100%">${workLbl}</span></div>
        ${brk}</div>
-     <div class="wcov" style="font-size:9px;padding:2px 0">${onBreak?'<span style="color:#8a6d29;font-weight:800">휴게중</span>':(live?'<span style="color:#639922;font-weight:800">근무중</span>':'<span style="color:var(--sub)">퇴근</span>')}${(r.breaks||[]).length?`<span class="wcn">${(r.breaks||[]).length}</span>`:''}</div>
+     <div class="wcov" style="font-size:10.5px;padding:3px 0">${onBreak?'<span style="color:#8a6d29;font-weight:800">휴게중</span>':(live?'<span style="color:#639922;font-weight:800">근무중</span>':'<span style="color:var(--sub)">퇴근</span>')}${(r.breaks||[]).length?`<span class="wcn">${(r.breaks||[]).length}</span>`:''}</div>
    </div>`; }).join('');
  return `<div class="card" style="margin-top:12px"><h3>${IC('clock','li sm')}근무 타임라인 <span class="muted" style="font-size:11px;font-weight:600">· ${rows.length}명</span></h3>${nav}
    <div class="wcal" style="grid-template-columns:26px repeat(${rows.length},1fr)"><div class="wtime">${times}</div>${cols}</div>
@@ -3399,6 +3399,8 @@ function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDon
 /* ═══════════ 업데이트 내역 (새로고침 후 무엇이 바뀌었는지) ═══════════ */
 const VER_KEY='farmplanet.lastver';
 const CHANGELOG=[
+ {v:'2.40.3', d:'2026-08-28', items:[
+   '근무 타임라인 글자를 키웠어요' ]},
  {v:'2.40.2', d:'2026-08-28', items:[
    '지난 날짜 근태 수정이 반영되지 않던 문제 수정 — 시각이 오늘 날짜로 저장되던 버그',
    '과거 기록을 승인해도 <b>오늘 출근 기록이 사라지지 않아요</b>' ]},
