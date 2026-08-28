@@ -456,7 +456,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.40.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.40.2'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -883,7 +883,7 @@ function attElapsed(){ const a=attToday(); if(!a)return 0; const st=attStatus(a)
 function tickAtt(){ if(tab!=='att'||!CUR)return; const el=$('aClock'); if(!el)return; const st=attStatus(attToday()); if(st==='work'||st==='break')el.textContent=fmtHMS(attElapsed()); }
 setInterval(tickAtt,15000);
 function confirmClockOut(){ askConfirm('퇴근하시겠어요? 오늘 근무를 종료합니다.','퇴근',()=>clockOut()); }
-function parseTs(v){ // "14:00" "14" "2"(→오후2시) "230"(2:30) 등 유연 파싱
+function parseTs(v,dateISO){ // "14:00" "14" "2"(→오후2시) "230"(2:30) 등 유연 파싱 · dateISO 기준 날짜
  v=String(v||'').trim().replace(/[시분]/g,'').replace(/\s/g,''); if(!v)return null;
  let h,mm=0,bare=false,m;
  if(m=v.match(/^(\d{1,2}):(\d{1,2})$/)){ h=+m[1]; mm=+m[2]; }            // H:MM (정확 입력 → 그대로)
@@ -892,18 +892,18 @@ function parseTs(v){ // "14:00" "14" "2"(→오후2시) "230"(2:30) 등 유연 �
  else return null;
  if(bare && h<OPEN_H) h+=12; // 카페 영업시간 기준: 분 없는 이른 시각은 오후로(2→14)
  if(h>23||mm>59)return null;
- const d=new Date(); d.setHours(h,mm,0,0); return d.getTime(); }
+ const d=dateISO? new Date(dateISO+'T00:00:00') : new Date(); d.setHours(h,mm,0,0); return d.getTime(); }
 function attReqCount(){ return (ATTREQ||[]).length; }
 function brkLabel(a){ // 휴게 기록 → "12:00~13:00, 15:00~15:30"
  return ((a&&a.breaks)||[]).filter(b=>b&&b.s).map(b=>fmtT(b.s)+'~'+(b.e?fmtT(b.e):'')).join(', '); }
-function parseBrk(v){ // "12~13, 15~15:30" → [{s,e}] · 빈칸이면 []
+function parseBrk(v,dateISO){ // "12~13, 15~15:30" → [{s,e}] · 빈칸이면 []
  const txt=String(v||'').trim(); if(!txt)return [];
  const out=[];
  for(const part of txt.split(',')){ const t=part.trim(); if(!t)continue;
    const m=t.split(/[~\-–]/); if(m.length!==2)return null;
-   const s=parseTs(m[0]); if(!s)return null;
+   const s=parseTs(m[0],dateISO); if(!s)return null;
    const eStr=m[1].trim();
-   const e=eStr? parseTs(eStr) : null;
+   const e=eStr? parseTs(eStr,dateISO) : null;
    if(eStr&&!e)return null;
    if(e&&e<=s)return null;
    out.push({s,e}); }
@@ -923,9 +923,10 @@ function reqAtt(iso){ _reqDate=iso||todayK();
    <div class="row" style="margin-top:12px"><button class="btn sec" onclick="go('att')">취소</button><button class="btn" onclick="sendAttReq()">관리자에게 요청 보내기</button></div>`);
  setTimeout(()=>{const el=$('atIn');if(el)el.focus();},50); }
 function sendAttReq(){ const date=_reqDate||todayK(); const a=attRecFor(CUR,date); if(!a)return;
- const ti=parseTs($('atIn').value); if(!ti){toast('출근 시각 형식 확인 (예: 9 · 9:30)');return;}
- const ov=($('atOut')?$('atOut').value:'').trim(); let to=null; if(ov){to=parseTs(ov); if(!to){toast('퇴근 시각 형식 확인 (예: 2 · 14:00)');return;}}
- const brks=parseBrk($('atBrk')?$('atBrk').value:'');
+ const ti=parseTs($('atIn').value,date); if(!ti){toast('출근 시각 형식 확인 (예: 9 · 9:30)');return;}
+ const ov=($('atOut')?$('atOut').value:'').trim(); let to=null; if(ov){to=parseTs(ov,date); if(!to){toast('퇴근 시각 형식 확인 (예: 2 · 14:00)');return;}}
+ if(to&&to<=ti)to+=86400000;   // 자정을 넘긴 퇴근
+ const brks=parseBrk($('atBrk')?$('atBrk').value:'', date);
  if(brks===null){toast('휴게 형식 확인 (예: 12~13 · 여러 번은 쉼표)');return;}
  const note=($('atNote')?$('atNote').value:'').trim();
  ATTREQ=(ATTREQ||[]).filter(r=>!(r.uid===CUR&&r.date===date)); // 같은 날 이전 요청은 대체
@@ -938,11 +939,19 @@ function sendAttReq(){ const date=_reqDate||todayK(); const a=attRecFor(CUR,date
 function adminUids(){ return (STAFF||[]).filter(s=>!s.pending&&isAdmin(s)).map(s=>s.id); }
 function approveAttReq(id){ if(!isAdmin(curUser())){toast('승인은 대표님·매니저만 가능해요');return;}
  const r=(ATTREQ||[]).find(x=>x.id===id); if(!r)return;
- let a=ATT[r.uid];
- if(!a || a.date!==r.date){ a=ATT[r.uid]={date:r.date,in:r.in,out:r.out||null,breaks:[]}; } // 기록 없음(출근 요청 등) → 새로 생성
- else { a.in=r.in; a.out=r.out||null; if(!r.out){const b=a.breaks&&a.breaks[a.breaks.length-1]; if(b&&!b.e)b.e=null;} }
- if(Array.isArray(r.breaks)) a.breaks=r.breaks.map(b=>({s:b.s,e:b.e||null}));   // 휴게 수정 반영
- ATTLOG[r.uid]=ATTLOG[r.uid]||{}; ATTLOG[r.uid][r.date]={in:a.in,out:a.out,breaks:(a.breaks||[]).map(b=>({s:b.s,e:b.e}))}; // 승인 결과 일자기록 반영
+ const brks=Array.isArray(r.breaks)? r.breaks.map(b=>({s:b.s,e:b.e||null})) : null;
+ if(r.date===todayK()){        // 오늘 기록만 실시간(ATT)에 반영
+   let a=ATT[r.uid];
+   if(!a || a.date!==r.date){ a=ATT[r.uid]={date:r.date,in:r.in,out:r.out||null,breaks:[]}; }
+   else { a.in=r.in; a.out=r.out||null; }
+   if(brks) a.breaks=brks;
+ } else if(ATT[r.uid] && ATT[r.uid].date===r.date){   // 과거지만 마침 ATT에 남아있다면 함께 정리
+   ATT[r.uid].in=r.in; ATT[r.uid].out=r.out||null; if(brks)ATT[r.uid].breaks=brks;
+ }
+ // 지난 날짜는 ATT를 건드리지 않고 일자기록만 고친다(오늘 출근 기록 보호)
+ ATTLOG[r.uid]=ATTLOG[r.uid]||{};
+ const prev=ATTLOG[r.uid][r.date]||{};
+ ATTLOG[r.uid][r.date]={in:r.in,out:r.out||null,breaks:(brks||prev.breaks||[]).map(b=>({s:b.s,e:b.e||null}))};
  ATTREQ=ATTREQ.filter(x=>x.id!==id); save(); render(); toast(r.name+'님 요청을 승인·반영했습니다'); }
 function rejectAttReq(id){ if(!isAdmin(curUser())){toast('대표님·매니저만 가능해요');return;}
  ATTREQ=(ATTREQ||[]).filter(x=>x.id!==id); save(); render(); toast('요청을 거절했습니다'); }
@@ -3390,6 +3399,9 @@ function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDon
 /* ═══════════ 업데이트 내역 (새로고침 후 무엇이 바뀌었는지) ═══════════ */
 const VER_KEY='farmplanet.lastver';
 const CHANGELOG=[
+ {v:'2.40.2', d:'2026-08-28', items:[
+   '지난 날짜 근태 수정이 반영되지 않던 문제 수정 — 시각이 오늘 날짜로 저장되던 버그',
+   '과거 기록을 승인해도 <b>오늘 출근 기록이 사라지지 않아요</b>' ]},
  {v:'2.40.1', d:'2026-08-19', items:[
    '근무 타임라인 정리 — 휴게는 <b>흰 칸</b>, 진행 중이면 <b>~휴게중</b>, 시간은 10분 단위',
    '글자 크기를 줄여 한 줄로 · 휴게 칸이 근무 시간을 가리지 않게' ]},
