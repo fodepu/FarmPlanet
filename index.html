@@ -456,7 +456,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.42.2'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.42.3'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -1037,31 +1037,20 @@ function dutyTimelineHTML(){
  const step=Math.max(1,Math.round(span/6));
  const ticks=[]; for(let h=lo;h<=hi;h+=step) ticks.push(h);
  const times=ticks.map(h=>`<span style="top:${pct(h)}%">${h}</span>`).join('');
- const mins=n=>Math.round(n*60);
  const cols=rows.map(({s,r,plan})=>{
    const live=isToday&&r&&!r.out, end=r? (r.out||(live?Date.now():r.in)) : 0;
    // ① 예정 근무 — 점선 빈 칸
    const planned=plan.map(pr=>{
      const t=pct(t2n(pr.s)), hgt=Math.max(2,pct(t2n(pr.e))-pct(t2n(pr.s)));
      return `<div class="wsh" title="예정 ${cT(pr.s)}~${cT(pr.e)}" style="top:${t}%;height:${hgt}%;left:0;width:100%;z-index:0;
-       background:transparent;border:1.5px dashed #b3bfb6;border-radius:4px;color:#8b978f;font-size:9px;font-weight:700;justify-content:flex-start;padding:2px 1px">
+       background:transparent;border:1.5px dashed ${s.c};border-radius:4px;color:#8b978f;font-size:9px;font-weight:700;justify-content:flex-start;padding:2px 1px">
        <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;width:100%">${cT(pr.s)}~${cT(pr.e)}</span></div>`; }).join('');
    // ② 실제 근무 — 채워진 칸
-   let actual='', badge='';
+   let actual='';
    if(r){
      const t=pct(hOf(r.in)), hgt=Math.max(2,pct(hOf(end))-pct(hOf(r.in)));
      actual=`<div class="wsh" style="top:${t}%;height:${hgt}%;left:0;width:100%;background:${s.c};z-index:1;font-size:10px;padding:2px 1px;justify-content:flex-start;border-radius:4px">
        <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;width:100%">${r10(r.in)}~${r.out?r10(r.out):''}</span></div>`;
-     if(plan.length){
-       const ps=t2n(plan[0].s), pe=t2n(plan[plan.length-1].e);
-       const late=mins(hOf(r.in)-ps), over=r.out? mins(hOf(r.out)-pe) : 0;
-       const tags=[];
-       if(late>=10) tags.push(`<span style="color:#c0392b;font-weight:800">지각 ${late}분</span>`);
-       else if(late<=-10) tags.push(`<span style="color:#2c7a4b;font-weight:800">일찍 ${-late}분</span>`);
-       if(over>=10) tags.push(`<span style="color:#8a6d29;font-weight:800">초과 ${over}분</span>`);
-       else if(r.out&&over<=-10) tags.push(`<span style="color:#8b978f">조퇴 ${-over}분</span>`);
-       if(tags.length) badge=`<div style="font-size:9px;line-height:1.3;margin-top:2px">${tags.join('<br>')}</div>`;
-     }
    }
    // ③ 휴게 — 흰 칸
    const brk=(r?(r.breaks||[]):[]).filter(b=>b.s).map(b=>{
@@ -1079,7 +1068,7 @@ function dutyTimelineHTML(){
    return `<div class="wcol">
      <div class="wch" style="font-size:11.5px;padding:4px 0">${escAttr(s.name)}<span style="display:block;font-weight:400;font-size:9.5px;color:var(--sub)">${r?fmtDurShort(recWorkedMs(r,live)):'미출근'}</span></div>
      <div class="wbody">${planned}${actual}${brk}</div>
-     <div class="wcov" style="font-size:10.5px;padding:3px 0">${state}${(r&&(r.breaks||[]).length)?`<span class="wcn">${r.breaks.length}</span>`:''}${badge}</div>
+     <div class="wcov" style="font-size:10.5px;padding:3px 0">${state}${(r&&(r.breaks||[]).length)?`<span class="wcn">${r.breaks.length}</span>`:''}</div>
    </div>`; }).join('');
  return `<div class="card" style="margin-top:12px"><h3>${IC('clock','li sm')}근무 타임라인 <span class="muted" style="font-size:11px;font-weight:600">· ${rows.length}명</span></h3>${nav}
    <div class="wcal" style="grid-template-columns:26px repeat(${rows.length},1fr)"><div class="wtime">${times}</div>${cols}</div>
@@ -3521,6 +3510,8 @@ function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDon
 /* ═══════════ 업데이트 내역 (새로고침 후 무엇이 바뀌었는지) ═══════════ */
 const VER_KEY='farmplanet.lastver';
 const CHANGELOG=[
+ {v:'2.42.3', d:'2026-08-28', items:[
+   '점선을 다시 직원 색으로 · 지각·초과 문구는 없애고 <b>빈 칸으로만</b> 표시' ]},
  {v:'2.42.2', d:'2026-08-28', items:[
    '타임라인을 <b>출근이 이른 사람부터</b> 왼쪽에 배치' ]},
  {v:'2.42.1', d:'2026-08-28', items:[
