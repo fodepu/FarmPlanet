@@ -456,7 +456,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.40.5'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.41.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -487,7 +487,7 @@ const CHAT_LIMIT=200;
 let _fsDb=null,_chatApi=null,_chatErr='',_fbUid=null;
 let CHATR={},_roomUnsub={},chatRoom=null;   // 방별 메시지 / 방별 구독 / 열려있는 방
 let _docApi=null;
-let STAFF, SHIFTS, ORDERS, NOTICES, CK, SUBMITS, CUR, REFS, READS, SCHED_TS=0, DELETED=[], ODEL=[], PATTERN=null, ATT={}, STORE_LOC=null, WAGE=0, ATTREQ=[], ATTLOG={}, BOARD=[], STORE_IP=null, STORE_IPS=[], INV=[], CATS=[], HOL=[], HDEL=[], WIFILOCK=false, WIFISTRICT=true, ROOMS=[], IDEL=[], CDEL=[], PLANS=[], PDONE={};
+let STAFF, SHIFTS, ORDERS, NOTICES, CK, SUBMITS, CUR, REFS, READS, SCHED_TS=0, DELETED=[], ODEL=[], PATTERN=null, ATT={}, STORE_LOC=null, WAGE=0, ATTREQ=[], ATTLOG={}, BOARD=[], STORE_IP=null, STORE_IPS=[], INV=[], CATS=[], HOL=[], HDEL=[], WIFILOCK=false, WIFISTRICT=true, ROOMS=[], IDEL=[], CDEL=[], PLANS=[], PDONE={}, MAN=null, REC=null;
 function touchSched(){SCHED_TS=Date.now();} // 시간표 변경 시각 기록(신규 표시용)
 /* ── 시간표 일괄 작업 되돌리기 (지난주 복사·기본패턴·초기화) ── */
 const UKEY='farmplanet.schedundo';
@@ -526,7 +526,7 @@ function defaults(){
  SHIFTS={}; seedWeek(buildWeek(0));
  ORDERS=[]; SUBMITS=[]; CK={}; REFS={}; READS={};
  NOTICES=[{tag:"공지",gold:true,who:"대표님",dt:fmtDT(),ts:Date.now(),bd:"FarmPlanet 앱 사용을 시작합니다. 공지·발주·시간표·마감을 여기서 관리해요."}];
- CUR=null; SCHED_TS=0; DELETED=[]; ODEL=[]; PATTERN=null; ATT={}; STORE_LOC=null; WAGE=MINWAGE; ATTREQ=[]; ATTLOG={}; BOARD=[]; STORE_IP=null; STORE_IPS=[]; INV=[]; CATS=[]; HOL=[]; HDEL=[]; WIFILOCK=false; WIFISTRICT=true; ROOMS=defaultRooms(); IDEL=[]; CDEL=[]; PLANS=[]; PDONE={};
+ CUR=null; SCHED_TS=0; DELETED=[]; ODEL=[]; PATTERN=null; ATT={}; STORE_LOC=null; WAGE=MINWAGE; ATTREQ=[]; ATTLOG={}; BOARD=[]; STORE_IP=null; STORE_IPS=[]; INV=[]; CATS=[]; HOL=[]; HDEL=[]; WIFILOCK=false; WIFISTRICT=true; ROOMS=defaultRooms(); IDEL=[]; CDEL=[]; PLANS=[]; PDONE={}; MAN=null; REC=null;
 }
 /* 주간 기본 패턴 (2026-07 확정, 화면 편성 기준)
    월: 예흔08~14·미루11~14·지한12:30~16·효원16~19
@@ -546,13 +546,13 @@ function seedWeek(week){
   else if(i===5){set('gh',d,'12:00','18:00');}
   });
 }
-function save(){try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,STORE_IPS,INV,CATS,HOL,HDEL,WIFILOCK,WIFISTRICT,ROOMS,IDEL,CDEL,PLANS,PDONE}));}catch(e){}
+function save(){try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,STORE_IPS,INV,CATS,HOL,HDEL,WIFILOCK,WIFISTRICT,ROOMS,IDEL,CDEL,PLANS,PDONE,MAN,REC}));}catch(e){}
  if(SYNC_ENABLED&&typeof pushSync==='function')pushSync();}
 /* ── 실시간 공유 (Firestore 단일 문서, 사진 제외) ── */
 function syncPayload(){
  const ckLite={};
  Object.keys(CK).forEach(k=>{const d=CK[k]||{};ckLite[k]={open:d.open||{},mid:d.mid||{},close:d.close||{}};});
- return {STAFF,SHIFTS,ORDERS,NOTICES,SUBMITS,READS,CK:ckLite,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,STORE_IPS,INV,CATS,HOL,HDEL,WIFILOCK,WIFISTRICT,ROOMS,IDEL,CDEL,PLANS,PDONE};
+ return {STAFF,SHIFTS,ORDERS,NOTICES,SUBMITS,READS,CK:ckLite,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,STORE_IPS,INV,CATS,HOL,HDEL,WIFILOCK,WIFISTRICT,ROOMS,IDEL,CDEL,PLANS,PDONE,MAN,REC};
 }
 async function syncBoot(){
  try{
@@ -624,6 +624,8 @@ function applyRemote(data){
   if(Array.isArray(d.PLANS)){ const m={}; [...d.PLANS,...(PLANS||[])].forEach(x=>{const k=x&&x.id; if(!k)return;
       if(!m[k]||(x.mt||0)>(m[k].mt||0))m[k]=x; }); PLANS=Object.values(m).filter(x=>!x.del).sort((a,b)=>(a.ts||0)-(b.ts||0)); }
   if(d.PDONE){ PDONE=Object.assign({},d.PDONE,PDONE||{}); }   // 완료기록: 합집합(먼저 찍힌 것 유지)
+  if(d.MAN!==undefined && d.MAN) MAN=d.MAN;   // 매뉴얼·레시피 편집분
+  if(d.REC!==undefined && d.REC) REC=d.REC;
   if(Array.isArray(d.IDEL)) IDEL=[...new Set([...(IDEL||[]),...d.IDEL])]; // 삭제된 재고 표식 합집합
   if(Array.isArray(d.CDEL)) CDEL=[...new Set([...(CDEL||[]),...d.CDEL])]; // 삭제된 분류 표식 합집합
   if(d.INV){ const m={}; [...d.INV,...(INV||[])].forEach(v=>{const k=v&&v.id; if(!k)return; // 재고: id 기준, 최근 수정(mt) 우선 병합
@@ -634,7 +636,7 @@ function applyRemote(data){
   if(d.HOL){ HOL=[...new Set([...(d.HOL||[]),...(HOL||[])])].filter(x=>!(HDEL||[]).includes(x)); } // 합집합 − 해제분
   if(d.CK){ const merged={}; Object.keys(d.CK).forEach(k=>{merged[k]=Object.assign({},d.CK[k]); if(CK[k]&&CK[k].photos)merged[k].photos=CK[k].photos;});
     Object.keys(CK).forEach(k=>{if(!merged[k])merged[k]=CK[k];}); CK=merged; }
-  try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,STORE_IPS,INV,CATS,HOL,HDEL,WIFILOCK,WIFISTRICT,ROOMS,IDEL,CDEL,PLANS,PDONE}));}catch(e){}
+  try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,STORE_IPS,INV,CATS,HOL,HDEL,WIFILOCK,WIFISTRICT,ROOMS,IDEL,CDEL,PLANS,PDONE,MAN,REC}));}catch(e){}
   const _ae=document.activeElement; // 입력 중(텍스트 칸 포커스)이면 화면 갱신 미룸 → 타이핑 안 끊김
   if(_ae && (_ae.tagName==='INPUT'||_ae.tagName==='TEXTAREA') && _ae.type!=='date'){ /* 다음 사용자 동작 때 반영 */ }
   else render();
@@ -652,7 +654,7 @@ function shareSchedule(){
 function load(){
  try{const d=JSON.parse(localStorage.getItem(SKEY));
   if(!d||!d.STAFF)throw 0;
-  ({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,STORE_IPS,INV,CATS,HOL,HDEL,WIFILOCK,WIFISTRICT,ROOMS,IDEL,CDEL,PLANS,PDONE}=Object.assign({ORDERS:[],NOTICES:[],CK:{},SUBMITS:[],CUR:null,REFS:{},READS:{},SCHED_TS:0,DELETED:[],ODEL:[],PATTERN:null,ATT:{},STORE_LOC:null,WAGE:MINWAGE,ATTREQ:[],ATTLOG:{},BOARD:[],STORE_IP:null,STORE_IPS:[],INV:[],CATS:[],HOL:[],HDEL:[],WIFILOCK:false,WIFISTRICT:true,ROOMS:defaultRooms(),IDEL:[],CDEL:[],PLANS:[],PDONE:{}},d));
+  ({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,STORE_IPS,INV,CATS,HOL,HDEL,WIFILOCK,WIFISTRICT,ROOMS,IDEL,CDEL,PLANS,PDONE,MAN,REC}=Object.assign({ORDERS:[],NOTICES:[],CK:{},SUBMITS:[],CUR:null,REFS:{},READS:{},SCHED_TS:0,DELETED:[],ODEL:[],PATTERN:null,ATT:{},STORE_LOC:null,WAGE:MINWAGE,ATTREQ:[],ATTLOG:{},BOARD:[],STORE_IP:null,STORE_IPS:[],INV:[],CATS:[],HOL:[],HDEL:[],WIFILOCK:false,WIFISTRICT:true,ROOMS:defaultRooms(),IDEL:[],CDEL:[],PLANS:[],PDONE:{},MAN:null,REC:null},d));
   INV=INV||[]; CATS=CATS||[]; HOL=HOL||[]; HDEL=HDEL||[]; if(HDEL.length)HOL=HOL.filter(x=>!HDEL.includes(x)); IDEL=IDEL||[]; CDEL=CDEL||[]; PLANS=PLANS||[]; PDONE=PDONE||{};
   if(IDEL.length){INV=INV.filter(v=>!IDEL.includes(v.id));} if(CDEL.length){CATS=CATS.filter(c=>!CDEL.includes(c));}
   REFS=REFS||{}; READS=READS||{}; SCHED_TS=SCHED_TS||0; DELETED=DELETED||[]; ODEL=ODEL||[]; ATT=ATT||{}; WAGE=WAGE||MINWAGE; ATTREQ=ATTREQ||[]; ATTLOG=ATTLOG||{}; BOARD=BOARD||[];
@@ -1300,39 +1302,126 @@ function screenHome(){
    <div class="qbtn" onclick="openMyDocs()">${IC('book')}내 서류</div>
    ${isAdmin(curUser())?`<div class="qbtn" style="position:relative" onclick="staffManage()">${IC('user')}직원 관리${pendingCount()?'<span class="bdotn" style="position:absolute;top:10px;right:10px;margin:0"></span>':''}</div>`:''}
  </div>
+ ${todayPlanCardHTML()}
  <div class="card"><h3>${IC('tv','li sm')}매장 TV</h3>
    <div class="muted" style="margin-bottom:8px">메뉴판·포스터는 스마트플랫에서 관리합니다.</div>
    ${role==='admin'?`<button class="btn sec" onclick="window.open(SMARTFLAT_URL,'_blank')">${IC('link','li sm')} 스마트플랫 관리자 열기</button>`:''}</div>`;
 }
 
-/* ═══════════ 매뉴얼 ═══════════ */
+/* ═══════════ 매뉴얼 · 레시피 (관리자 편집 가능) ═══════════ */
+function manList(){ return Array.isArray(MAN)?MAN:MANUAL; }
+function recList(){ return Array.isArray(REC)?REC:RECIPES; }
+function manEnsure(){ if(!Array.isArray(MAN)) MAN=manList().map(m=>Object.assign({},m)); return MAN; }
+function recEnsure(){ if(!Array.isArray(REC)) REC=recList().map(r=>({n:r.n,c:r.c,t:(r.t||[]).slice(),ing:(r.ing||[]).map(x=>[x[0],x[1]])})); return REC; }
+function manBody(m){ // 편집한 항목은 일반 텍스트, 기본 항목은 원래 서식
+ if(m.body!==undefined) return escAttr(m.body).replace(/\n/g,'<br>');
+ return m.html||''; }
+function manText(m){ return m.body!==undefined? m.body : String(m.html||'').replace(/<[^>]+>/g,'').replace(/\n\s*\n/g,'\n').trim(); }
+function manId(){ return 'm'+Date.now().toString(36)+Math.random().toString(36).slice(2,5); }
+
 function screenManual(){
+ const admin=isAdmin(curUser());
  return `<h2 class="title">${IC('book')}매뉴얼 · 레시피</h2>
   <input class="search" id="msearch" placeholder="검색: 나사, 연유라떼, 식기세척기…" oninput="filterManual(this.value)">
+  ${admin?`<div class="row" style="gap:6px;margin-bottom:10px">
+    <button class="btn sec" onclick="manForm(-1)">${IC('plus','li sm')} 매뉴얼 추가</button>
+    <button class="btn sec" onclick="recForm(-1)">${IC('plus','li sm')} 레시피 추가</button></div>`:''}
   <div id="manList"></div><div id="recList"></div>`;
 }
 function renderManual(q=""){
  q=q.trim().toLowerCase();
+ const admin=isAdmin(curUser());
  let mh="";
- MANUAL.forEach(m=>{
-   const hay=(m.t+m.kw+m.html).toLowerCase();
+ manList().forEach((m,i)=>{
+   const hay=(m.t+(m.kw||'')+manText(m)).toLowerCase();
    if(q&&!hay.includes(q))return;
    mh+=`<div class="acc" id="acc_${m.id}"><div class="h" onclick="document.getElementById('acc_${m.id}').classList.toggle('open')">
-     <span>${m.t}</span><span class="chev">▾</span></div><div class="b">${m.html}</div></div>`;
+     <span>${escAttr(m.t)}</span><span class="chev">▾</span></div>
+     <div class="b">${manBody(m)}
+     ${admin?`<div class="row" style="gap:6px;margin-top:10px">
+       <button class="btn sec" style="font-size:12px;padding:8px" onclick="event.stopPropagation();manForm(${i})">수정</button>
+       <button class="btn sec" style="font-size:12px;padding:8px;color:var(--warn)" onclick="event.stopPropagation();manDel(${i})">삭제</button></div>`:''}
+     </div></div>`;
  });
  $("manList").innerHTML=mh||(q?"":"");
- const rec=RECIPES.filter(r=>!q||(r.n+r.c).toLowerCase().includes(q));
+ const all=recList();
+ const rec=all.map((r,i)=>({r,i})).filter(({r})=>!q||(r.n+r.c).toLowerCase().includes(q));
  let rh=`<div class="grp">${IC('spark','li sm')}레시피 DB (${rec.length})</div>`;
- if(!rec.length&&!mh) rh=`<p class="muted" style="text-align:center;margin-top:30px">"${q}" 검색 결과가 없어요.</p>`;
- else rec.forEach(r=>{
-   let pills=r.t.map(x=>`<span class="pill ${x==='HOT'?'hot':'ice'}">${x}</span>`).join("");
-   let rows=r.ing.map(i=>`<tr><td>${i[0]}</td><td>${i[1]}</td></tr>`).join("");
-   rh+=`<div class="ritem"><div class="rn">${r.n} <span class="pill">${r.c}</span> ${pills}</div><table class="rtable">${rows}</table></div>`;
+ if(!rec.length&&!mh) rh=`<p class="muted" style="text-align:center;margin-top:30px">"${escAttr(q)}" 검색 결과가 없어요.</p>`;
+ else rec.forEach(({r,i})=>{
+   let pills=(r.t||[]).map(x=>`<span class="pill ${x==='HOT'?'hot':'ice'}">${x}</span>`).join("");
+   let rows=(r.ing||[]).map(x=>`<tr><td>${escAttr(x[0])}</td><td>${escAttr(x[1])}</td></tr>`).join("");
+   rh+=`<div class="ritem"><div class="rn">${escAttr(r.n)} <span class="pill">${escAttr(r.c)}</span> ${pills}
+     ${admin?`<span class="oact" style="margin-left:auto" onclick="recForm(${i})">수정</span><span class="oact del" onclick="recDel(${i})">삭제</span>`:''}</div>
+     <table class="rtable">${rows}</table></div>`;
  });
  $("recList").innerHTML = q&&!rec.length?(mh?"":rh):rh;
  if(q){document.querySelectorAll('.acc').forEach(a=>a.classList.add('open'));}
 }
 function filterManual(v){renderManual(v);}
+
+/* ── 매뉴얼 편집 ── */
+function manForm(i){
+ if(!isAdmin(curUser())){toast('관리자·매니저만 수정할 수 있어요');return;}
+ const m = i>=0? manList()[i] : {t:'',kw:'',body:''};
+ openModal(`<h3>${i>=0?'매뉴얼 수정':'매뉴얼 추가'}</h3>
+   <div class="fld"><label>제목</label><input id="mnT" class="tsel" value="${escAttr(m.t||'')}" placeholder="예: 커피 추출 매뉴얼"></div>
+   <div class="fld" style="margin-top:8px"><label>검색어 <span class="muted">(선택 · 띄어쓰기로 구분)</span></label>
+     <input id="mnK" class="tsel" value="${escAttr(m.kw||'')}" placeholder="예: 그라인더 나사 템핑"></div>
+   <div class="fld" style="margin-top:8px"><label>내용</label>
+     <textarea id="mnB" class="inp" style="min-height:160px" placeholder="줄바꿈으로 항목을 구분해 적으세요">${escAttr(manText(m))}</textarea></div>
+   <div class="row" style="margin-top:12px"><button class="btn sec" onclick="closeModal()">취소</button>
+     <button class="btn" onclick="manSave(${i})">저장</button></div>`);
+ setTimeout(()=>{const el=$('mnT');if(el)el.focus();},60); }
+function manSave(i){
+ const t=($('mnT')?$('mnT').value:'').trim(); if(!t){toast('제목을 입력하세요');return;}
+ const kw=($('mnK')?$('mnK').value:'').trim();
+ const body=($('mnB')?$('mnB').value:'').trim();
+ const arr=manEnsure();
+ if(i>=0){ arr[i]=Object.assign({},arr[i],{t,kw,body}); delete arr[i].html; }
+ else arr.push({id:manId(),t,kw,body});
+ save(); closeModal(); render(); toast(i>=0?'수정했습니다':'매뉴얼을 추가했습니다'); }
+function manDel(i){
+ if(!isAdmin(curUser())){toast('관리자·매니저만 가능해요');return;}
+ const m=manList()[i]; if(!m)return;
+ askConfirm(`<b>${escAttr(m.t)}</b> 매뉴얼을 삭제할까요?`,'삭제',()=>{
+   const arr=manEnsure(); arr.splice(i,1); save(); render(); toast('삭제했습니다'); }); }
+
+/* ── 레시피 편집 ── */
+function recForm(i){
+ if(!isAdmin(curUser())){toast('관리자·매니저만 수정할 수 있어요');return;}
+ const r = i>=0? recList()[i] : {n:'',c:'',t:[],ing:[]};
+ const ingTxt=(r.ing||[]).map(x=>x[0]+' : '+x[1]).join('\n');
+ const has=x=>(r.t||[]).includes(x);
+ openModal(`<h3>${i>=0?'레시피 수정':'레시피 추가'}</h3>
+   <div class="fld"><label>메뉴 이름</label><input id="rcN" class="tsel" value="${escAttr(r.n||'')}" placeholder="예: 연유라떼"></div>
+   <div class="fld" style="margin-top:8px"><label>분류</label><input id="rcC" class="tsel" value="${escAttr(r.c||'')}" placeholder="예: 커피 · 음료 · 스무디"></div>
+   <div class="fld" style="margin-top:8px"><label>온도</label>
+     <div style="display:flex;gap:8px">
+       <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rcH" ${has('HOT')?'checked':''} style="width:17px;height:17px">HOT</label>
+       <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rcI" ${has('ICE')?'checked':''} style="width:17px;height:17px">ICE</label></div></div>
+   <div class="fld" style="margin-top:8px"><label>재료 <span class="muted">(한 줄에 하나 · "재료 : 양")</span></label>
+     <textarea id="rcG" class="inp" style="min-height:120px" placeholder="우유 : 180g&#10;연유 : 30g">${escAttr(ingTxt)}</textarea></div>
+   <div class="row" style="margin-top:12px"><button class="btn sec" onclick="closeModal()">취소</button>
+     <button class="btn" onclick="recSave(${i})">저장</button></div>`);
+ setTimeout(()=>{const el=$('rcN');if(el)el.focus();},60); }
+function recSave(i){
+ const n=($('rcN')?$('rcN').value:'').trim(); if(!n){toast('메뉴 이름을 입력하세요');return;}
+ const c=($('rcC')?$('rcC').value:'').trim()||'기타';
+ const t=[]; if($('rcH')&&$('rcH').checked)t.push('HOT'); if($('rcI')&&$('rcI').checked)t.push('ICE');
+ const ing=[];
+ ($('rcG')?$('rcG').value:'').split('\n').forEach(line=>{
+   const s2=line.trim(); if(!s2)return;
+   const p=s2.split(':'); const name=(p[0]||'').trim(); const amt=p.slice(1).join(':').trim();
+   if(name)ing.push([name,amt||'']); });
+ const arr=recEnsure();
+ if(i>=0)arr[i]={n,c,t,ing}; else arr.push({n,c,t,ing});
+ save(); closeModal(); render(); toast(i>=0?'수정했습니다':'레시피를 추가했습니다'); }
+function recDel(i){
+ if(!isAdmin(curUser())){toast('관리자·매니저만 가능해요');return;}
+ const r=recList()[i]; if(!r)return;
+ askConfirm(`<b>${escAttr(r.n)}</b> 레시피를 삭제할까요?`,'삭제',()=>{
+   const arr=recEnsure(); arr.splice(i,1); save(); render(); toast('삭제했습니다'); }); }
 
 /* ═══════════ 시간표 ═══════════ */
 function setWeek(off){weekOffset=off;WEEK=buildWeek(off);
@@ -3378,12 +3467,28 @@ function planSave(){
  pushSend('📅 새 일정 · '+((curUser()&&curUser().name)||''),
    `${p.title}${p.time?' '+p.time:''} · ${planRepeatLabel(p)}${p.memo?' — '+p.memo:''}`, {tag:'plan', url:deepLinkFor('plan')});
  toast('일정을 등록하고 모두에게 알렸습니다'); }
+function todayPlanCardHTML(){ // 홈: 오늘 할 일 체크(일정)
+ const t=todayK(), list=plansOn(t);
+ if(!list.length)return '';
+ const done=list.filter(p=>planDone(p.id,t)).length;
+ const rows=list.map(p=>{ const dn=planDone(p.id,t);
+   return `<div class="ck" style="${dn?'background:#F4F8F3;border-color:#cfe3d4':''}">
+     <button class="pchk ${dn?'on':''}" onclick="planToggle('${p.id}','${t}')" aria-label="완료">${dn?'✓':''}</button>
+     <div class="tx"><b style="${dn?'color:#6a7d70':''}">${p.time?`<span style="color:var(--deep);font-size:11.5px">${p.time}</span> `:''}${escAttr(p.title)}</b>
+       ${dn?`<div class="muted" style="font-size:10.5px">${escAttr(dn.name)} ${fmtT(dn.ts)}</div>`:(p.memo?`<div class="muted" style="font-size:10.5px">${escAttr(p.memo)}</div>`:'')}</div></div>`; }).join('');
+ return `<div class="card" style="margin-bottom:12px"><h3>${IC('check','li sm')}오늘 할 일
+     <span class="muted" style="font-size:12px;font-weight:600">· ${done}/${list.length}</span></h3>
+   ${rows}
+   <div class="muted" style="font-size:10.5px;text-align:center;margin-top:8px">누가 했는지 남아요 · <span class="authlink" onclick="go('plan')">일정에서 관리</span></div></div>`; }
 function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDone(p.id,t)).length; }
 
 
 /* ═══════════ 업데이트 내역 (새로고침 후 무엇이 바뀌었는지) ═══════════ */
 const VER_KEY='farmplanet.lastver';
 const CHANGELOG=[
+ {v:'2.41.0', d:'2026-08-28', items:[
+   '<b>매뉴얼·레시피를 앱에서 수정</b>할 수 있어요 (관리자·매니저)',
+   '홈에 <b>오늘 할 일</b> 카드 — 물주기·재고세기 같은 반복 업무를 바로 체크' ]},
  {v:'2.40.5', d:'2026-08-28', items:[
    '근태에서 중복되던 <b>오늘 근무 현황</b> 카드를 없앴어요 — 타임라인만 남습니다' ]},
  {v:'2.40.4', d:'2026-08-28', items:[
