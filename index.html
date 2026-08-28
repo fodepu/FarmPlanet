@@ -456,7 +456,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.40.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.40.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -992,6 +992,10 @@ function attLiveStatus(uid){ // 오늘 기준 'work'|'break'|null
 /* ── 관리자: 그날 근무 타임라인 (근무=색 · 휴게=회색 빗금) ── */
 let dutyDate=null;
 function dutyShift(d){ const b=new Date((dutyDate||todayK())+'T00:00:00'); b.setDate(b.getDate()+d); const iso=dk(b); if(iso>todayK())return; dutyDate=iso; render(); }
+function r10(ts){ // 10분 단위 반올림 (시간표와 같은 눈금)
+ const d=new Date(ts); let m=Math.round(d.getMinutes()/10)*10, h=d.getHours();
+ if(m===60){ m=0; h=(h+1)%24; }
+ return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'); }
 function dutyTimelineHTML(){
  const iso=dutyDate||todayK(), isToday=iso===todayK();
  const rows=[];
@@ -1003,30 +1007,37 @@ function dutyTimelineHTML(){
    <button class="onbtn" onclick="dutyShift(1)" aria-label="다음 날" ${isToday?'disabled style="opacity:.35"':''}>›</button></div>`;
  if(!rows.length) return `<div class="card" style="margin-top:12px"><h3>${IC('clock','li sm')}근무 타임라인</h3>${nav}
    <p class="muted" style="text-align:center;padding:16px 2px">이 날은 근무 기록이 없어요.</p></div>`;
- // 표시 시간 범위 = 기록에 맞춰 자동(최소 매장 운영시간)
  const hOf=ts=>{ const d=new Date(ts); return d.getHours()+d.getMinutes()/60; };
  let lo=OPEN_H, hi=CLOSE_H;
  rows.forEach(({r})=>{ lo=Math.min(lo,hOf(r.in)); const end=r.out||(isToday?Date.now():r.in); hi=Math.max(hi,hOf(end)); });
  lo=Math.floor(lo); hi=Math.ceil(hi); if(hi-lo<4)hi=lo+4;
  const span=hi-lo;
- const ticks=[]; for(let h=lo;h<=hi;h+=Math.max(1,Math.round(span/6))) ticks.push(h);
+ const step=Math.max(1,Math.round(span/6));
+ const ticks=[]; for(let h=lo;h<=hi;h+=step) ticks.push(h);
  const times=ticks.map(h=>`<span style="top:${(h-lo)/span*100}%">${h}</span>`).join('');
  const cols=rows.map(({s,r})=>{
    const live=isToday&&!r.out, end=r.out||(live?Date.now():r.in);
-   const top=(hOf(r.in)-lo)/span*100, hgt=Math.max(1,(hOf(end)-hOf(r.in))/span*100);
+   const top=(hOf(r.in)-lo)/span*100, hgt=Math.max(2,(hOf(end)-hOf(r.in))/span*100);
+   const onBreak=live&&(r.breaks||[]).some(b=>b.s&&!b.e);
    const brk=(r.breaks||[]).filter(b=>b.s).map(b=>{
-     const be=b.e||end, bt=(hOf(b.s)-lo)/span*100, bh=Math.max(0.8,(hOf(be)-hOf(b.s))/span*100);
-     return `<div class="wsh" style="top:${bt}%;height:${bh}%;left:0;width:100%;background:repeating-linear-gradient(45deg,#c9d2cb,#c9d2cb 4px,#e3e9e4 4px,#e3e9e4 8px);color:#4a544c;font-size:8.5px;z-index:3;border:1px solid #b7c2b9" title="휴게 ${fmtT(b.s)}~${b.e?fmtT(b.e):''}">휴게<span class="wt">${fmtT(b.s)}~${b.e?fmtT(b.e):'…'}</span></div>`; }).join('');
+     const be=b.e||end, bt=(hOf(b.s)-lo)/span*100, bh=Math.max(1.5,(hOf(be)-hOf(b.s))/span*100);
+     const lbl= b.e? `${r10(b.s)}~${r10(b.e)}` : `${r10(b.s)}~ 휴게중`;
+     const wide=bh>=7;   // 칸이 좁으면 글자를 숨겨 근무 시간이 가려지지 않게
+     return `<div class="wsh" title="휴게 ${lbl}" style="top:${bt}%;height:${bh}%;left:0;width:100%;z-index:3;
+       background:#fff;border:1px dashed #b3bfb6;border-radius:3px;color:#6b7a70;font-size:7.5px;font-weight:700;padding:0 1px">
+       ${wide?`휴게<span class="wt" style="font-size:7px">${lbl}</span>`:''}</div>`; }).join('');
+   const workLbl=`${r10(r.in)}~${r.out?r10(r.out):(live?'':'—')}`;
    return `<div class="wcol">
-     <div class="wch" style="font-size:10px">${escAttr(s.name)}<br><span style="font-weight:400;font-size:8.5px;color:var(--sub)">${fmtDurShort(recWorkedMs(r,live))}</span></div>
+     <div class="wch" style="font-size:9.5px;padding:3px 0">${escAttr(s.name)}<span style="display:block;font-weight:400;font-size:8px;color:var(--sub)">${fmtDurShort(recWorkedMs(r,live))}</span></div>
      <div class="wbody">
-       <div class="wsh" style="top:${top}%;height:${hgt}%;left:0;width:100%;background:${s.c};z-index:1">${fmtT(r.in)}<span class="wt">~${r.out?fmtT(r.out):'근무중'}</span></div>
+       <div class="wsh" style="top:${top}%;height:${hgt}%;left:0;width:100%;background:${s.c};z-index:1;font-size:8px;padding:1px 1px;justify-content:flex-start">
+         <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;width:100%">${workLbl}</span></div>
        ${brk}</div>
-     <div class="wcov"><span style="color:${live?'#639922':'var(--sub)'};font-weight:800">${live?'●':'✓'}</span><span class="wcn">${(r.breaks||[]).length}</span></div>
+     <div class="wcov" style="font-size:9px;padding:2px 0">${onBreak?'<span style="color:#8a6d29;font-weight:800">휴게중</span>':(live?'<span style="color:#639922;font-weight:800">근무중</span>':'<span style="color:var(--sub)">퇴근</span>')}${(r.breaks||[]).length?`<span class="wcn">${(r.breaks||[]).length}</span>`:''}</div>
    </div>`; }).join('');
  return `<div class="card" style="margin-top:12px"><h3>${IC('clock','li sm')}근무 타임라인 <span class="muted" style="font-size:11px;font-weight:600">· ${rows.length}명</span></h3>${nav}
    <div class="wcal" style="grid-template-columns:26px repeat(${rows.length},1fr)"><div class="wtime">${times}</div>${cols}</div>
-   <div class="muted" style="font-size:10.5px;text-align:center;margin-top:8px">색 = 근무 · 빗금 = 휴게 · 맨 아래 숫자 = 휴게 횟수</div></div>`;
+   <div class="muted" style="font-size:10.5px;text-align:center;margin-top:8px">색 = 근무 · <span style="border:1px dashed #b3bfb6;border-radius:3px;padding:0 4px;background:#fff">흰 칸</span> = 휴게 · 10분 단위 표시</div></div>`;
 }
 function currentDutyHTML(){ // 오늘 근무한 사람 전체(근무중·휴게중·퇴근) — 관리자용
  const tk=todayK(), list=[]; let onNow=0;
@@ -3379,6 +3390,9 @@ function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDon
 /* ═══════════ 업데이트 내역 (새로고침 후 무엇이 바뀌었는지) ═══════════ */
 const VER_KEY='farmplanet.lastver';
 const CHANGELOG=[
+ {v:'2.40.1', d:'2026-08-19', items:[
+   '근무 타임라인 정리 — 휴게는 <b>흰 칸</b>, 진행 중이면 <b>~휴게중</b>, 시간은 10분 단위',
+   '글자 크기를 줄여 한 줄로 · 휴게 칸이 근무 시간을 가리지 않게' ]},
  {v:'2.40.0', d:'2026-08-19', items:[
    '알림을 누르면 <b>그 화면으로 바로</b> 들어가요 — 채팅은 해당 방까지' ]},
  {v:'2.39.2', d:'2026-08-19', items:[
