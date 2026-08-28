@@ -456,7 +456,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.40.4'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.40.5'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -1048,21 +1048,6 @@ function dutyTimelineHTML(){
    <div class="wcal" style="grid-template-columns:26px repeat(${rows.length},1fr)"><div class="wtime">${times}</div>${cols}</div>
    <div class="muted" style="font-size:10.5px;text-align:center;margin-top:8px">색 = 근무 · <span style="border:1px dashed #b3bfb6;border-radius:3px;padding:0 4px;background:#fff">흰 칸</span> = 휴게 · 10분 단위 표시</div></div>`;
 }
-function currentDutyHTML(){ // 오늘 근무한 사람 전체(근무중·휴게중·퇴근) — 관리자용
- const tk=todayK(), list=[]; let onNow=0;
- (STAFF||[]).forEach(s=>{ if(s.pending)return; const r=attRecFor(s.id,tk); if(!r||!r.in)return;
-   const live=r.in&&!r.out, st=attLiveStatus(s.id);
-   const rank = st==='work'?0 : st==='break'?1 : 2; if(rank<2)onNow++;
-   list.push({s,r,st,rank}); });
- list.sort((a,b)=>(a.rank-b.rank)||((a.r.in||0)-(b.r.in||0)));
- const rows= list.length? list.map(({s,r,st,rank})=>{
-   const label= rank===0?'근무 중':rank===1?'휴게 중':'퇴근';
-   const bg= rank===0?'#EAF3DE':rank===1?'#FAEEDA':'#EDF1EA', col= rank===0?'#3B6D11':rank===1?'#854F0B':'var(--deep)';
-   const time= r.out? `${fmtT(r.in)}~${fmtT(r.out)}` : `${fmtT(r.in)}~`;
-   return `<div class="lrow"><span><span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:${s.c};margin-right:6px"></span>${s.name} <span class="pill" style="background:${bg};color:${col};font-size:10px">${label}</span></span><b style="white-space:nowrap;font-size:12px">${time} · ${fmtDur(workedMs(r))}</b></div>`;
- }).join('') : `<p class="muted" style="text-align:center;padding:12px 2px">오늘 근무한 사람이 없어요.</p>`;
- return `<div class="card" style="margin-top:12px"><h3>${IC('clock','li sm')}오늘 근무 현황 <span class="muted" style="font-size:11px;font-weight:600">· 근무 중 ${onNow}명</span></h3>${rows}</div>`;
-}
 function screenAtt(){
  const admin=isAdmin(curUser()), a=attToday(), st=attStatus(a);
  const td=TODAY(), shift=td?rangesLabel(CUR+'|'+td.k):'';
@@ -1088,7 +1073,7 @@ function screenAtt(){
  const editBtn = a? `<button class="btn sec" style="margin-top:14px" onclick="reqAtt(todayK())">${IC('swap','li sm')} 오늘 기록 수정 요청</button>`:'';
  const reqBox = (admin && attReqCount())? `<div class="card" style="margin-top:12px;border-color:#bcd7f0"><h3>${IC('bell','li sm')}근태 요청 ${attReqCount()}건</h3>${ATTREQ.map(r=>`<div style="border-top:1px solid var(--edge);padding:8px 0"><div style="font-size:13px"><b>${r.name}</b> <span class="pill" style="background:${r.kind==='in'?'#e7f0ff':'#F0F4EE'};color:${r.kind==='in'?'#2f6fd0':'var(--deep)'};font-size:10px">${r.kind==='in'?'출근 요청':'기록 수정'}</span> <span class="muted" style="font-size:11px">${r.date.slice(5)}</span></div><div class="muted" style="font-size:11.5px">출근 ${fmtT(r.in)}${r.out?' · 퇴근 '+fmtT(r.out):" · '근무 중'으로"}${Array.isArray(r.breaks)?' · 휴게 '+(r.breaks.length?r.breaks.map(b=>fmtT(b.s)+'~'+(b.e?fmtT(b.e):'')).join(', '):'없음'):''}${r.note?' · "'+r.note+'"':''}</div><div class="row" style="gap:6px;margin-top:6px"><button class="btn sec" style="color:var(--warn);border-color:#f0d9bd" onclick="rejectAttReq('${r.id}')">거절</button><button class="btn" onclick="approveAttReq('${r.id}')">승인</button></div></div>`).join('')}</div>`:'';
  const adminBox = admin? `<div class="muted" style="font-size:11px;margin-top:14px">${STORE_IP?(WIFILOCK?'매장 와이파이 고정됨 🔒':'매장 와이파이 등록됨'):'매장 와이파이 미등록 — 출퇴근 확인 안 함'} · <span class="authlink" onclick="openWifiSetup()">와이파이 설정</span></div>`:'';
- return `<h2 class="title">${IC('clock')}근태</h2><div class="card">${body}${editBtn}</div>${admin?currentDutyHTML():''}${admin?dutyTimelineHTML():''}${attHistoryHTML()}${admin?admSummaryHTML():''}${reqBox}${adminBox}`;
+ return `<h2 class="title">${IC('clock')}근태</h2><div class="card">${body}${editBtn}</div>${admin?dutyTimelineHTML():''}${attHistoryHTML()}${admin?admSummaryHTML():''}${reqBox}${adminBox}`;
 }
 function setWage(){ const v=prompt('시급(원):',WAGE); if(v===null)return; const n=parseInt(String(v).replace(/[^0-9]/g,''),10); if(!n){toast('숫자를 입력하세요');return;} WAGE=n; save(); reAtt(); toast('시급을 '+won(n)+'(으)로 저장했습니다'); }
 function attView(){
@@ -3399,6 +3384,8 @@ function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDon
 /* ═══════════ 업데이트 내역 (새로고침 후 무엇이 바뀌었는지) ═══════════ */
 const VER_KEY='farmplanet.lastver';
 const CHANGELOG=[
+ {v:'2.40.5', d:'2026-08-28', items:[
+   '근태에서 중복되던 <b>오늘 근무 현황</b> 카드를 없앴어요 — 타임라인만 남습니다' ]},
  {v:'2.40.4', d:'2026-08-28', items:[
    '근태 수정 요청을 보내면 창이 바로 닫혀요' ]},
  {v:'2.40.3', d:'2026-08-28', items:[
