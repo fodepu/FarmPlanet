@@ -456,7 +456,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.42.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.42.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -1038,7 +1038,7 @@ function dutyTimelineHTML(){
    const planned=plan.map(pr=>{
      const t=pct(t2n(pr.s)), hgt=Math.max(2,pct(t2n(pr.e))-pct(t2n(pr.s)));
      return `<div class="wsh" title="예정 ${cT(pr.s)}~${cT(pr.e)}" style="top:${t}%;height:${hgt}%;left:0;width:100%;z-index:0;
-       background:transparent;border:1.5px dashed ${s.c};border-radius:4px;color:#8b978f;font-size:9px;font-weight:700;justify-content:flex-start;padding:2px 1px">
+       background:transparent;border:1.5px dashed #b3bfb6;border-radius:4px;color:#8b978f;font-size:9px;font-weight:700;justify-content:flex-start;padding:2px 1px">
        <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;width:100%">${cT(pr.s)}~${cT(pr.e)}</span></div>`; }).join('');
    // ② 실제 근무 — 채워진 칸
    let actual='', badge='';
@@ -3515,6 +3515,8 @@ function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDon
 /* ═══════════ 업데이트 내역 (새로고침 후 무엇이 바뀌었는지) ═══════════ */
 const VER_KEY='farmplanet.lastver';
 const CHANGELOG=[
+ {v:'2.42.1', d:'2026-08-28', items:[
+   '예정 근무 점선을 회색으로 — 실제 근무 색과 헷갈리지 않게' ]},
  {v:'2.42.0', d:'2026-08-28', items:[
    '타임라인에 <b>시간표 예정 근무를 점선</b>으로 표시 — 실제 근무가 그 칸을 채워요',
    '<b>지각·초과·조퇴</b>가 분 단위로 표시돼요' ]},
