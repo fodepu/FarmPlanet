@@ -331,6 +331,7 @@ input.inp{min-height:auto}
 <div class="modal" id="modal" onclick="if(event.target.id==='modal')closeModal()"><div class="mbox" id="mbox"></div></div>
 <div class="mmwrap" id="msgMenu" onclick="if(event.target.id==='msgMenu')closeMsgMenu()"></div>
 <div class="hpwrap" id="helpPop"></div>
+<input type="file" id="chatPhoto" accept="image/*" style="display:none" onchange="chatPhotoChosen(this)">
 <div id="authOverlay">
   <div class="ttl">FARM PLANET</div>
   <div class="sub">매장 앱 · 구글 계정으로 로그인</div>
@@ -455,7 +456,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.39.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.39.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -2842,9 +2843,9 @@ function screenChat(){
      <div style="display:flex;gap:8px;align-items:center">
        <div class="chatin" id="chatText" contenteditable="true" role="textbox" aria-label="메시지 입력" data-ph="메시지 입력" enterkeyhint="enter"
             oninput="chatInputTrim(this)" onkeydown="chatKey(event)"></div>
-       <button class="sfab" style="background:#EDF1EA;color:var(--deep)" onclick="chatPickPhoto()" aria-label="사진 보내기">${IC('cam','li sm')}</button>
+       <button class="sfab" style="background:#EDF1EA;color:var(--deep)" onclick="chatPickPhoto()" aria-label="사진 보내기">${IC('plus','li sm')}</button>
        <button class="sfab" onpointerdown="sendChatTap(event)" onclick="sendChatTap(event)" aria-label="전송">${IC('up','li sm')}</button></div>
-     <input type="file" id="chatPhoto" accept="image/*" style="display:none" onchange="chatPhotoChosen(this)">
+
    </div>`; }
 
 /* 전송 탭 — 버튼이 입력창 포커스를 뺏으면 iOS에서 첫 탭이 삼켜지므로
@@ -2953,16 +2954,22 @@ function delMsg(id){
    .catch(e=>{ if(i>=0&&bak)arr.splice(i,0,bak); if(lst)lst.innerHTML=chatListHTML();
      toast('삭제 실패: '+((e&&(e.code||e.message))||e)); }); }
 /* ── 사진 보내기 (압축 후 메시지에 담아 전송) ── */
-function chatPickPhoto(){ const el=$('chatPhoto'); if(el){ el.value=''; el.click(); } }
+let _photoRoom=null;
+function chatPickPhoto(){
+ if(!chatRoom){ toast('채팅방을 먼저 선택하세요'); return; }
+ _photoRoom=chatRoom;                       // 카메라 앱 다녀오는 동안 화면이 바뀌어도 이 방으로 전송
+ const el=$('chatPhoto'); if(!el){ toast('사진 기능을 불러오지 못했어요 — 새로고침해 주세요'); return; }
+ el.value=''; el.click(); }
 function chatPhotoChosen(inp){
  const f=inp.files&&inp.files[0]; if(!f)return;
  if(!/^image\//.test(f.type)){ toast('사진만 보낼 수 있어요'); return; }
- if(!chatRoom){ toast('채팅방을 먼저 선택하세요'); return; }
+ if(!_photoRoom) _photoRoom=chatRoom;
+ if(!_photoRoom){ toast('채팅방을 먼저 선택하세요'); return; }
  toast('사진 준비 중…');
  const r=new FileReader();
  r.onload=e=>{ const img=new Image();
    img.onload=()=>{ let data; try{ data=chatCompress(img); }catch(err){ toast('사진 처리 실패'); return; }
-     if(data.length>800000){ toast('사진이 너무 커요 — 다시 시도해 주세요'); return; }
+     if(data.length>900000){ toast('사진이 너무 커요 — 다시 시도해 주세요'); return; }
      sendChatPhoto(data); };
    img.onerror=()=>toast('사진을 읽지 못했어요');
    img.src=e.target.result; };
@@ -2979,16 +2986,23 @@ function chatCompress(img){ // 최대 1200px · 약 500KB 이하
    if(q>0.45)q-=0.1; else long=Math.round(long*0.8); }
  return url; }
 function sendChatPhoto(data){
- if(!_fsDb||!_chatApi){toast('채팅 연결 준비 중이에요');return;}
+ const rid=_photoRoom||chatRoom;
+ if(!rid){toast('채팅방을 먼저 선택하세요');return;}
+ if(!_fsDb||!_chatApi){toast('채팅 연결 준비 중이에요 — 잠시 후 다시 시도하세요');return;}
  if(!_fbUid){toast('로그인 후 이용할 수 있어요');return;}
  const {collection,addDoc,serverTimestamp}=_chatApi;
- const r=roomById(chatRoom);
+ const r=roomById(rid);
  const payload={auth:_fbUid,uid:CUR,name:(curUser()&&curUser().name)||'',text:'',img:data,
    cts:Date.now(),ts:serverTimestamp(),nep:{},sook:{}};
- addDoc(collection(_fsDb,'rooms',chatRoom,'messages'),payload)
-   .then(()=>{ pushSend(`${payload.name||'FarmPlanet'} · ${r?r.name:''}`,'사진을 보냈어요',{tag:'chat-'+chatRoom,onlyUids:roomMembers(r)});
+ toast('사진 보내는 중…');
+ addDoc(collection(_fsDb,'rooms',rid,'messages'),payload)
+   .then(()=>{ _photoRoom=null;
+     pushSend(`${payload.name||'FarmPlanet'} · ${r?r.name:''}`,'사진을 보냈어요',{tag:'chat-'+rid,onlyUids:roomMembers(r)});
      toast('사진을 보냈어요'); })
-   .catch(e=>toast('전송 실패: '+((e&&(e.code||e.message))||e))); }
+   .catch(e=>{ const c=(e&&(e.code||e.message))||String(e);
+     if(/permission|denied/i.test(c))
+       askConfirm('사진 전송 권한이 없어요.<br>Firebase <b>보안 규칙</b>에 사진(img) 허용 항목을 게시해야 합니다.<br><br><span class="muted">글 전송은 되는데 사진만 안 되면 대부분 이 경우예요.</span>','알겠습니다',()=>{});
+     else toast('전송 실패: '+c); }); }
 function chatImgOpen(id){ const m=roomMsgs(chatRoom).find(x=>x.id===id); if(!m||!m.img)return;
  openModal(`<img src="${m.img}" style="width:100%;border-radius:10px;border:1px solid var(--edge)">
    <div class="row" style="margin-top:10px">
@@ -3350,6 +3364,9 @@ function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDon
 /* ═══════════ 업데이트 내역 (새로고침 후 무엇이 바뀌었는지) ═══════════ */
 const VER_KEY='farmplanet.lastver';
 const CHANGELOG=[
+ {v:'2.39.1', d:'2026-08-19', items:[
+   '사진이 전송되지 않던 문제 수정 — 카메라 다녀오는 사이 선택이 사라지던 버그',
+   '사진 버튼을 <b>＋</b> 모양으로 변경' ]},
  {v:'2.39.0', d:'2026-08-19', items:[
    '관리자 근태에 <b>근무 타임라인</b> 추가 — 시간표처럼 근무·<b>휴게 구간</b>을 한눈에',
    '와이파이 출근이 연결 후에도 안 되던 문제 수정 (옛 IP 캐시·잠금 해제)' ]},
