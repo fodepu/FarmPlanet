@@ -308,6 +308,7 @@ input.inp{min-height:auto}
  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c1-4 4-5.5 7-5.5S18 16 19 20"/></symbol>
  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4.5 4.5 0 0 0 6.4.4l3-3a4.5 4.5 0 1 0-6.4-6.4l-1.5 1.5"/><path d="M14 10a4.5 4.5 0 0 0-6.4-.4l-3 3a4.5 4.5 0 1 0 6.4 6.4l1.5-1.5"/></symbol>
  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4.5 4.5"/></symbol>
+ <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.3"/><circle cx="12" cy="12" r="7.1"/><path d="M12 2.7v2.1M12 19.2v2.1M2.7 12h2.1M19.2 12h2.1M5.4 5.4l1.5 1.5M17.1 17.1l1.5 1.5M18.6 5.4l-1.5 1.5M6.9 17.1l-1.5 1.5"/></symbol>
  <symbol id="i-swap" viewBox="0 0 24 24"><path d="M7 8h12l-3.5-3.5M17 16H5l3.5 3.5"/></symbol>
  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v4h-4"/></symbol>
  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/></symbol>
@@ -456,7 +457,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.43.3'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.43.4'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -3014,7 +3015,7 @@ function screenChat(){
      <button class="role" onclick="closeRoom()" style="padding:5px 8px" title="목록">←</button>
      <b style="flex:1;font-size:14px;color:var(--ink)">${escAttr(r.name)}</b>
      <button class="role" onclick="chatSearchToggle()" style="padding:5px 8px;display:flex;align-items:center" title="검색" aria-label="대화 검색">${IC('search','li sm')}</button>
-     <span class="muted" style="font-size:11px;cursor:pointer" onclick="roomInfoModal()">${roomMembers(r).length}명 ⓘ</span></div>
+     <button class="role" onclick="roomInfoModal()" style="padding:5px 8px;display:flex;align-items:center" title="방 설정" aria-label="방 설정 · ${roomMembers(r).length}명">${IC('gear','li sm')}</button></div>
    <div id="searchBar" style="flex:none;display:${chatQ!==null?'':'none'};background:#fff;border-bottom:1px solid var(--edge);padding:7px 10px">
      <div style="display:flex;gap:6px;align-items:center">
        <input id="chatQ" class="tsel" style="flex:1;font-size:15px" placeholder="대화 검색" value="${escAttr(chatQ||'')}"
@@ -3618,6 +3619,8 @@ function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDon
 /* ═══════════ 업데이트 내역 (새로고침 후 무엇이 바뀌었는지) ═══════════ */
 const VER_KEY='farmplanet.lastver';
 const CHANGELOG=[
+ {v:'2.43.4', d:'2026-08-28', items:[
+   '채팅방 인원 표시를 <b>톱니바퀴</b> 버튼으로 변경' ]},
  {v:'2.43.3', d:'2026-08-28', items:[
    '새 기기·오래 지난 뒤 로그인하면 <b>가입 요청 화면이 잘못 뜨던 문제</b> 수정',
    '로그인 후 데이터 연결을 다시 시도해요' ]},
