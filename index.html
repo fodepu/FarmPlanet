@@ -456,7 +456,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.43.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.43.2'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -2878,7 +2878,7 @@ function chatWhenShort(ts){ if(!ts)return ''; const d=new Date(ts);
  if(dk(d)===todayK())return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
  return `${d.getMonth()+1}/${d.getDate()}`; }
 
-function openRoom(id){ chatQ=null; chatHits=[]; chatHitI=0; chatRoom=id; render(); }
+function openRoom(id){ chatQ=null; chatHits=[]; chatHitI=0; _pinOpen=false; chatRoom=id; render(); }
 function closeRoom(){ chatRoom=null; _pendingPhoto=null; _photoRoom=null; chatQ=null; chatHits=[]; chatHitI=0; render(); }
 
 /* ── 방 만들기 / 초대 (관리자·매니저) ── */
@@ -2981,7 +2981,7 @@ function chatListHTML(){
      <div style="max-width:74%;display:flex;flex-direction:column;align-items:${mine?'flex-end':'flex-start'}">
        ${(!mine&&!grpPrev)?`<div style="font-size:11px;font-weight:700;color:${nameColor(m.uid)};margin:1px 0 4px 2px">${escAttr(m.name)}</div>`:''}
        <div style="display:flex;align-items:flex-end;gap:4px;${mine?'flex-direction:row-reverse':''}">
-         <div id="msg_${m.id}" ontouchstart="reactHoldStart('${m.id}',event)" ontouchend="reactHoldEnd()" ontouchmove="reactHoldEnd()" oncontextmenu="event.preventDefault();openReactMenu('${m.id}')" style="background:${m.img?'transparent':(mine?'#DCF0E1':'#fff')};border:${m.img?'none':'1px solid '+(mine?'#c6e5cf':'#E5EAE3')};border-radius:${rad};padding:${m.img?'0':'8px 11px'};${_hitCur===m.id?'box-shadow:0 0 0 2px #E9A33A;':''}font-size:13.5px;line-height:1.45;color:var(--ink);white-space:pre-wrap;word-break:break-word;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none">${m.pin?'<span style="display:inline-block;font-size:9.5px;font-weight:800;color:#8a6d29;background:#FAF6EC;border-radius:10px;padding:1px 6px;margin-bottom:4px">공지</span><br>':''}${m.img?`<img src="${m.img}" onclick="chatImgOpen('${m.id}')" style="max-width:200px;width:100%;border-radius:12px;display:block">${m.text?`<div style="margin-top:5px;padding:7px 10px;background:${mine?'#DCF0E1':'#fff'};border:1px solid ${mine?'#c6e5cf':'#E5EAE3'};border-radius:12px">${hiLite(m.text,_hitQ)}</div>`:''}`:hiLite(m.text,_hitQ)}</div>
+         <div id="msg_${m.id}" ontouchstart="reactHoldStart('${m.id}',event)" ontouchend="reactHoldEnd()" ontouchmove="reactHoldEnd()" oncontextmenu="event.preventDefault();openReactMenu('${m.id}')" style="background:${m.img?'transparent':(mine?'#DCF0E1':'#fff')};border:${m.img?'none':'1px solid '+(mine?'#c6e5cf':'#E5EAE3')};border-radius:${rad};padding:${m.img?'0':'8px 11px'};${_hitCur===m.id?'box-shadow:0 0 0 2px #E9A33A;':''}font-size:13.5px;line-height:1.45;color:var(--ink);white-space:pre-wrap;word-break:break-word;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none">${m.pin?'<span style="display:inline-block;font-size:9.5px;font-weight:800;color:var(--deep);background:#E7F0E9;border-radius:10px;padding:1px 6px;margin-bottom:4px">공지</span><br>':''}${m.img?`<img src="${m.img}" onclick="chatImgOpen('${m.id}')" style="max-width:200px;width:100%;border-radius:12px;display:block">${m.text?`<div style="margin-top:5px;padding:7px 10px;background:${mine?'#DCF0E1':'#fff'};border:1px solid ${mine?'#c6e5cf':'#E5EAE3'};border-radius:12px">${hiLite(m.text,_hitQ)}</div>`:''}`:hiLite(m.text,_hitQ)}</div>
          ${meta}</div>
        ${nepChip}</div></div>`; });
  return out; }
@@ -3233,15 +3233,27 @@ function togglePin(id){
      toast(on?'공지로 고정했어요':'고정을 해제했어요'); })
    .catch(e=>{ m.pin=!on; if(el)el.innerHTML=chatListHTML(); renderPinBar();
      toast('실패: '+((e&&(e.code||e.message))||e)); }); }
+let _pinOpen=false;
+function pinToggleOpen(){ _pinOpen=!_pinOpen; renderPinBar(); }
 function renderPinBar(){ const bar=$('pinBar'); if(!bar)return;
  const m=pinnedMsg();
- if(!m){ bar.style.display='none'; bar.innerHTML=''; return; }
+ if(!m){ bar.style.display='none'; bar.innerHTML=''; _pinOpen=false; return; }
  bar.style.display='';
  const txt=m.img? '사진' : (m.text||'');
- bar.innerHTML=`<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:#FAF6EC;border-bottom:1px solid #EADFC4">
-   <span style="flex:none;font-size:11px;font-weight:800;color:#8a6d29">공지</span>
-   <div style="flex:1;min-width:0;font-size:12px;color:#5a4a22;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="chatScrollTo('${m.id}')">${escAttr(txt)}</div>
-   ${canMakeRoom()?`<span class="authlink" style="font-size:11px;flex:none" onclick="togglePin('${m.id}')">해제</span>`:''}</div>`; }
+ const many=m.img || txt.length>26 || txt.indexOf('\n')>=0;   // 접을 만큼 긴가
+ const open=_pinOpen&&many;
+ bar.innerHTML=`<div style="background:#fff;border-bottom:1px solid var(--edge)">
+   <div style="display:flex;align-items:${open?'flex-start':'center'};gap:8px;padding:9px 12px">
+     <span style="flex:none;display:flex;align-items:center;gap:3px;font-size:10.5px;font-weight:800;color:var(--deep);background:#E7F0E9;border-radius:9px;padding:2px 7px;${open?'margin-top:1px':''}">공지</span>
+     <div style="flex:1;min-width:0;font-size:12.5px;line-height:1.5;color:var(--ink);cursor:pointer;
+       ${open?'white-space:pre-wrap;word-break:break-word;max-height:34vh;overflow-y:auto':'overflow:hidden;text-overflow:ellipsis;white-space:nowrap'}"
+       onclick="chatScrollTo('${m.id}')">${open&&m.img?`<img src="${m.img}" style="max-width:150px;width:100%;border-radius:8px;display:block;margin-bottom:4px">`:''}${escAttr(open&&m.img?(m.text||''):txt)}</div>
+     ${many?`<button class="onbtn" style="flex:none;width:26px;height:26px;font-size:12px" onclick="event.stopPropagation();pinToggleOpen()" title="${open?'접기':'펼치기'}">${open?'▲':'▼'}</button>`:''}
+   </div>
+   ${open&&canMakeRoom()?`<div style="padding:0 12px 9px;text-align:right">
+     <span class="authlink" style="font-size:11.5px" onclick="togglePin('${m.id}')">공지 해제</span></div>`:''}
+   ${!open&&canMakeRoom()&&!many?`<div style="padding:0 12px 8px;text-align:right">
+     <span class="authlink" style="font-size:11px" onclick="togglePin('${m.id}')">해제</span></div>`:''}</div>`; }
 function chatScrollTo(id){ const el=document.getElementById('msg_'+id); if(el)el.scrollIntoView({block:'center'}); }
 function toggleReact(msgId,type){ // 넵/숙지 토글
  if(!_fsDb||!_chatApi||!_fbUid||!chatRoom)return;
@@ -3585,6 +3597,9 @@ function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDon
 /* ═══════════ 업데이트 내역 (새로고침 후 무엇이 바뀌었는지) ═══════════ */
 const VER_KEY='farmplanet.lastver';
 const CHANGELOG=[
+ {v:'2.43.2', d:'2026-08-28', items:[
+   '채팅 공지를 <b>펼치기·접기</b>로 — 긴 공지도 전부 볼 수 있어요',
+   '공지 색을 앱 톤(연한 초록)으로 정리' ]},
  {v:'2.43.1', d:'2026-08-28', items:[
    '직원 근무 기록에 <b>휴게 합계</b>를 함께 표시',
    '채팅 검색 아이콘을 앱 아이콘 톤으로 통일' ]},
