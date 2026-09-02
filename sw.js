@@ -1,5 +1,5 @@
 // 네트워크 우선(항상 최신), 오프라인 시 캐시 · 외부(카카오·파이어베이스 등) 요청은 간섭 안 함
-const C='farmplanet-v4';
+const C='farmplanet-v5';
 self.addEventListener('install',e=>{e.waitUntil(caches.open(C).then(c=>c.addAll(['./','./index.html','./manifest.webmanifest','./icon-192.png','./icon-512.png','./apple-touch-icon.png','./favicon.png'])));self.skipWaiting();});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==C).map(k=>caches.delete(k))))); self.clients.claim();});
 self.addEventListener('fetch',e=>{
@@ -32,4 +32,21 @@ self.addEventListener('notificationclick',e=>{
      return; } }
    if(clients.openWindow)return clients.openWindow(target);
  }));
+});
+
+/* ── 구독이 교체될 때(안드로이드에서 자주 발생) 새 구독으로 갈아끼우기 ── */
+const PUSH_URL='https://farmplanet-push.kimjuham1120.workers.dev';
+const VAPID_PUB='BEg3PHpSlx0RL3KBDBUhUA-S8qfPr4H8kbMu_H3yNsGqvGvie1bIAq3d19lPUcxtahsFxfxIFgw-pqpy8NNGako';
+function b64u8(b){ const pad='='.repeat((4-b.length%4)%4); const raw=atob((b+pad).replace(/-/g,'+').replace(/_/g,'/'));
+ const a=new Uint8Array(raw.length); for(let i=0;i<raw.length;i++)a[i]=raw.charCodeAt(i); return a; }
+self.addEventListener('pushsubscriptionchange',e=>{
+ const oldEp=(e.oldSubscription&&e.oldSubscription.endpoint)||'';
+ e.waitUntil((async()=>{
+   try{
+     const sub=e.newSubscription||await self.registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64u8(VAPID_PUB)});
+     const j=sub.toJSON();
+     await fetch(PUSH_URL+'/resub',{method:'POST',headers:{'Content-Type':'application/json'},
+       body:JSON.stringify({old:oldEp,sub:{endpoint:sub.endpoint,keys:j.keys}})});
+   }catch(err){}
+ })());
 });
