@@ -456,7 +456,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.43.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.43.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -964,21 +964,32 @@ function monthISOs(uid,y,mo){ const days=[]; const l=ATTLOG[uid]||{};
  Object.keys(l).forEach(iso=>{const d=new Date(iso+'T00:00:00'); if(d.getFullYear()===y&&d.getMonth()===mo)days.push(iso);});
  const a=ATT[uid]; if(a&&a.date){const d=new Date(a.date+'T00:00:00'); if(d.getFullYear()===y&&d.getMonth()===mo&&!days.includes(a.date))days.push(a.date);}
  return days.sort(); }
-function staffMonthStat(uid,y,mo){ let ms=0,days=0; monthISOs(uid,y,mo).forEach(iso=>{ const r=attRecFor(uid,iso); const w=recWorkedMs(r,iso===todayK()); if(w>0){ms+=w;days++;} }); return {ms,days}; }
+function recBreakMs(r,live){ // 그날 휴게 합계(진행 중이면 지금까지)
+ return (r&&r.breaks||[]).reduce((a,b)=>{ if(!b.s)return a;
+   const e=b.e||(live?Date.now():0); return e? a+Math.max(0,e-b.s) : a; },0); }
+function staffMonthStat(uid,y,mo){ let ms=0,bms=0,days=0;
+ monthISOs(uid,y,mo).forEach(iso=>{ const r=attRecFor(uid,iso); const live=iso===todayK()&&r&&!r.out;
+   const w=recWorkedMs(r,iso===todayK()); if(w>0){ms+=w; bms+=recBreakMs(r,live); days++;} });
+ return {ms,bms,days}; }
+function hmTxt(ms){ const h=Math.floor(ms/3600000), m=Math.round((ms%3600000)/60000); return h?`${h}시간 ${m}분`:`${m}분`; }
 function admSummaryHTML(){ if(!isAdmin(curUser()))return '';
  const base=new Date((admMonth||todayK())+'T00:00:00'), y=base.getFullYear(), mo=base.getMonth();
  const rows=STAFF.filter(s=>!s.pending).map(s=>({s,st:staffMonthStat(s.id,y,mo)})).filter(x=>x.st.days>0).sort((a,b)=>b.st.ms-a.st.ms);
- const list= rows.length? rows.map(({s,st})=>{ const h=Math.floor(st.ms/3600000), m=Math.round((st.ms%3600000)/60000);
+ const list= rows.length? rows.map(({s,st})=>{
    return `<div class="ck" style="cursor:pointer" onclick="admStaffDetail('${s.id}')">
      <span style="width:24px;height:24px;border-radius:7px;background:${s.c};flex:none"></span>
      <div class="tx"><b>${s.name}</b> <span class="muted" style="font-size:11px">· ${st.days}일</span></div>
-     <span class="pill" style="background:#EDF1EA;color:var(--ink)">${h}시간 ${m}분</span></div>`; }).join('')
+     <span class="pill" style="background:#EDF1EA;color:var(--ink)">${hmTxt(st.ms)}</span>
+     ${st.bms?`<span class="pill" style="background:#EFF2ED;color:#7c8a80;margin-left:4px">${hmTxt(st.bms)}</span>`:''}</div>`; }).join('')
    : `<p class="muted" style="text-align:center;padding:16px 2px">이 달 근무 기록이 없어요.</p>`;
- const totMs=rows.reduce((a,x)=>a+x.st.ms,0), th=Math.floor(totMs/3600000), tm=Math.round((totMs%3600000)/60000);
+ const totMs=rows.reduce((a,x)=>a+x.st.ms,0), totB=rows.reduce((a,x)=>a+x.st.bms,0);
  return `<div class="card" style="margin-top:12px"><h3>${IC('clock','li sm')}직원 근무 기록</h3>
    <div class="acalhd"><button onclick="admShift(-1)">‹</button><b style="font-size:14.5px">${y}년 ${mo+1}월</b><button onclick="admShift(1)">›</button></div>
    ${list}
-   ${rows.length?`<div class="lrow tot"><span>전체 합계</span><b>${th}시간 ${tm}분</b></div>`:''}
+   ${rows.length?`<div class="lrow tot"><span>전체 합계</span><b>${hmTxt(totMs)}${totB?`<span style="color:#7c8a80;font-weight:700;font-size:12px"> · 휴게 ${hmTxt(totB)}</span>`:''}</b></div>`:''}
+   ${rows.length?`<div class="muted" style="font-size:10.5px;text-align:center;margin-top:6px">
+     <span class="pill" style="background:#EDF1EA;color:var(--ink);font-size:9.5px">근무</span>
+     <span class="pill" style="background:#EFF2ED;color:#7c8a80;font-size:9.5px;margin-left:3px">휴게</span></div>`:''}
    <p class="muted" style="font-size:11px;margin-top:8px;text-align:center">이름을 누르면 날짜별 상세가 열려요</p></div>`; }
 function admStaffDetail(uid){ if(!isAdmin(curUser()))return;
  const base=new Date((admMonth||todayK())+'T00:00:00'), y=base.getFullYear(), mo=base.getMonth();
@@ -987,7 +998,7 @@ function admStaffDetail(uid){ if(!isAdmin(curUser()))return;
  const rows=isos.map(iso=>{ const r=attRecFor(uid,iso); if(!r||!r.in)return '';
    const live=iso===todayK()&&!r.out, ms=recWorkedMs(r,live), min=Math.round(ms/60000);
    const d=new Date(iso+'T00:00:00'), md=`${d.getMonth()+1}/${d.getDate()}(${WD[d.getDay()]})`, brk=(r.breaks||[]).length;
-   const bMs=(r.breaks||[]).reduce((a,b)=>a+((b.s&&(b.e||(live?Date.now():0)))?Math.max(0,(b.e||Date.now())-b.s):0),0);
+   const bMs=recBreakMs(r,live);
    const bMin=Math.round(bMs/60000), tot=min+bMin;
    const wpc=tot? Math.round(min/tot*100) : 100;
    const bar=`<div style="display:flex;height:6px;border-radius:3px;overflow:hidden;background:#EDF1EA;margin-top:4px;width:100%">
@@ -2981,7 +2992,7 @@ function screenChat(){
  return `<div style="flex:none;display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--edge);background:#fff">
      <button class="role" onclick="closeRoom()" style="padding:5px 8px" title="목록">←</button>
      <b style="flex:1;font-size:14px;color:var(--ink)">${escAttr(r.name)}</b>
-     <button class="role" onclick="chatSearchToggle()" style="padding:5px 8px" title="검색">🔍</button>
+     <button class="role" onclick="chatSearchToggle()" style="padding:5px 8px;display:flex;align-items:center" title="검색" aria-label="대화 검색">${IC('search','li sm')}</button>
      <span class="muted" style="font-size:11px;cursor:pointer" onclick="roomInfoModal()">${roomMembers(r).length}명 ⓘ</span></div>
    <div id="searchBar" style="flex:none;display:${chatQ!==null?'':'none'};background:#fff;border-bottom:1px solid var(--edge);padding:7px 10px">
      <div style="display:flex;gap:6px;align-items:center">
@@ -3574,6 +3585,9 @@ function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDon
 /* ═══════════ 업데이트 내역 (새로고침 후 무엇이 바뀌었는지) ═══════════ */
 const VER_KEY='farmplanet.lastver';
 const CHANGELOG=[
+ {v:'2.43.1', d:'2026-08-28', items:[
+   '직원 근무 기록에 <b>휴게 합계</b>를 함께 표시',
+   '채팅 검색 아이콘을 앱 아이콘 톤으로 통일' ]},
  {v:'2.43.0', d:'2026-08-28', items:[
    '채팅방에서 <b>대화 검색</b> — 🔍를 눌러 단어를 찾고 ↑↓로 이동',
    '안드로이드에서 알림이 오다 끊기던 문제 수정 (구독 자동 복구)',
