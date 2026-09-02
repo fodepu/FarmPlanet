@@ -456,7 +456,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.43.2'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.43.3'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -479,7 +479,7 @@ const LOGIN_ENABLED=true;
 const USE_FB=LOGIN_ENABLED && FIREBASE_CONFIG.apiKey.indexOf('여기')===-1 && GIS_CLIENT_ID.indexOf('여기')===-1;
 /* ▼ 실시간 공유 — config만 있으면 로그인과 무관하게 켜집니다 (발주·시간표·공지·체크가 모든 폰에 동기화, 사진 제외) */
 const SYNC_ENABLED=FIREBASE_CONFIG.apiKey.indexOf('여기')===-1;
-let _fbAuth=null,_fbSignInCred=null,_fbSignOut=null;
+let _fbAuth=null,_fbSignInCred=null,_fbSignOut=null,_stateUnsub=null,_subscribeState=null,_syncDenied=false;
 let _fsSet=null,_applyingRemote=false,_syncT=null,_lastSyncJSON='',_syncReady=false,_syncStat='연결 준비 중',_syncAt=0;
 let _pendingUser=null,_authTO=null,_authForce=false;
 /* 채팅: 상태문서와 분리된 messages 컬렉션(1MB 한도·동시전송 유실 회피). CHAT은 메모리에만 둔다 */
@@ -563,12 +563,19 @@ async function syncBoot(){
   _fsDb=db; _chatApi={collection,addDoc,query,orderBy,limit,onSnapshot,serverTimestamp,doc,updateDoc,deleteDoc}; _docApi={doc,getDoc,setDoc,deleteDoc}; maybeChatSubscribe();
   const ref=doc(db,'shared','state');
   _fsSet=(data)=>setDoc(ref,data);
-  onSnapshot(ref,(snap)=>{ const first=!_syncReady; _syncReady=true; _syncStat='연결됨'; _syncAt=Date.now();
-    if(!snap.exists()){pushSync();} else {applyRemote(snap.data());}
-    if(_pendingUser){const e=_pendingUser;_pendingUser=null;clearTimeout(_authTO);onFbLogin(e);} // 대기 로그인 처리
-    else if(first&&tab==='sched'&&CUR)render(); },
-    (err)=>{ _syncStat='수신 오류: '+(err&&(err.code||err.message)||err); console.warn('sync 수신 오류',err);
-      _authForce=true; if(_pendingUser){const e=_pendingUser;_pendingUser=null;clearTimeout(_authTO);onFbLogin(e);} if(CUR)render(); });
+  _stateUnsub=null;
+  _subscribeState=()=>{
+    if(_stateUnsub){ try{_stateUnsub();}catch(e){} _stateUnsub=null; }
+    _stateUnsub=onSnapshot(ref,(snap)=>{ const first=!_syncReady; _syncReady=true; _syncStat='연결됨'; _syncAt=Date.now(); _syncDenied=false;
+      if(!snap.exists()){pushSync();} else {applyRemote(snap.data());}
+      if(_pendingUser){const e=_pendingUser;_pendingUser=null;clearTimeout(_authTO);onFbLogin(e);} // 대기 로그인 처리
+      else if(first&&tab==='sched'&&CUR)render(); },
+      (err)=>{ const code=(err&&(err.code||err.message))||String(err);
+        _syncStat='수신 오류: '+code; console.warn('sync 수신 오류',err);
+        // 로그인 전이라 권한이 없는 것뿐이면 — 빈 데이터로 로그인시키지 말고 로그인 후 다시 붙는다
+        if(/permission|denied|unauthenticated/i.test(code) && !_fbUid){ _syncDenied=true; return; }
+        _authForce=true; if(_pendingUser){const e=_pendingUser;_pendingUser=null;clearTimeout(_authTO);onFbLogin(e);} if(CUR)render(); }); };
+  _subscribeState();
  }catch(e){ _syncStat='초기화 실패: '+(e&&(e.code||e.message)||e); console.warn('sync 초기화 실패',e); }
 }
 function pushSync(){
@@ -1267,7 +1274,9 @@ async function fbBoot(){
   await setPersistence(_fbAuth,browserLocalPersistence).catch(()=>{});
   _fbSignInCred=(idTok)=>signInWithCredential(_fbAuth,GoogleAuthProvider.credential(idTok));
   _fbSignOut=()=>signOut(_fbAuth);
-  onAuthStateChanged(_fbAuth,(user)=>{ _fbUid=user?user.uid:null; if(user)onFbLogin(user.email||''); else onFbLogout(); });
+  onAuthStateChanged(_fbAuth,(user)=>{ _fbUid=user?user.uid:null;
+    if(user && _subscribeState && (!_syncReady||_syncDenied)) _subscribeState();   // 로그인 후 데이터 구독을 다시 시도
+    if(user)onFbLogin(user.email||''); else onFbLogout(); });
   gisStart();
  }catch(e){ console.warn('firebase 초기화 실패 → 폴백 로그인',e); fbFallbackBoot(); }
 }
@@ -1287,7 +1296,7 @@ function onFbLogin(email){
  // 원격(직원 목록·이메일 연결) 로드 전이면 대기 — 재로그인 시 이름폼 재등장/중복 방지
  if(SYNC_ENABLED && !_syncReady && !_authForce){
    _pendingUser=email; clearTimeout(_authTO);
-   _authTO=setTimeout(()=>{ _authForce=true; if(_pendingUser){const e=_pendingUser;_pendingUser=null;onFbLogin(e);} },4000);
+   _authTO=setTimeout(()=>{ _authForce=true; if(_pendingUser){const e=_pendingUser;_pendingUser=null;onFbLogin(e);} },9000);
    return; }
  let s=STAFF.find(x=>(x.email||'').toLowerCase()===email);
  // 부트스트랩: 관리자 이메일인데 명단에 없으면 대표님 계정에 연결(최초 로그인 자가치유)
@@ -1305,10 +1314,22 @@ function onFbLogin(email){
      <div style="margin-top:10px;display:flex;flex-direction:column;gap:8px">
        <input id="signName" class="tsel" placeholder="성 포함 이름 (예: 김주함)" autocomplete="off" onkeydown="if(event.key==='Enter')finishSignup()">
        <button class="btn" onclick="finishSignup()">가입 요청 보내기</button></div>
-     <div style="margin-top:10px"><span class="authlink" onclick="fbRelogin()">다른 계정으로</span></div>`);
+     <div style="margin-top:10px;display:flex;gap:12px;justify-content:center">
+       <span class="authlink" onclick="retryLoadState()">직원인데 이 화면이 떴어요</span>
+       <span class="authlink" onclick="fbRelogin()">다른 계정으로</span></div>`);
    setTimeout(()=>{const i=$('signName'); if(i)i.focus();},60); }
 }
 let pendingEmail='';
+function retryLoadState(){ // 연결이 늦어 가입 화면이 잘못 뜬 경우 — 데이터를 다시 불러온다
+ const em=pendingEmail;
+ authMsg('<div style="text-align:center;padding:8px 0">직원 명단을 다시 불러오는 중…</div>');
+ _syncReady=false; _syncDenied=false; _authForce=false;
+ if(_subscribeState) _subscribeState();
+ setTimeout(()=>{
+   const s=STAFF.find(x=>(x.email||'').toLowerCase()===em);
+   if(s){ _authForce=false; onFbLogin(em); }
+   else { _authForce=true; onFbLogin(em); toast('명단에서 찾지 못했어요 — 이름을 입력해 요청해 주세요'); }
+ },2500); }
 /* 가입 이름 해석: 기존 직원(이메일 미연결)과 이름이 겹치면 그 직원으로 연결(성 떼고 표시),
    이미 찬 이름이면 성 유지해 구분 */
 function resolveSignup(name){
@@ -1334,7 +1355,7 @@ function finishSignup(){
  const gb=$('gsiButton'); if(gb)gb.style.display='';
  showAuthOverlay(false); save(); render(); toast(s.pending?'가입 요청을 보냈어요 — 승인을 기다려 주세요':hon(s.name)+', 환영합니다!');
 }
-function onFbLogout(){ chatUnsubAll(); chatRoom=null; CUR=null; role='staff'; onlyMine=false; $("userBtn").style.display='none';
+function onFbLogout(){ _syncDenied=false; chatUnsubAll(); chatRoom=null; CUR=null; role='staff'; onlyMine=false; $("userBtn").style.display='none';
  const gb=$('gsiButton'); if(gb)gb.style.display=''; showAuthOverlay(true); authMsg(''); render(); }
 function fbRelogin(){ if(_fbSignOut)_fbSignOut(); }
 function fbFallbackBoot(){ showAuthOverlay(false);
@@ -3597,6 +3618,9 @@ function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDon
 /* ═══════════ 업데이트 내역 (새로고침 후 무엇이 바뀌었는지) ═══════════ */
 const VER_KEY='farmplanet.lastver';
 const CHANGELOG=[
+ {v:'2.43.3', d:'2026-08-28', items:[
+   '새 기기·오래 지난 뒤 로그인하면 <b>가입 요청 화면이 잘못 뜨던 문제</b> 수정',
+   '로그인 후 데이터 연결을 다시 시도해요' ]},
  {v:'2.43.2', d:'2026-08-28', items:[
    '채팅 공지를 <b>펼치기·접기</b>로 — 긴 공지도 전부 볼 수 있어요',
    '공지 색을 앱 톤(연한 초록)으로 정리' ]},
