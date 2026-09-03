@@ -457,7 +457,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.43.4'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.43.5'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -607,9 +607,9 @@ function applyRemote(data){
   if(d.WAGE)WAGE=d.WAGE;
   if(d.ATTREQ)ATTREQ=d.ATTREQ; // 요청 큐(최신 반영)
   if(d.ATT){ const m=Object.assign({},d.ATT); // 사용자별 최신 기록 유지
-    Object.keys(ATT||{}).forEach(uid=>{const l=ATT[uid],r=m[uid]; if(!r||attStamp(l)>attStamp(r))m[uid]=l;}); ATT=m; }
+    Object.keys(ATT||{}).forEach(uid=>{const l=ATT[uid],r=m[uid]; if(!r||attKey(l)>attKey(r))m[uid]=l;}); ATT=m; }
   if(d.ATTLOG){ Object.keys(d.ATTLOG).forEach(uid=>{ ATTLOG[uid]=ATTLOG[uid]||{}; // 일자별 기록 병합(날짜별 최신 반영)
-    Object.keys(d.ATTLOG[uid]).forEach(dt=>{ const rr=d.ATTLOG[uid][dt], lr=ATTLOG[uid][dt]; if(!lr||attStamp(rr)>=attStamp(lr))ATTLOG[uid][dt]=rr; }); }); }
+    Object.keys(d.ATTLOG[uid]).forEach(dt=>{ const rr=d.ATTLOG[uid][dt], lr=ATTLOG[uid][dt]; if(!lr||attKey(rr)>=attKey(lr))ATTLOG[uid][dt]=rr; }); }); }
   if(d.STAFF){ // 병합: 원격 기준 + 로컬 신규/이메일/매니저 보존, 삭제표식 제외
     const by={}; d.STAFF.forEach(s=>by[s.id]=Object.assign({},s));
     STAFF.forEach(ls=>{ const rs=by[ls.id];
@@ -711,6 +711,7 @@ function ckLists(m){return m==='close'?CLOSE_LIST:m==='mid'?MID_LIST:OPEN_LIST;}
 /* ═══════════ 출퇴근 · 휴게 (와이파이=공인 IP) ═══════════ */
 const STORE_RADIUS=60; // m — 이 반경 안에서만 출퇴근 (멀리서 방지 + 실내 오차 감안)
 function attStamp(a){ if(!a)return 0; let m=Math.max(a.in||0,a.out||0); (a.breaks||[]).forEach(b=>{m=Math.max(m,b.s||0,b.e||0);}); return m; }
+function attKey(a){ return a? Math.max(a.mt||0, attStamp(a)) : 0; }   // 병합 우선순위: 마지막으로 손댄 시각
 function attToday(){ const a=ATT[CUR]; return (a&&a.date===todayK())?a:null; }
 function attOpenBreak(a){ const b=a&&a.breaks&&a.breaks[a.breaks.length-1]; return (b&&!b.e)?b:null; }
 function attStatus(a){ if(!a)return 'off'; if(a.out)return 'done'; return attOpenBreak(a)?'break':'work'; }
@@ -821,7 +822,7 @@ function toggleWifiStrict(){ if(!isAdmin(curUser())){toast('대표님·매니저
 function wifiDrop(ip){ if(WIFILOCK){toast('먼저 고정을 해제하세요');return;}
  STORE_IPS=(STORE_IPS||[]).filter(x=>x!==ip); save(); openWifiSetup(); toast('제외했어요'); }
 function toggleWifiLock(){ if(!STORE_IP && !WIFILOCK){toast('먼저 매장 IP를 등록하세요');return;} WIFILOCK=!WIFILOCK; save(); render(); openWifiSetup(); toast(WIFILOCK?'와이파이 설정을 고정했습니다 🔒':'고정을 해제했습니다 🔓'); }
-function logAtt(uid){ uid=uid||CUR; const a=ATT[uid]; if(a&&a.date){ ATTLOG[uid]=ATTLOG[uid]||{}; ATTLOG[uid][a.date]={in:a.in,out:a.out,breaks:(a.breaks||[]).map(b=>({s:b.s,e:b.e}))}; } }
+function logAtt(uid){ uid=uid||CUR; const a=ATT[uid]; if(a&&a.date){ a.mt=Date.now(); ATTLOG[uid]=ATTLOG[uid]||{}; ATTLOG[uid][a.date]={in:a.in,out:a.out,mt:a.mt,breaks:(a.breaks||[]).map(b=>({s:b.s,e:b.e}))}; } }
 function clockIn(){ const a=attToday(); if(a&&a.in&&!a.out){toast('이미 출근 상태예요');return;}
  wifiGate('출근',()=>{ ATT[CUR]={date:todayK(),in:Date.now(),out:null,breaks:[]}; logAtt(); pushAttDone('in'); render(); reAtt(); toast('출근했습니다 — 좋은 하루 되세요!'); },
    msg=>offerClockInReq(msg)); }
@@ -950,18 +951,20 @@ function adminUids(){ return (STAFF||[]).filter(s=>!s.pending&&isAdmin(s)).map(s
 function approveAttReq(id){ if(!isAdmin(curUser())){toast('승인은 대표님·매니저만 가능해요');return;}
  const r=(ATTREQ||[]).find(x=>x.id===id); if(!r)return;
  const brks=Array.isArray(r.breaks)? r.breaks.map(b=>({s:b.s,e:b.e||null})) : null;
+ const now=Date.now();
  if(r.date===todayK()){        // 오늘 기록만 실시간(ATT)에 반영
    let a=ATT[r.uid];
    if(!a || a.date!==r.date){ a=ATT[r.uid]={date:r.date,in:r.in,out:r.out||null,breaks:[]}; }
    else { a.in=r.in; a.out=r.out||null; }
    if(brks) a.breaks=brks;
+   a.mt=now;
  } else if(ATT[r.uid] && ATT[r.uid].date===r.date){   // 과거지만 마침 ATT에 남아있다면 함께 정리
-   ATT[r.uid].in=r.in; ATT[r.uid].out=r.out||null; if(brks)ATT[r.uid].breaks=brks;
+   ATT[r.uid].in=r.in; ATT[r.uid].out=r.out||null; if(brks)ATT[r.uid].breaks=brks; ATT[r.uid].mt=now;
  }
  // 지난 날짜는 ATT를 건드리지 않고 일자기록만 고친다(오늘 출근 기록 보호)
  ATTLOG[r.uid]=ATTLOG[r.uid]||{};
  const prev=ATTLOG[r.uid][r.date]||{};
- ATTLOG[r.uid][r.date]={in:r.in,out:r.out||null,breaks:(brks||prev.breaks||[]).map(b=>({s:b.s,e:b.e||null}))};
+ ATTLOG[r.uid][r.date]={in:r.in,out:r.out||null,mt:now,breaks:(brks||prev.breaks||[]).map(b=>({s:b.s,e:b.e||null}))};
  ATTREQ=ATTREQ.filter(x=>x.id!==id); save(); render(); toast(r.name+'님 요청을 승인·반영했습니다'); }
 function rejectAttReq(id){ if(!isAdmin(curUser())){toast('대표님·매니저만 가능해요');return;}
  ATTREQ=(ATTREQ||[]).filter(x=>x.id!==id); save(); render(); toast('요청을 거절했습니다'); }
@@ -3619,6 +3622,8 @@ function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDon
 /* ═══════════ 업데이트 내역 (새로고침 후 무엇이 바뀌었는지) ═══════════ */
 const VER_KEY='farmplanet.lastver';
 const CHANGELOG=[
+ {v:'2.43.5', d:'2026-08-28', items:[
+   '근태 수정이 <b>다시 원래대로 돌아가던 문제</b> 수정 — 시간을 앞당기는 수정이 반영되지 않았어요' ]},
  {v:'2.43.4', d:'2026-08-28', items:[
    '채팅방 인원 표시를 <b>톱니바퀴</b> 버튼으로 변경' ]},
  {v:'2.43.3', d:'2026-08-28', items:[
