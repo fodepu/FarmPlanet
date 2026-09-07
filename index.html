@@ -277,6 +277,41 @@ input.inp{min-height:auto}
 .atimer.grn .aclock{color:#173404}.atimer.amb .aclock{color:#412402}.atimer.done .aclock{color:var(--deep)}
 .btn.adngr{background:var(--warn)}
 .asum{text-align:center;font-size:12px;color:var(--sub);margin-top:12px;padding-top:10px;border-top:1px solid var(--edge)}
+
+/* ═══════════ PC 화면(900px 이상): 왼쪽 메뉴 + 넓은 본문 ═══════════ */
+@media(min-width:900px){
+ body{padding:0;background:#E9EDE6}
+ .app{max-width:1240px;width:100%;height:100dvh;border-radius:0;box-shadow:0 0 0 1px var(--edge);
+   display:grid;grid-template-columns:212px minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr);
+   grid-template-areas:"nav upd" "nav top" "nav screen"}
+ .upd{grid-area:upd}
+ .top{grid-area:top;padding:14px 32px 12px}
+ .screen{grid-area:screen;padding:24px max(32px,calc((100% - 960px)/2)) 48px}
+ .screen.chatmode{padding:0}
+ .nav{grid-area:nav;flex-direction:column;justify-content:flex-start;align-items:stretch;gap:4px;
+   border-top:none;border-right:1px solid var(--edge);padding:22px 12px;background:#fff}
+ .nav:before{content:"FARM PLANET";display:block;font-size:11px;font-weight:900;letter-spacing:.14em;color:var(--deep);padding:0 14px 14px;opacity:.8}
+ .nav button{flex-direction:row;width:100%;justify-content:flex-start;gap:12px;font-size:14px;font-weight:700;
+   padding:11px 14px;border-radius:10px;color:#6b7a70;transition:background .12s}
+ .nav button:hover{background:#F3F6F1}
+ .nav button.on{background:#E7F0E9;color:var(--deep)}
+ .nav button svg.li.lg{width:22px;height:22px}
+ .nav .ndot{left:auto;right:12px;top:50%;transform:translateY(-50%)}
+ body.kb .nav{display:flex}
+ .modal{align-items:center}
+ .mbox{border-radius:16px;max-width:600px;max-height:86vh;padding:22px 24px 26px}
+ .toast{bottom:36px}
+ .hpwrap{padding:40px}
+ /* 홈: 두 단으로 */
+ .screen[data-tab="home"]{column-count:2;column-gap:18px;column-fill:balance}
+ .screen[data-tab="home"]>*{break-inside:avoid;-webkit-column-break-inside:avoid}
+ .screen[data-tab="home"]>h2.title,.screen[data-tab="home"]>.hero,.screen[data-tab="home"]>.grid2{column-span:all}
+ /* 채팅: 말풍선이 너무 길어지지 않게 */
+ .screen.chatmode [id^="msg_"]{max-width:520px!important}
+ #chatList{padding:16px 40px 20px!important}
+ .card{padding:16px 18px}
+ h2.title{font-size:20px}
+}
 </style>
 <script src="https://accounts.google.com/gsi/client" async></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.6/Sortable.min.js" defer></script>
@@ -457,7 +492,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.43.5'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.44.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -3622,6 +3657,9 @@ function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDon
 /* ═══════════ 업데이트 내역 (새로고침 후 무엇이 바뀌었는지) ═══════════ */
 const VER_KEY='farmplanet.lastver';
 const CHANGELOG=[
+ {v:'2.44.0', d:'2026-09-07', items:[
+   '<b>PC 화면 지원</b> — 넓은 화면에선 왼쪽 메뉴 + 넓은 본문으로 보여요 (홈은 두 단)',
+   '창이 좁아지면 자동으로 폰 화면으로 돌아가요' ]},
  {v:'2.43.5', d:'2026-08-28', items:[
    '근태 수정이 <b>다시 원래대로 돌아가던 문제</b> 수정 — 시간을 앞당기는 수정이 반영되지 않았어요' ]},
  {v:'2.43.4', d:'2026-08-28', items:[
@@ -4140,6 +4178,7 @@ function render(){
  else if(tab==="sdocs") html=screenDocs();
  $("screen").innerHTML=html;
  $("screen").classList.toggle('chatmode', tab==='chat'); // 채팅일 때만 화면을 flex로(입력바 바닥 고정)
+ $("screen").dataset.tab=tab;   // PC 레이아웃 훅(홈 2단 등)
  if(tab==="manual") renderManual($("msearch")?.value||"");
  if(tab==="inv") setTimeout(initInvSort,0);
  if(tab==="chat") setTimeout(chatAfterRender,0);
