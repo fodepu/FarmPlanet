@@ -491,7 +491,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.44.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.44.2'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -2502,14 +2502,14 @@ function invOrderStale(){ // 고정 순서와 실제 정렬이 달라졌는지(=
  const fresh=invSortedFresh().map(x=>x.v.id).filter(id=>invFreeze.includes(id));
  const cur=invFreeze.filter(id=>INV.some(v=>v.id===id));
  return fresh.join()!==cur.join(); }
-function invSortedFresh(){ // 발주 필요 먼저 → 수동 순서. 묶음 품목은 서로 붙여서(클러스터) 보여줌
+function invSortedFresh(){ // 수동 순서(ord)가 최우선. 묶음 품목은 서로 붙여서(클러스터) 보여줌
  const items=INV.map((v,i)=>({v,i}));
  const cOf=x=>(x.v.grp||'').trim()||('#'+x.v.id); // 묶음명 또는 개별 고유키
  const rank={};
- items.forEach(x=>{ const c=cOf(x), low=isLow(x.v)?0:1, ord=(x.v.ord||0), ts=(x.v.ts||0);
-   const r=rank[c]; if(!r||low<r.low||(low===r.low&&ord<r.ord)) rank[c]={low,ord,ts,c}; });
+ items.forEach(x=>{ const c=cOf(x), ord=(x.v.ord||0), ts=(x.v.ts||0);
+   const r=rank[c]; if(!r||ord<r.ord||(ord===r.ord&&ts<r.ts)) rank[c]={ord,ts,c}; });
  return items.sort((a,b)=>{ const ra=rank[cOf(a)], rb=rank[cOf(b)];
-   return (ra.low-rb.low)||(ra.ord-rb.ord)||(ra.ts-rb.ts)|| (ra.c<rb.c?-1:ra.c>rb.c?1:0) // 클러스터 순
+   return (ra.ord-rb.ord)||(ra.ts-rb.ts)|| (ra.c<rb.c?-1:ra.c>rb.c?1:0) // 클러스터 순
        || ((a.v.ord||0)-(b.v.ord||0))||((a.v.ts||0)-(b.v.ts||0)); }); } // 클러스터 내부 순서
 let _invSortable=null;
 function initInvSort(){ const el=$('invList'); if(!el||!window.Sortable)return;
@@ -2521,8 +2521,13 @@ function onInvSortEnd(){ const el=$('invList'); if(!el)return;
  // 뷰에 보이는 항목의 '슬롯'(전체 표시순 위치)에 새 순서를 채워넣어 다른 분류 순서는 보존
  const fullOrder=invSortedIdx().map(x=>x.v.id), visible=new Set(domIds);
  let di=0; const newFull=fullOrder.map(id=> visible.has(id)? domIds[di++] : id );
- newFull.forEach((id,k)=>{ const v=INV.find(x=>x.id===id); if(v){v.ord=k+1;v.mt=Date.now();} });
- save(); toast('순서를 저장했습니다'); } // DOM은 이미 이동됨 — 전체 재렌더 불필요
+ const now=Date.now();
+ newFull.forEach((id,k)=>{ const v=INV.find(x=>x.id===id); if(v){v.ord=k+1;v.mt=now;} });
+ INV.sort((a,b)=>((a.ord||0)-(b.ord||0))||((a.ts||0)-(b.ts||0)));
+ invFreeze=newFull.slice();            // 화면 고정 순서도 새 순서로 — 다음 렌더에서 되돌아가지 않게
+ save();
+ if(_fsSet&&_syncReady){ try{ const blob=JSON.stringify(syncPayload()); _lastSyncJSON=blob; _fsSet({blob,ts:Date.now()}).catch(()=>{}); }catch(e){} } // 즉시 반영
+ toast('순서를 저장했습니다'); } // DOM은 이미 이동됨 — 전체 재렌더 불필요
 let invDate=null, invCat='', invQ=''; // 보는 날짜(null=오늘), 분류 필터, 검색어
 function setInvCat(c){ invCat=c; invFreezeReset(); render(); }
 function filterInv(q){ invQ=q; invFreezeReset(); const el=$('invList'); if(el)el.innerHTML=invListHTML(isAdmin(curUser())); initInvSort(); }
@@ -3656,6 +3661,9 @@ function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDon
 /* ═══════════ 업데이트 내역 (새로고침 후 무엇이 바뀌었는지) ═══════════ */
 const VER_KEY='farmplanet.lastver';
 const CHANGELOG=[
+ {v:'2.44.2', d:'2026-09-11', items:[
+   '재고 <b>품목 순서 변경이 저장되지 않던 문제</b> 수정 — 이제 끌어다 놓은 순서가 그대로 유지돼요',
+   '재고 목록은 <b>내가 정한 순서</b>로만 보여요 (부족 품목은 색과 발주 버튼으로 표시)' ]},
  {v:'2.44.0', d:'2026-09-07', items:[
    '<b>PC 화면 지원</b> — 넓은 화면에선 왼쪽 메뉴 + 넓은 본문으로 보여요 (홈은 두 단)',
    '창이 좁아지면 자동으로 폰 화면으로 돌아가요' ]},
