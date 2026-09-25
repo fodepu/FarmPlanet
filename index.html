@@ -497,7 +497,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.46.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.46.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -917,7 +917,9 @@ function fmtDurShort(ms){ const m=Math.round(ms/60000),h=Math.floor(m/60),mm=m%6
 let attCalMonth=null; // 보고있는 달(그달 1일 ISO). null=이번달
 function attCalShift(d){ const b=new Date((attCalMonth||todayK())+'T00:00:00'); b.setMonth(b.getMonth()+d); attCalMonth=dk(new Date(b.getFullYear(),b.getMonth(),1)); render(); }
 function attRecFor(uid,iso){ if(iso===todayK()){ const a=ATT[uid]; if(a&&a.date===iso)return a; } const l=ATTLOG[uid]; return (l&&l[iso])||null; }
-function recBreakMs(r,end){ let ms=0; (r.breaks||[]).forEach(b=>{ if(!b.s)return; const be=b.e||end||0; ms+=Math.max(0,be-b.s); }); return ms; }
+function recBreakMs(r,endOrLive){ // 휴게 합계. 두 번째 인자: 종료 시각(숫자) 또는 live(true=지금까지)
+ const end = typeof endOrLive==='number' ? endOrLive : (endOrLive===true ? Date.now() : 0);
+ return (r&&r.breaks||[]).reduce((a,b)=>{ if(!b.s)return a; const be=b.e||end; return be? a+Math.max(0,be-b.s) : a; },0); }
 function recWorkedMs(r,live){ if(!r||!r.in)return 0; const end=r.out||(live?Date.now():0); if(!end)return 0; return Math.max(0,end-r.in-recBreakMs(r,end)); }
 function attHistoryHTML(){
  const uid=CUR, base=new Date((attCalMonth||todayK())+'T00:00:00'), y=base.getFullYear(), mo=base.getMonth();
@@ -1036,9 +1038,6 @@ function monthISOs(uid,y,mo){ const days=[]; const l=ATTLOG[uid]||{};
  Object.keys(l).forEach(iso=>{const d=new Date(iso+'T00:00:00'); if(d.getFullYear()===y&&d.getMonth()===mo)days.push(iso);});
  const a=ATT[uid]; if(a&&a.date){const d=new Date(a.date+'T00:00:00'); if(d.getFullYear()===y&&d.getMonth()===mo&&!days.includes(a.date))days.push(a.date);}
  return days.sort(); }
-function recBreakMs(r,live){ // 그날 휴게 합계(진행 중이면 지금까지)
- return (r&&r.breaks||[]).reduce((a,b)=>{ if(!b.s)return a;
-   const e=b.e||(live?Date.now():0); return e? a+Math.max(0,e-b.s) : a; },0); }
 function staffMonthStat(uid,y,mo){ let ms=0,bms=0,days=0;
  monthISOs(uid,y,mo).forEach(iso=>{ const r=attRecFor(uid,iso); const live=iso===todayK()&&r&&!r.out;
    const w=recWorkedMs(r,iso===todayK()); if(w>0){ms+=w; bms+=recBreakMs(r,live); days++;} });
@@ -3721,6 +3720,8 @@ function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDon
 /* ═══════════ 업데이트 내역 (새로고침 후 무엇이 바뀌었는지) ═══════════ */
 const VER_KEY='farmplanet.lastver';
 const CHANGELOG=[
+ {v:'2.46.1', d:'2026-09-25', items:[
+   '지난 근무 기록에 복귀 안 누른 휴게가 있으면 근무시간이 0으로 잡히던 문제 수정' ]},
  {v:'2.46.0', d:'2026-09-25', items:[
    '재고 품목을 끌어 <b>화면 위·아래 끝으로 가져가면 자동으로 스크롤</b>돼요',
    '재고 <b>분류 순서</b>도 끌어서 바꿀 수 있어요 (분류 관리 → ≡ 잡고 끌기)',
