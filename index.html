@@ -311,6 +311,8 @@ input.inp{min-height:auto}
  .card{padding:16px 18px}
  h2.title{font-size:20px}
 }
+input[type=date],input[type=time]{max-width:100%;min-width:0;box-sizing:border-box;-webkit-appearance:none;appearance:none}
+.fld{min-width:0}
 </style>
 <script src="https://accounts.google.com/gsi/client" async></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.6/Sortable.min.js" defer></script>
@@ -491,7 +493,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.45.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.45.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -3632,9 +3634,9 @@ function planFormHTML(p){
  return `<h3>${p?'일정 수정':'일정 추가'}</h3>
    <div class="fld"><label>할 일</label><input id="plTitle" class="tsel" placeholder="예: 화분 물주기" autocomplete="off" value="${escAttr((p&&p.title)||'')}"></div>
    <div class="fld" style="margin-top:8px"><label>메모 <span class="muted">(선택)</span></label><input id="plMemo" class="tsel" placeholder="예: 창가 화분 3개" autocomplete="off" value="${escAttr((p&&p.memo)||'')}"></div>
-   <div style="display:flex;gap:8px;margin-top:10px">
-     <div class="fld" style="flex:1"><label>시작일</label><input id="plFrom" class="tsel" type="date" value="${sel}"></div>
-     <div class="fld" style="flex:none;width:120px"><label>시간 <span class="muted">(선택)</span></label><input id="plTime" class="tsel" type="time" value="${escAttr((p&&p.time)||'')}"></div></div>
+   <div style="display:flex;gap:8px;margin-top:10px;width:100%">
+     <div class="fld" style="flex:3;min-width:0"><label>시작일</label><input id="plFrom" class="tsel" type="date" value="${sel}" style="width:100%;min-width:0;box-sizing:border-box"></div>
+     <div class="fld" style="flex:2;min-width:0"><label>시간 <span class="muted">(선택)</span></label><input id="plTime" class="tsel" type="time" value="${escAttr((p&&p.time)||'')}" style="width:100%;min-width:0;box-sizing:border-box"></div></div>
    <div style="display:flex;gap:6px;margin-top:12px">${tb('once','한 번')}${tb('weekly','매주')}${tb('interval','N일마다')}</div>
    <div id="plBox" style="margin-top:10px">${planTypeHTML()}</div>
    <div class="row" style="margin-top:14px"><button class="btn sec" onclick="closeModal()">취소</button>
