@@ -497,7 +497,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='3.0.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='3.0.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -622,7 +622,8 @@ function v3CanWrite(path,admin,force){ const c=path.split('/')[0];
 /* ── 투영: 전역 상태 → {경로: 문서} ── */
 function v3Project(){
  const P={}; const put=(p,o)=>{ P[p]=clean(o); };
- put('config/store',{STORE_IP,STORE_IPS,WIFILOCK,WIFISTRICT,STORE_LOC,WAGE,PATTERN,HOL,HDEL,SCHED_TS,ROOMS,MAN,REC,CATS,CATMT,CDEL,DELETED,ODEL,IDEL,PDEL});
+ put('config/store',{STORE_IP,STORE_IPS,WIFILOCK,WIFISTRICT,STORE_LOC,WAGE,PATTERN,HOL,HDEL,SCHED_TS,ROOMS,CATS,CATMT,CDEL,DELETED,ODEL,IDEL,PDEL,
+   MANJ:MAN?JSON.stringify(MAN):null, RECJ:REC?JSON.stringify(REC):null});   // 매뉴얼·레시피는 중첩 배열이라 문자열로
  const real=(STAFF||[]).filter(s=>s&&s.id&&!s.sid);
  const okEmails=real.filter(s=>!s.pending&&s.email).map(s=>s.email.toLowerCase());
  const adEmails=real.filter(s=>!s.pending&&s.email&&isAdmin(s)).map(s=>s.email.toLowerCase());
@@ -691,7 +692,9 @@ function v3Subscribe(){
      return; }
    _syncStat='수신 오류: '+code; console.warn('v3 수신 오류',what,err); };
  const sub=(q,fn,what)=>{ _unsubs.push(onSnapshot(q,snap=>{ _hydrating=true; try{ fn(snap); }finally{ _hydrating=false; } v3AfterHydrate(what); },onErr(what))); };
- sub(doc(_fsDb,'config','store'),s=>hyDoc('config/store',s,d=>{ ({STORE_IP,STORE_IPS,WIFILOCK,WIFISTRICT,STORE_LOC,WAGE,PATTERN,HOL,HDEL,SCHED_TS,ROOMS,MAN,REC,CATS,CATMT,CDEL,DELETED,ODEL,IDEL,PDEL}=Object.assign({STORE_IP,STORE_IPS,WIFILOCK,WIFISTRICT,STORE_LOC,WAGE,PATTERN,HOL,HDEL,SCHED_TS,ROOMS,MAN,REC,CATS,CATMT,CDEL,DELETED,ODEL,IDEL,PDEL},d)); if(!ROOMS||!ROOMS.length)ROOMS=defaultRooms(); }),'config');
+ sub(doc(_fsDb,'config','store'),s=>hyDoc('config/store',s,d=>{ ({STORE_IP,STORE_IPS,WIFILOCK,WIFISTRICT,STORE_LOC,WAGE,PATTERN,HOL,HDEL,SCHED_TS,ROOMS,CATS,CATMT,CDEL,DELETED,ODEL,IDEL,PDEL}=Object.assign({STORE_IP,STORE_IPS,WIFILOCK,WIFISTRICT,STORE_LOC,WAGE,PATTERN,HOL,HDEL,SCHED_TS,ROOMS,CATS,CATMT,CDEL,DELETED,ODEL,IDEL,PDEL},d));
+   try{ MAN=d.MANJ?JSON.parse(d.MANJ):null; }catch(e){} try{ REC=d.RECJ?JSON.parse(d.RECJ):null; }catch(e){}
+   if(!ROOMS||!ROOMS.length)ROOMS=defaultRooms(); }),'config');
  sub(collection(_fsDb,'staff'),s=>{ hyColl('staff',s,()=>STAFF.filter(x=>!x.sid),arr=>{ const sg=STAFF.filter(x=>x.sid); STAFF=[...arr,...sg];
      STAFF.forEach((x,i)=>{ if(FIXED_COLORS[x.id])x.c=FIXED_COLORS[x.id]; if(!x.c)x.c=PALETTE[i%PALETTE.length]; if(MANAGER_EMAILS.includes((x.email||'').toLowerCase()))x.mgr=true; });
      const b=STAFF.find(x=>x.id==='boss'); if(b)b.email=ADMIN_EMAILS[0];
