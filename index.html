@@ -497,7 +497,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.46.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='3.0.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -521,7 +521,7 @@ const USE_FB=LOGIN_ENABLED && FIREBASE_CONFIG.apiKey.indexOf('여기')===-1 && G
 /* ▼ 실시간 공유 — config만 있으면 로그인과 무관하게 켜집니다 (발주·시간표·공지·체크가 모든 폰에 동기화, 사진 제외) */
 const SYNC_ENABLED=FIREBASE_CONFIG.apiKey.indexOf('여기')===-1;
 let _fbAuth=null,_fbSignInCred=null,_fbSignOut=null,_stateUnsub=null,_subscribeState=null,_syncDenied=false;
-let _fsSet=null,_applyingRemote=false,_syncT=null,_lastSyncJSON='',_syncReady=false,_syncStat='연결 준비 중',_syncAt=0;
+let _applyingRemote=false,_syncT=null,_syncReady=false,_syncStat='연결 준비 중',_syncAt=0;
 let _pendingUser=null,_authTO=null,_authForce=false;
 /* 채팅: 상태문서와 분리된 messages 컬렉션(1MB 한도·동시전송 유실 회피). CHAT은 메모리에만 둔다 */
 const CHAT_LIMIT=200;
@@ -547,9 +547,7 @@ function schedUndo(){
  u.keys.forEach(k=>{ if(u.snap[k]===null||u.snap[k]===undefined) delete SHIFTS[k]; else SHIFTS[k]=u.snap[k]; });
  schedUndoClear(); touchSched(); save(); render();
  // 원격에 바로 반영 — 안 그러면 앞선 작업의 동기화 응답이 되돌리기를 덮어쓴다
- if(SYNC_ENABLED&&_fsSet){ const blob=JSON.stringify(syncPayload()); _lastSyncJSON=blob;
-   _fsSet({blob,ts:Date.now()}).then(()=>toast(`"${u.label}" 되돌렸습니다 ✓`))
-     .catch(e=>toast('되돌렸지만 공유 실패: '+((e&&(e.code||e.message))||e))); }
+ if(SYNC_ENABLED&&_v3){ pushSyncNow(false).then(r=>toast(r&&r.fails?'되돌렸지만 공유 실패 '+r.fails+'건':`"${u.label}" 되돌렸습니다 ✓`)); }
  else toast(`"${u.label}" 되돌렸습니다`); }
 function defaults(){
  STAFF=[
@@ -589,38 +587,246 @@ function seedWeek(week){
 }
 function save(){try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,STORE_IPS,INV,CATS,HOL,HDEL,WIFILOCK,WIFISTRICT,ROOMS,IDEL,CDEL,PLANS,PDONE,MAN,REC,PDEL,CATMT}));}catch(e){}
  if(SYNC_ENABLED&&typeof pushSync==='function')pushSync();}
-/* ── 실시간 공유 (Firestore 단일 문서, 사진 제외) ── */
-function syncPayload(){
- const ckLite={};
- Object.keys(CK).forEach(k=>{const d=CK[k]||{};ckLite[k]={open:d.open||{},mid:d.mid||{},close:d.close||{}};});
- return {STAFF,SHIFTS,ORDERS,NOTICES,SUBMITS,READS,CK:ckLite,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,STORE_IPS,INV,CATS,HOL,HDEL,WIFILOCK,WIFISTRICT,ROOMS,IDEL,CDEL,PLANS,PDONE,MAN,REC,PDEL,CATMT};
+/* ═══════════ 실시간 공유 v3 — 도메인별 문서 (shared/state 한 덩어리 → 컬렉션 분리) ═══════════
+   원칙: 화면 코드와 전역 상태(STAFF, SHIFTS, …)는 그대로. 저장·수신 층만 교체.
+   - 쓰기: 내 상태를 문서들로 투영(v3Project) → 마지막으로 서버와 맞춘 내용(_lastDocJSON)과 다른 문서만 씀
+   - 읽기: 컬렉션·문서 구독 → 바뀐 문서 조각만 전역 상태에 갈아끼움. 내가 아직 안 보낸 편집(dirty)은 지키고 남의 것만 받음
+   - 병합 없음: 서버의 문서가 곧 진실. 삭제는 문서 삭제.                                                       */
+const V3_ATT_MONTHS=4, V3_CK_DAYS=14, V3_PD_MONTHS=3, V3_WEEKS=6;
+let _v3=false, _legacy=false, _fsApi=null, _unsubs=[], _lastDocJSON={}, _pushing=false, _pushQueued=false, _migrating=false, _signupSent=false, _hydrating=false, _v3Range=null;
+function cj(o){ // 키 순서 고정 직렬화(비교용)
+ if(o===null||typeof o!=='object')return JSON.stringify(o===undefined?null:o);
+ if(Array.isArray(o))return '['+o.map(cj).join(',')+']';
+ return '{'+Object.keys(o).filter(k=>o[k]!==undefined).sort().map(k=>JSON.stringify(k)+':'+cj(o[k])).join(',')+'}'; }
+function clean(o){ return JSON.parse(JSON.stringify(o===undefined?null:o)); } // undefined 제거(Firestore 거부)
+function docId(s){ return String(s||'').replace(/\//g,'_').slice(0,300)||'_'; }
+function weekKey(iso){ const d=new Date(iso+'T00:00:00'); const day=(d.getDay()+6)%7; d.setDate(d.getDate()-day); return dk(d); } // 그 주 월요일
+function monthKey(iso){ return String(iso||'').slice(0,7); }
+function shiftMonths(iso,n){ const d=new Date(iso+'T00:00:00'); d.setMonth(d.getMonth()+n); return dk(new Date(d.getFullYear(),d.getMonth(),1)); }
+function v3RangeNow(){ const t=todayK();
+ return { wLo:weekKey(dk(new Date(Date.now()-V3_WEEKS*7*86400000))), wHi:weekKey(dk(new Date(Date.now()+V3_WEEKS*7*86400000))),
+          mLo:monthKey(shiftMonths(t,-(V3_ATT_MONTHS-1))), pLo:monthKey(shiftMonths(t,-(V3_PD_MONTHS-1))), cLo:dk(new Date(Date.now()-V3_CK_DAYS*86400000)) }; }
+function inRange(path){ const r=_v3Range||v3RangeNow(); const [c,id]=path.split('/');
+ if(c==='shifts') return id>=r.wLo&&id<=r.wHi;
+ if(c==='attlog'){ const m=id.slice(-7); return m>=r.mLo; }
+ if(c==='plandone') return id>=r.pLo;
+ if(c==='ck') return id>=r.cLo;
+ return true; }
+const V3_ADMIN_COLLS=['config','staff','shifts'];       // 관리자만 쓰는 컬렉션(규칙과 동일)
+const V3_NO_DELETE=['config','users','att'];             // 삭제하지 않는 컬렉션
+function v3CanWrite(path,admin,force){ const c=path.split('/')[0];
+ if(V3_ADMIN_COLLS.includes(c)&&!admin)return false;
+ if(force)return true;
+ return (path in _lastDocJSON) || inRange(path); }     // 옛 달·옛 주는 불러온 적 있을 때만(옛 사본으로 덮어쓰기 방지)
+
+/* ── 투영: 전역 상태 → {경로: 문서} ── */
+function v3Project(){
+ const P={}; const put=(p,o)=>{ P[p]=clean(o); };
+ put('config/store',{STORE_IP,STORE_IPS,WIFILOCK,WIFISTRICT,STORE_LOC,WAGE,PATTERN,HOL,HDEL,SCHED_TS,ROOMS,MAN,REC,CATS,CATMT,CDEL,DELETED,ODEL,IDEL,PDEL});
+ const real=(STAFF||[]).filter(s=>s&&s.id&&!s.sid);
+ const okEmails=real.filter(s=>!s.pending&&s.email).map(s=>s.email.toLowerCase());
+ const adEmails=real.filter(s=>!s.pending&&s.email&&isAdmin(s)).map(s=>s.email.toLowerCase());
+ put('config/allow',{emails:[...new Set([...ADMIN_EMAILS,...MANAGER_EMAILS,...okEmails])],admins:[...new Set([...ADMIN_EMAILS,...MANAGER_EMAILS,...adEmails])]});
+ put('config/wages',{w:Object.fromEntries(real.map(s=>[s.id,s.wage||0]))});
+ real.forEach(s=>{ const c=Object.assign({},s); delete c.wage; put('staff/'+docId(s.id),c); });
+ const byW={}; Object.keys(SHIFTS||{}).forEach(k=>{ const iso=k.split('|')[1]; if(!iso||!SHIFTS[k])return; const w=weekKey(iso); (byW[w]=byW[w]||{w,e:{}}).e[k]=SHIFTS[k]; });
+ Object.values(byW).forEach(x=>put('shifts/'+x.w,x));
+ (ORDERS||[]).forEach(o=>{ if(!o)return; if(!o.id)o.id=docId('o'+ordKey(o)); put('orders/'+docId(o.id),o); });
+ (INV||[]).forEach(v=>{ if(v&&v.id)put('inv/'+docId(v.id),v); });
+ (PLANS||[]).forEach(p=>{ if(p&&p.id)put('plans/'+docId(p.id),p); });
+ (BOARD||[]).forEach(b=>{ if(b&&b.id)put('board/'+docId(b.id),b); });
+ (ATTREQ||[]).forEach(r=>{ if(r&&r.id)put('attreq/'+docId(r.id),r); });
+ Object.keys(ATT||{}).forEach(uid=>{ if(ATT[uid])put('att/'+docId(uid),{uid,a:ATT[uid]}); });
+ Object.keys(ATTLOG||{}).forEach(uid=>{ const byM={}; Object.keys(ATTLOG[uid]||{}).forEach(d=>{ const m=monthKey(d); (byM[m]=byM[m]||{uid,m,d:{}}).d[d]=ATTLOG[uid][d]; });
+   Object.values(byM).forEach(x=>put('attlog/'+docId(uid)+'_'+x.m,x)); });
+ Object.keys(CK||{}).forEach(k=>{ const c=CK[k]||{}; put('ck/'+k,{d:k,open:c.open||{},mid:c.mid||{},close:c.close||{},submits:(SUBMITS||[]).filter(s=>s.date===k)}); });
+ const byPM={}; Object.keys(PDONE||{}).forEach(k=>{ const iso=k.split('|')[1]; if(!iso)return; const m=monthKey(iso); (byPM[m]=byPM[m]||{m,d:{}}).d[k]=PDONE[k]; });
+ Object.values(byPM).forEach(x=>put('plandone/'+x.m,x));
+ if(_fbUid&&CUR) put('users/'+_fbUid,{reads:READS[CUR]||{},cur:CUR});
+ return P; }
+
+/* ── 쓰기 ── */
+function pushSync(){ if(!_v3||!_fsApi||!_syncReady||_migrating||_hydrating)return; clearTimeout(_syncT); _syncT=setTimeout(()=>pushSyncNow(false),800); }
+async function pushSyncNow(force){
+ if(!_v3||!_fsApi)return; if(_pushing){ _pushQueued=true; return; } _pushing=true; clearTimeout(_syncT);
+ const {doc,setDoc,deleteDoc}=_fsApi; let fails=0, n=0;
+ try{
+  const proj=v3Project(), admin=isAdmin(curUser());
+  const ops=[]; for(const path in proj){ if(!v3CanWrite(path,admin,force))continue; const j=cj(proj[path]); if(!force&&_lastDocJSON[path]===j)continue; ops.push({path,obj:proj[path],j}); }
+  const dels=Object.keys(_lastDocJSON).filter(p=>!(p in proj)&&!V3_NO_DELETE.includes(p.split('/')[0])&&(admin||!V3_ADMIN_COLLS.includes(p.split('/')[0])));
+  const NESTED={shifts:['e'],attlog:['d'],ck:['open','mid','close'],plandone:['d'],config:['STORE_IPS'],users:['reads']};
+  const run=async(op)=>{ const [c,id]=op.path.split('/'); const ref=doc(_fsDb,c,id);
+    const before=_lastDocJSON[op.path];
+    try{
+      const prev=(!force&&before)? JSON.parse(before) : null;
+      _lastDocJSON[op.path]=op.j;   // 쓰기 완료 전에 먼저 기록 — 내 쓰기의 메아리(스냅샷)가 먼저 와도 '미전송'으로 오인하지 않게
+      if(!prev||!_fsApi.updateDoc||!_fsApi.FieldPath){ await setDoc(ref,op.obj); }
+      else { // 바뀐 칸만 갱신 → 다른 기기가 같은 문서의 다른 칸을 고쳐도 서로 안 덮음
+        const {updateDoc,FieldPath,deleteField}=_fsApi; const args=[]; const cur=op.obj; const nest=(NESTED[c]||[]);
+        const keys=new Set([...Object.keys(prev),...Object.keys(cur)]);
+        keys.forEach(k=>{ const a=prev[k], b=cur[k];
+          if(nest.includes(k)&&a&&b&&typeof a==='object'&&typeof b==='object'&&!Array.isArray(a)&&!Array.isArray(b)){
+            new Set([...Object.keys(a),...Object.keys(b)]).forEach(sk=>{ if(cj(a[sk])!==cj(b[sk])) args.push(new FieldPath(k,sk), b[sk]===undefined?deleteField():b[sk]); });
+          } else if(cj(a)!==cj(b)) args.push(new FieldPath(k), b===undefined?deleteField():b); });
+        if(args.length){ try{ await updateDoc(ref,...args); }catch(e){ if(e&&/not-found|no document/i.test(e.code||e.message||'')) await setDoc(ref,op.obj); else throw e; } }
+      }
+      n++; }
+    catch(e){ fails++; if(before===undefined)delete _lastDocJSON[op.path]; else _lastDocJSON[op.path]=before; console.warn('v3 쓰기 실패',op.path,e&&(e.code||e.message)); } };
+  const del=async(p)=>{ const [c,id]=p.split('/'); try{ await deleteDoc(doc(_fsDb,c,id)); delete _lastDocJSON[p]; n++; }catch(e){ fails++; console.warn('v3 삭제 실패',p,e&&e.code); } };
+  for(let i=0;i<ops.length;i+=20) await Promise.all(ops.slice(i,i+20).map(run));
+  for(let i=0;i<dels.length;i+=20) await Promise.all(dels.slice(i,i+20).map(del));
+  _syncAt=Date.now(); _syncStat= fails? `전송 오류 ${fails}건` : '연결됨';
+  if(fails&&tab!=='chat'){ toast('일부 저장이 서버에 반영되지 않았어요 ('+fails+'건)'); }
+ }finally{ _pushing=false; if(_pushQueued){ _pushQueued=false; pushSyncNow(false); } }
+ return {n,fails}; }
+
+/* ── 읽기(구독) ── */
+function v3Unsub(){ _unsubs.forEach(u=>{try{u();}catch(e){}}); _unsubs=[]; }
+function v3Subscribe(){
+ if(!_fsApi||!_v3)return; v3Unsub(); _v3Range=v3RangeNow(); const r=_v3Range;
+ const {collection,doc,query,where,onSnapshot}=_fsApi;
+ const onErr=(what)=>(err)=>{ const code=(err&&(err.code||err.message))||String(err);
+   if(/permission|denied|unauthenticated/i.test(code)){ if(!_fbUid){ _syncDenied=true; return; }
+     if(what==='staff'){ _syncDenied=true; _syncStat='승인 대기'; if(_pendingUser){const e=_pendingUser;_pendingUser=null;clearTimeout(_authTO);_authForce=true;onFbLogin(e);} }
+     return; }
+   _syncStat='수신 오류: '+code; console.warn('v3 수신 오류',what,err); };
+ const sub=(q,fn,what)=>{ _unsubs.push(onSnapshot(q,snap=>{ _hydrating=true; try{ fn(snap); }finally{ _hydrating=false; } v3AfterHydrate(what); },onErr(what))); };
+ sub(doc(_fsDb,'config','store'),s=>hyDoc('config/store',s,d=>{ ({STORE_IP,STORE_IPS,WIFILOCK,WIFISTRICT,STORE_LOC,WAGE,PATTERN,HOL,HDEL,SCHED_TS,ROOMS,MAN,REC,CATS,CATMT,CDEL,DELETED,ODEL,IDEL,PDEL}=Object.assign({STORE_IP,STORE_IPS,WIFILOCK,WIFISTRICT,STORE_LOC,WAGE,PATTERN,HOL,HDEL,SCHED_TS,ROOMS,MAN,REC,CATS,CATMT,CDEL,DELETED,ODEL,IDEL,PDEL},d)); if(!ROOMS||!ROOMS.length)ROOMS=defaultRooms(); }),'config');
+ sub(collection(_fsDb,'staff'),s=>{ hyColl('staff',s,()=>STAFF.filter(x=>!x.sid),arr=>{ const sg=STAFF.filter(x=>x.sid); STAFF=[...arr,...sg];
+     STAFF.forEach((x,i)=>{ if(FIXED_COLORS[x.id])x.c=FIXED_COLORS[x.id]; if(!x.c)x.c=PALETTE[i%PALETTE.length]; if(MANAGER_EMAILS.includes((x.email||'').toLowerCase()))x.mgr=true; });
+     const b=STAFF.find(x=>x.id==='boss'); if(b)b.email=ADMIN_EMAILS[0];
+     if(_wagesCache) STAFF.forEach(x=>{ if(_wagesCache[x.id]!==undefined)x.wage=_wagesCache[x.id]; }); });
+   const first=!_syncReady; _syncReady=true; _syncDenied=false; _syncStat='연결됨'; _syncAt=Date.now();
+   if(_pendingUser){const e=_pendingUser;_pendingUser=null;clearTimeout(_authTO);onFbLogin(e);} else if(first&&CUR)render(); },'staff');
+ sub(doc(_fsDb,'config','wages'),s=>{ if(!s.exists())return; _wagesCache=(s.data()||{}).w||{}; _lastDocJSON['config/wages']=cj(clean({w:_wagesCache})); STAFF.forEach(x=>{ if(_wagesCache[x.id]!==undefined)x.wage=_wagesCache[x.id]; }); },'wages');
+ sub(collection(_fsDb,'orders'),s=>hyColl('orders',s,()=>ORDERS,arr=>{ ORDERS=arr.sort((a,b)=>(a.ts||0)-(b.ts||0)); }),'orders');
+ sub(collection(_fsDb,'inv'),s=>hyColl('inv',s,()=>INV,arr=>{ INV=arr.sort((a,b)=>((a.ord||0)-(b.ord||0))||((a.ts||0)-(b.ts||0))); }),'inv');
+ sub(collection(_fsDb,'plans'),s=>hyColl('plans',s,()=>PLANS,arr=>{ PLANS=arr.sort((a,b)=>(a.ts||0)-(b.ts||0)); }),'plans');
+ sub(collection(_fsDb,'board'),s=>hyColl('board',s,()=>BOARD,arr=>{ BOARD=arr.sort((a,b)=>(b.ts||0)-(a.ts||0)); }),'board');
+ sub(collection(_fsDb,'attreq'),s=>hyColl('attreq',s,()=>ATTREQ,arr=>{ ATTREQ=arr.sort((a,b)=>(a.ts||0)-(b.ts||0)); }),'attreq');
+ sub(collection(_fsDb,'att'),s=>hyMap('att',s,d=>d.id,(id,data)=>{ if(data)ATT[id]=data.a; else delete ATT[id]; },()=>Object.keys(ATT)),'att');
+ sub(query(collection(_fsDb,'shifts'),where('w','>=',r.wLo),where('w','<=',r.wHi)),s=>hyMap('shifts',s,d=>d.id,(w,data)=>{
+   Object.keys(SHIFTS).forEach(k=>{ const iso=k.split('|')[1]; if(iso&&weekKey(iso)===w)delete SHIFTS[k]; });
+   if(data)Object.assign(SHIFTS,data.e||{}); },()=>[...new Set(Object.keys(SHIFTS).map(k=>weekKey(k.split('|')[1]||todayK())).filter(w=>w>=r.wLo&&w<=r.wHi))]),'shifts');
+ sub(query(collection(_fsDb,'attlog'),where('m','>=',r.mLo)),s=>hyMap('attlog',s,d=>d.id,(id,data)=>{ const uid=id.slice(0,-8), m=id.slice(-7);
+   ATTLOG[uid]=ATTLOG[uid]||{}; Object.keys(ATTLOG[uid]).forEach(d=>{ if(monthKey(d)===m)delete ATTLOG[uid][d]; });
+   if(data)Object.assign(ATTLOG[uid],data.d||{}); },()=>{ const ids=[]; Object.keys(ATTLOG).forEach(uid=>{ [...new Set(Object.keys(ATTLOG[uid]).map(monthKey))].forEach(m=>{ if(m>=r.mLo)ids.push(docId(uid)+'_'+m); }); }); return ids; }),'attlog');
+ sub(query(collection(_fsDb,'ck'),where('d','>=',r.cLo)),s=>hyMap('ck',s,d=>d.id,(k,data)=>{ const photos=(CK[k]||{}).photos;
+   if(data){ CK[k]={open:data.open||{},mid:data.mid||{},close:data.close||{}}; if(photos)CK[k].photos=photos;
+     SUBMITS=[...(data.submits||[]),...(SUBMITS||[]).filter(x=>x.date!==k)]; }
+   else { delete CK[k]; SUBMITS=(SUBMITS||[]).filter(x=>x.date!==k); } },()=>Object.keys(CK).filter(k=>k>=r.cLo)),'ck');
+ sub(query(collection(_fsDb,'plandone'),where('m','>=',r.pLo)),s=>hyMap('plandone',s,d=>d.id,(m,data)=>{
+   Object.keys(PDONE).forEach(k=>{ const iso=k.split('|')[1]; if(iso&&monthKey(iso)===m)delete PDONE[k]; });
+   if(data)Object.assign(PDONE,data.d||{}); },()=>[...new Set(Object.keys(PDONE).map(k=>monthKey(k.split('|')[1]||'')).filter(m=>m>=r.pLo))]),'plandone');
+ if(_fbUid) sub(doc(_fsDb,'users',_fbUid),s=>hyDoc('users/'+_fbUid,s,d=>{ if(CUR&&d.reads)READS[CUR]=d.reads; }),'users');
+ if(isAdmin(curUser())) sub(collection(_fsDb,'signups'),s=>{ const sg=[]; s.forEach(d=>{ const x=d.data()||{}; const em=(x.email||'').toLowerCase();
+     if(STAFF.some(y=>!y.sid&&(y.email||'').toLowerCase()===em))return; sg.push({id:'sg_'+d.id,sid:d.id,name:x.name||'',email:em,pending:true,c:PALETTE[0],mgr:false}); });
+   STAFF=[...STAFF.filter(x=>!x.sid),...sg]; },'signups');
 }
+let _wagesCache=null;
+function hyDoc(path,snap,apply){ if(!snap.exists()){ delete _lastDocJSON[path]; return; }
+ const data=snap.data()||{}, j=cj(clean(data));
+ if(v3Dirty(path))return;                      // 내가 아직 안 보낸 편집이 있으면 이 조각은 지킨다
+ apply(data); _lastDocJSON[path]=j; }
+function v3Dirty(path){ if(!(path in _lastDocJSON))return false; const p=v3Project()[path]; return p!==undefined && cj(p)!==_lastDocJSON[path]; }
+function hyColl(name,snap,getLocal,setLocal){ // id 컬렉션: 서버 문서 = 진실, 단 내 미전송 편집·신규는 유지
+ const local=getLocal()||[], byId={}; local.forEach(x=>{ if(x&&x.id)byId[docId(x.id)]=x; });
+ const seen=new Set(), out=[];
+ snap.forEach(d=>{ const path=name+'/'+d.id; seen.add(d.id); const data=d.data()||{}; const j=cj(clean(data));
+   if(v3Dirty(path)&&byId[d.id]){ out.push(byId[d.id]); } else { out.push(data); _lastDocJSON[path]=j; } });
+ local.forEach(x=>{ if(!x||!x.id)return; const id=docId(x.id), path=name+'/'+id; if(seen.has(id))return;
+   if(path in _lastDocJSON){ delete _lastDocJSON[path]; }   // 서버에서 지워짐 → 나도 버림
+   else out.push(x); });                                     // 아직 서버에 안 올린 신규 → 유지
+ setLocal(out); }
+function hyMap(name,snap,idOf,apply,localIds){ // 키 문서(주·월·날짜·uid): 조각 단위 교체
+ const seen=new Set();
+ snap.forEach(d=>{ const id=idOf(d), path=name+'/'+id; seen.add(id); const data=d.data()||{}; const j=cj(clean(data));
+   if(v3Dirty(path))return; apply(id,data); _lastDocJSON[path]=j; });
+ (localIds()||[]).forEach(id=>{ const path=name+'/'+id; if(seen.has(id))return;
+   if(path in _lastDocJSON){ delete _lastDocJSON[path]; apply(id,null); } }); }
+function v3AfterHydrate(what){
+ saveLocal();
+ if(what==='staff'&&!CUR)return;
+ const ae=document.activeElement;
+ if(ae && ((ae.tagName==='INPUT'&&ae.type!=='date'&&ae.type!=='checkbox')||ae.tagName==='TEXTAREA'||ae.isContentEditable))return; // 입력 중엔 화면 갱신 미룸
+ if(CUR)render(); }
+function saveLocal(){ try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,STORE_IPS,INV,CATS,HOL,HDEL,WIFILOCK,WIFISTRICT,ROOMS,IDEL,CDEL,PLANS,PDONE,MAN,REC,PDEL,CATMT}));}catch(e){} }
+/* 옛 달·옛 주를 볼 때 불러오기(불러온 뒤엔 편집도 가능) */
+async function v3LoadAttMonth(m){ if(!_v3||!_fsApi||!m)return; const {collection,query,where,getDocs}=_fsApi;
+ try{ const s=await getDocs(query(collection(_fsDb,'attlog'),where('m','==',m))); let n=0;
+   s.forEach(d=>{ const path='attlog/'+d.id; if(path in _lastDocJSON)return; const data=d.data()||{}; const uid=d.id.slice(0,-8);
+     ATTLOG[uid]=ATTLOG[uid]||{}; Object.keys(ATTLOG[uid]).forEach(k=>{ if(monthKey(k)===m)delete ATTLOG[uid][k]; }); Object.assign(ATTLOG[uid],data.d||{}); _lastDocJSON[path]=cj(clean(data)); n++; });
+   if(n){ saveLocal(); render(); } }catch(e){ console.warn('attlog load',e&&e.code); } }
+async function v3LoadWeek(w){ if(!_v3||!_fsApi||!w)return; const {doc,getDoc}=_fsApi; const path='shifts/'+w; if(path in _lastDocJSON)return;
+ try{ const s=await getDoc(doc(_fsDb,'shifts',w)); if(!s.exists())return; const data=s.data()||{};
+   Object.keys(SHIFTS).forEach(k=>{ const iso=k.split('|')[1]; if(iso&&weekKey(iso)===w)delete SHIFTS[k]; }); Object.assign(SHIFTS,data.e||{}); _lastDocJSON[path]=cj(clean(data)); saveLocal(); render(); }catch(e){} }
+
+/* ── 부팅 ── */
 async function syncBoot(){
  try{
   const {initializeApp,getApps}=await import('https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js');
-  const {getFirestore,doc,getDoc,onSnapshot,setDoc,updateDoc,deleteDoc,collection,addDoc,query,orderBy,limit,serverTimestamp}=await import('https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js');
+  const F=await import('https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js');
+  const {getFirestore,doc,getDoc,onSnapshot,setDoc,updateDoc,deleteDoc,collection,addDoc,query,orderBy,limit,serverTimestamp,where,getDocs,FieldPath,deleteField}=F;
   const app=getApps().length?getApps()[0]:initializeApp(FIREBASE_CONFIG);
   const db=getFirestore(app);
-  _fsDb=db; _chatApi={collection,addDoc,query,orderBy,limit,onSnapshot,serverTimestamp,doc,updateDoc,deleteDoc}; _docApi={doc,getDoc,setDoc,deleteDoc}; maybeChatSubscribe();
-  const ref=doc(db,'shared','state');
-  _fsSet=(data)=>setDoc(ref,data);
-  _stateUnsub=null;
-  _subscribeState=()=>{
-    if(_stateUnsub){ try{_stateUnsub();}catch(e){} _stateUnsub=null; }
-    _stateUnsub=onSnapshot(ref,(snap)=>{ const first=!_syncReady; _syncReady=true; _syncStat='연결됨'; _syncAt=Date.now(); _syncDenied=false;
-      if(!snap.exists()){pushSync();} else {applyRemote(snap.data());}
-      if(_pendingUser){const e=_pendingUser;_pendingUser=null;clearTimeout(_authTO);onFbLogin(e);} // 대기 로그인 처리
-      else if(first&&tab==='sched'&&CUR)render(); },
-      (err)=>{ const code=(err&&(err.code||err.message))||String(err);
-        _syncStat='수신 오류: '+code; console.warn('sync 수신 오류',err);
-        // 로그인 전이라 권한이 없는 것뿐이면 — 빈 데이터로 로그인시키지 말고 로그인 후 다시 붙는다
-        if(/permission|denied|unauthenticated/i.test(code) && !_fbUid){ _syncDenied=true; return; }
-        _authForce=true; if(_pendingUser){const e=_pendingUser;_pendingUser=null;clearTimeout(_authTO);onFbLogin(e);} if(CUR)render(); }); };
+  _fsDb=db; _fsApi={doc,getDoc,setDoc,deleteDoc,updateDoc,collection,query,where,getDocs,onSnapshot,FieldPath,deleteField};
+  _chatApi={collection,addDoc,query,orderBy,limit,onSnapshot,serverTimestamp,doc,updateDoc,deleteDoc}; _docApi={doc,getDoc,setDoc,deleteDoc}; maybeChatSubscribe();
+  _subscribeState=async()=>{
+    if(_v3){ v3Subscribe(); return; }
+    // 전환 여부 확인
+    try{ const meta=await getDoc(doc(db,'config','meta'));
+      if(meta.exists()&&(meta.data()||{}).ver>=3){ _v3=true; _legacy=false; v3Subscribe(); return; } }
+    catch(e){ const code=(e&&(e.code||e.message))||''; if(/permission|denied|unauthenticated/i.test(code)&&!_fbUid){ _syncDenied=true; return; } }
+    // 아직 전환 전: 옛 한 덩어리를 한 번 읽어 화면만 채움(쓰기 없음)
+    _legacy=true;
+    try{ const s=await getDoc(doc(db,'shared','state')); if(s.exists()){ const d=JSON.parse((s.data()||{}).blob||'{}'); applyLegacyBlob(d); }
+      _syncReady=true; _syncDenied=false; _syncStat='전환 대기(읽기 전용)';
+      if(_pendingUser){const e=_pendingUser;_pendingUser=null;clearTimeout(_authTO);onFbLogin(e);} else if(CUR)render(); }
+    catch(e){ const code=(e&&(e.code||e.message))||String(e); if(/permission|denied|unauthenticated/i.test(code)&&!_fbUid){ _syncDenied=true; return; }
+      _syncStat='수신 오류: '+code; _authForce=true; if(_pendingUser){const e2=_pendingUser;_pendingUser=null;clearTimeout(_authTO);onFbLogin(e2);} }
+  };
   _subscribeState();
  }catch(e){ _syncStat='초기화 실패: '+(e&&(e.code||e.message)||e); console.warn('sync 초기화 실패',e); }
 }
-/* 읽음 표시: 렌더할 때마다 시각을 새로 찍으면 기기끼리 1초마다 서로 덮어쓰는 핑퐁이 생긴다.
-   → 마지막으로 그 화면의 내용이 바뀐 시각보다 뒤에 봤으면 다시 찍지 않는다. */
+function applyLegacyBlob(d){ // 옛 덩어리 → 전역(병합 없이 그대로)
+ const pick=(k,def)=>d[k]!==undefined&&d[k]!==null?d[k]:def;
+ STAFF=pick('STAFF',STAFF); SHIFTS=pick('SHIFTS',SHIFTS); ORDERS=pick('ORDERS',ORDERS); SUBMITS=pick('SUBMITS',SUBMITS); READS=pick('READS',READS);
+ SCHED_TS=pick('SCHED_TS',SCHED_TS); DELETED=pick('DELETED',DELETED); ODEL=pick('ODEL',ODEL); PATTERN=pick('PATTERN',PATTERN); ATT=pick('ATT',ATT);
+ STORE_LOC=pick('STORE_LOC',STORE_LOC); WAGE=pick('WAGE',WAGE); ATTREQ=pick('ATTREQ',ATTREQ); ATTLOG=pick('ATTLOG',ATTLOG); BOARD=pick('BOARD',BOARD);
+ STORE_IP=pick('STORE_IP',STORE_IP); STORE_IPS=pick('STORE_IPS',STORE_IPS); INV=pick('INV',INV); CATS=pick('CATS',CATS); HOL=pick('HOL',HOL); HDEL=pick('HDEL',HDEL);
+ WIFILOCK=pick('WIFILOCK',WIFILOCK); WIFISTRICT=pick('WIFISTRICT',WIFISTRICT); ROOMS=pick('ROOMS',ROOMS); IDEL=pick('IDEL',IDEL); CDEL=pick('CDEL',CDEL);
+ PLANS=pick('PLANS',PLANS); PDONE=pick('PDONE',PDONE); MAN=pick('MAN',MAN); REC=pick('REC',REC); PDEL=pick('PDEL',PDEL); CATMT=pick('CATMT',CATMT);
+ if(d.CK){ const merged={}; Object.keys(d.CK).forEach(k=>{ merged[k]=Object.assign({},d.CK[k]); if(CK[k]&&CK[k].photos)merged[k].photos=CK[k].photos; }); CK=merged; }
+ // 표식 정리
+ STAFF=(STAFF||[]).filter(s=>!(DELETED||[]).includes(s.id)); ORDERS=(ORDERS||[]).filter(o=>!(ODEL||[]).includes(ordKey(o)));
+ INV=(INV||[]).filter(v=>!(IDEL||[]).includes(v.id)); CATS=(CATS||[]).filter(c=>!(CDEL||[]).includes(c)); PLANS=(PLANS||[]).filter(p=>!p.del&&!(PDEL||[]).includes(p.id));
+ HOL=(HOL||[]).filter(x=>!(HDEL||[]).includes(x));
+ STAFF.forEach((s,i)=>{ if(FIXED_COLORS[s.id])s.c=FIXED_COLORS[s.id]; if(!s.c)s.c=PALETTE[i%PALETTE.length]; if(MANAGER_EMAILS.includes((s.email||'').toLowerCase()))s.mgr=true; });
+ ORDERS.forEach(o=>{ if(!o.id)o.id=docId('o'+ordKey(o)); });
+ saveLocal(); }
+
+/* ── 전환(관리자 1회): 옛 덩어리 → 문서들 ── */
+async function v3Migrate(){
+ if(!isAdmin(curUser())){toast('전환은 대표님·매니저만 할 수 있어요');return;}
+ if(!_fsApi){toast('서버 연결 준비 중이에요');return;}
+ askConfirm('<b>데이터 구조 전환</b>을 시작합니다.<br>옛 데이터는 그대로 두고(백업), 새 구조로 복사해요.<br><br><span class="muted">1~2분 걸려요. 끝나면 모든 직원이 앱을 새로고침해야 해요.</span>','전환 시작',async()=>{
+   _migrating=true; toast('전환 중… 잠시만요');
+   try{
+     const {doc,getDoc,setDoc}=_fsApi;
+     const s=await getDoc(doc(_fsDb,'shared','state'));
+     if(s.exists()){ const d=JSON.parse((s.data()||{}).blob||'{}'); applyLegacyBlob(d); }
+     _v3=true; _legacy=false; _lastDocJSON={};
+     const res=await pushSyncNow(true);
+     await setDoc(doc(_fsDb,'config','meta'),{ver:3,at:Date.now(),by:CUR,from:'shared/state',docs:res.n});
+     await setDoc(doc(_fsDb,'shared','state_backup'),{blob:JSON.stringify(syncPayloadLegacy()),ts:Date.now(),note:'v3 전환 직전 백업'}).catch(()=>{});
+     _syncReady=true; v3Subscribe(); render();
+     askConfirm(`전환 완료 — 문서 ${res.n}개 생성${res.fails?`, 실패 ${res.fails}건`:''}.<br><br><b>이제 Firebase 보안 규칙을 새 것으로 게시</b>하고, 직원들에게 앱 새로고침을 안내하세요.`,'확인',()=>{});
+   }catch(e){ toast('전환 실패: '+((e&&(e.code||e.message))||e)); console.warn(e); _v3=false; _legacy=true; }
+   finally{ _migrating=false; } }); }
+function syncPayloadLegacy(){ const ckLite={}; Object.keys(CK).forEach(k=>{const d=CK[k]||{};ckLite[k]={open:d.open||{},mid:d.mid||{},close:d.close||{}};});
+ return {STAFF,SHIFTS,ORDERS,NOTICES,SUBMITS,READS,CK:ckLite,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,STORE_IPS,INV,CATS,HOL,HDEL,WIFILOCK,WIFISTRICT,ROOMS,IDEL,CDEL,PLANS,PDONE,MAN,REC,PDEL,CATMT}; }
+function syncPayload(){ return syncPayloadLegacy(); }
+/* 읽음 표시: 마지막으로 그 화면의 내용이 바뀐 시각보다 뒤에 봤으면 다시 찍지 않는다(핑퐁 방지) */
 function lastChangeTs(kind){
  try{
   if(kind==='sched') return SCHED_TS||0;
@@ -630,96 +836,15 @@ function lastChangeTs(kind){
 function markRead(kind){
  if(!CUR)return; READS[CUR]=READS[CUR]||{};
  const seen=READS[CUR][kind]||0, last=lastChangeTs(kind);
- if(seen>=last && seen>0) return;          // 이미 최신까지 본 상태 — 다시 찍지 않음(핑퐁 방지)
+ if(seen>=last && seen>0) return;
  READS[CUR][kind]=Date.now(); }
-function pushSync(){
- if(!_fsSet||_applyingRemote||!_syncReady)return; // 원격 수신 전엔 내 기본데이터로 덮어쓰지 않음
- clearTimeout(_syncT);
- _syncT=setTimeout(()=>{
-   const blob=JSON.stringify(syncPayload());
-   if(blob===_lastSyncJSON)return;
-   _lastSyncJSON=blob;
-   _fsSet({blob,ts:Date.now()}).catch(e=>console.warn('sync 전송 오류',e));
- },1000);
-}
-function applyRemote(data){
- if(!data||!data.blob||data.blob===_lastSyncJSON)return;
- let d; try{d=JSON.parse(data.blob);}catch(e){return;}
- _lastSyncJSON=data.blob;
- _applyingRemote=true;
- try{
-  if(d.DELETED)DELETED=[...new Set([...(DELETED||[]),...d.DELETED])];
-  if(d.ODEL)ODEL=[...new Set([...(ODEL||[]),...d.ODEL])];
-  if(d.PATTERN!==undefined && d.PATTERN)PATTERN=d.PATTERN;
-  if(d.STORE_LOC)STORE_LOC=d.STORE_LOC;
-  if(d.STORE_IP!==undefined)STORE_IP=d.STORE_IP;
-  if(Array.isArray(d.STORE_IPS))STORE_IPS=[...new Set([...(STORE_IPS||[]),...d.STORE_IPS])];
-  if(d.WIFILOCK!==undefined)WIFILOCK=d.WIFILOCK;
-  if(d.WIFISTRICT!==undefined)WIFISTRICT=d.WIFISTRICT;
-  if(Array.isArray(d.ROOMS))ROOMS=d.ROOMS;
-  if(d.WAGE)WAGE=d.WAGE;
-  if(d.ATTREQ)ATTREQ=d.ATTREQ; // 요청 큐(최신 반영)
-  if(d.ATT){ const m=Object.assign({},d.ATT); // 사용자별 최신 기록 유지
-    Object.keys(ATT||{}).forEach(uid=>{const l=ATT[uid],r=m[uid]; if(!r||attKey(l)>attKey(r))m[uid]=l;}); ATT=m; }
-  if(d.ATTLOG){ Object.keys(d.ATTLOG).forEach(uid=>{ ATTLOG[uid]=ATTLOG[uid]||{}; // 일자별 기록 병합(날짜별 최신 반영)
-    Object.keys(d.ATTLOG[uid]).forEach(dt=>{ const rr=d.ATTLOG[uid][dt], lr=ATTLOG[uid][dt]; if(!lr||attKey(rr)>=attKey(lr))ATTLOG[uid][dt]=rr; }); }); }
-  if(d.STAFF){ // 병합: 원격 기준 + 로컬 신규/이메일/매니저 보존, 삭제표식 제외
-    const by={}; d.STAFF.forEach(s=>by[s.id]=Object.assign({},s));
-    STAFF.forEach(ls=>{ const rs=by[ls.id];
-      if(!rs){ by[ls.id]=ls; }
-      else { if(!rs.email&&ls.email)rs.email=ls.email; if(ls.mgr&&!rs.mgr)rs.mgr=true; } });
-    STAFF=Object.values(by).filter(s=>!DELETED.includes(s.id));
-    STAFF.forEach(s=>{ if(FIXED_COLORS[s.id])s.c=FIXED_COLORS[s.id]; }); // 고정색(예흔=초록) 유지
-  }
-  if(d.SHIFTS)SHIFTS=d.SHIFTS;
-  if(d.NOTICES)NOTICES=d.NOTICES;
-  if(d.SUBMITS)SUBMITS=d.SUBMITS;
-  if(d.READS)READS=d.READS;
-  if(d.SCHED_TS)SCHED_TS=Math.max(SCHED_TS||0,d.SCHED_TS);
-  if(d.ORDERS){ const m={}; [...d.ORDERS,...ORDERS].forEach(o=>{const k=ordKey(o);
-      if(!m[k] || (o.mt||0)>(m[k].mt||0)) m[k]=o; });
-    ORDERS=Object.values(m).filter(o=>!(ODEL||[]).includes(ordKey(o))).sort((a,b)=>(a.ts||0)-(b.ts||0)); }
-  if(d.BOARD){ const m={}; [...d.BOARD,...(BOARD||[])].forEach(b=>{const k=b&&b.id; if(!k)return; // 게시판: id 기준, 최근 수정(mt) 우선 병합
-      if(!m[k] || (b.mt||0)>(m[k].mt||0)) m[k]=b; });
-    BOARD=Object.values(m).sort((a,b)=>(b.ts||0)-(a.ts||0)); }
-  if(Array.isArray(d.PDEL)) PDEL=[...new Set([...(PDEL||[]),...d.PDEL])];   // 삭제된 일정 표식 합집합
-  if(Array.isArray(d.PLANS)){ const m={}; [...d.PLANS,...(PLANS||[])].forEach(x=>{const k=x&&x.id; if(!k)return;
-      if(!m[k]||(x.mt||0)>(m[k].mt||0))m[k]=x; }); PLANS=Object.values(m).filter(x=>!x.del&&!(PDEL||[]).includes(x.id)).sort((a,b)=>(a.ts||0)-(b.ts||0)); }
-  if(d.PDONE){ PDONE=Object.assign({},d.PDONE,PDONE||{}); }   // 완료기록: 합집합(먼저 찍힌 것 유지)
-  if(d.MAN!==undefined && d.MAN) MAN=d.MAN;   // 매뉴얼·레시피 편집분
-  if(d.REC!==undefined && d.REC) REC=d.REC;
-  if(Array.isArray(d.IDEL)) IDEL=[...new Set([...(IDEL||[]),...d.IDEL])]; // 삭제된 재고 표식 합집합
-  if(Array.isArray(d.CDEL)) CDEL=[...new Set([...(CDEL||[]),...d.CDEL])]; // 삭제된 분류 표식 합집합
-  if(d.INV){ const m={}; [...d.INV,...(INV||[])].forEach(v=>{const k=v&&v.id; if(!k)return; // 재고: id 기준, 최근 수정(mt) 우선 병합
-      if(!m[k] || (v.mt||0)>(m[k].mt||0)) m[k]=v; });
-    INV=Object.values(m).filter(v=>!IDEL.includes(v.id)).sort((a,b)=>((a.ord||0)-(b.ord||0))||((a.ts||0)-(b.ts||0))); } // 삭제분 제외 + 수동 순서 유지
-  if(d.CATS){ // 분류: 순서는 더 최근에 정렬한 쪽(CATMT) 기준, 이름은 합집합 − 삭제분
-    const remoteNewer=(d.CATMT||0)>(CATMT||0);
-    const base=remoteNewer? (d.CATS||[]) : (CATS||[]), other=remoteNewer? (CATS||[]) : (d.CATS||[]);
-    CATS=[...new Set([...base,...other])].filter(c=>!CDEL.includes(c));
-    if(remoteNewer) CATMT=d.CATMT||0; }
-  if(Array.isArray(d.HDEL)) HDEL=[...new Set([...(HDEL||[]),...d.HDEL])];      // 해제한 휴무 표식
-  if(d.HOL){ HOL=[...new Set([...(d.HOL||[]),...(HOL||[])])].filter(x=>!(HDEL||[]).includes(x)); } // 합집합 − 해제분
-  if(d.CK){ const merged={}; Object.keys(d.CK).forEach(k=>{merged[k]=Object.assign({},d.CK[k]); if(CK[k]&&CK[k].photos)merged[k].photos=CK[k].photos;});
-    Object.keys(CK).forEach(k=>{if(!merged[k])merged[k]=CK[k];}); CK=merged; }
-  try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,STORE_IPS,INV,CATS,HOL,HDEL,WIFILOCK,WIFISTRICT,ROOMS,IDEL,CDEL,PLANS,PDONE,MAN,REC,PDEL,CATMT}));}catch(e){}
-  const _ae=document.activeElement; // 입력 중(텍스트 칸 포커스)이면 화면 갱신 미룸 → 타이핑 안 끊김
-  if(_ae && (_ae.tagName==='INPUT'||_ae.tagName==='TEXTAREA') && _ae.type!=='date'){ /* 다음 사용자 동작 때 반영 */ }
-  else render();
- }finally{ _applyingRemote=false; }
- try{ const mine=syncPayload(), theirs=JSON.parse(data.blob);
-   const strip=o=>{ const c=Object.assign({},o); delete c.READS; return JSON.stringify(c); };
-   if(strip(mine)!==strip(theirs)) pushSync();           // 병합 결과 되반영(읽음 시각 차이만으로는 안 씀)
- }catch(e){ pushSync(); }
-}
 function shareSchedule(){
  if(!SYNC_ENABLED){toast('공유 설정이 아직 준비 안 됐어요');return;}
- if(!_fsSet){toast('동기화 연결 중이에요 — 잠시 후 다시 시도하세요');return;}
- _syncReady=true;
- const blob=JSON.stringify(syncPayload()); _lastSyncJSON=blob;
- _fsSet({blob,ts:Date.now()}).then(()=>{pushUploadSched(true);toast('시간표를 모든 직원에게 공유했습니다');})
-   .catch(e=>{_syncStat='전송 오류: '+(e&&(e.code||e.message)||e);toast('공유 실패: '+(e&&(e.code||e.message)||e));if(CUR)render();});
-}
+ if(!_v3){toast(_legacy?'데이터 전환 후 공유할 수 있어요':'동기화 연결 중이에요 — 잠시 후 다시 시도하세요');return;}
+ SCHED_TS=Date.now(); saveLocal();
+ pushSyncNow(false).then(r=>{ if(r&&r.fails){toast('공유 실패 '+r.fails+'건');return;} pushUploadSched(true); toast('시간표를 모든 직원에게 공유했습니다'); })
+   .catch(e=>{ toast('공유 실패: '+((e&&(e.code||e.message))||e)); }); }
+
 function load(){
  try{const d=JSON.parse(localStorage.getItem(SKEY));
   if(!d||!d.STAFF)throw 0;
@@ -915,7 +1040,7 @@ function fmtDur(ms){ const m=Math.round(ms/60000); return `${Math.floor(m/60)}�
 function fmtDurShort(ms){ const m=Math.round(ms/60000),h=Math.floor(m/60),mm=m%60; return h?`${h}h${mm}m`:`${mm}m`; }
 /* ── 내 근무기록(월간 캘린더) ── */
 let attCalMonth=null; // 보고있는 달(그달 1일 ISO). null=이번달
-function attCalShift(d){ const b=new Date((attCalMonth||todayK())+'T00:00:00'); b.setMonth(b.getMonth()+d); attCalMonth=dk(new Date(b.getFullYear(),b.getMonth(),1)); render(); }
+function attCalShift(d){ const b=new Date((attCalMonth||todayK())+'T00:00:00'); b.setMonth(b.getMonth()+d); attCalMonth=dk(new Date(b.getFullYear(),b.getMonth(),1)); render(); v3LoadAttMonth(monthKey(attCalMonth)); }
 function attRecFor(uid,iso){ if(iso===todayK()){ const a=ATT[uid]; if(a&&a.date===iso)return a; } const l=ATTLOG[uid]; return (l&&l[iso])||null; }
 function recBreakMs(r,endOrLive){ // 휴게 합계. 두 번째 인자: 종료 시각(숫자) 또는 live(true=지금까지)
  const end = typeof endOrLive==='number' ? endOrLive : (endOrLive===true ? Date.now() : 0);
@@ -1033,7 +1158,7 @@ function rejectAttReq(id){ if(!isAdmin(curUser())){toast('대표님·매니저�
  ATTREQ=(ATTREQ||[]).filter(x=>x.id!==id); save(); render(); toast('요청을 거절했습니다'); }
 /* ── 관리자: 직원 월별 근무 요약 ── */
 let admMonth=null; // 보고있는 달(그달 1일 ISO). null=이번달
-function admShift(d){ const b=new Date((admMonth||todayK())+'T00:00:00'); b.setMonth(b.getMonth()+d); admMonth=dk(new Date(b.getFullYear(),b.getMonth(),1)); render(); }
+function admShift(d){ const b=new Date((admMonth||todayK())+'T00:00:00'); b.setMonth(b.getMonth()+d); admMonth=dk(new Date(b.getFullYear(),b.getMonth(),1)); render(); v3LoadAttMonth(monthKey(admMonth)); }
 function monthISOs(uid,y,mo){ const days=[]; const l=ATTLOG[uid]||{};
  Object.keys(l).forEach(iso=>{const d=new Date(iso+'T00:00:00'); if(d.getFullYear()===y&&d.getMonth()===mo)days.push(iso);});
  const a=ATT[uid]; if(a&&a.date){const d=new Date(a.date+'T00:00:00'); if(d.getFullYear()===y&&d.getMonth()===mo&&!days.includes(a.date))days.push(a.date);}
@@ -1339,7 +1464,7 @@ async function fbBoot(){
   _fbSignInCred=(idTok)=>signInWithCredential(_fbAuth,GoogleAuthProvider.credential(idTok));
   _fbSignOut=()=>signOut(_fbAuth);
   onAuthStateChanged(_fbAuth,(user)=>{ _fbUid=user?user.uid:null;
-    if(user && _subscribeState && (!_syncReady||_syncDenied)) _subscribeState();   // 로그인 후 데이터 구독을 다시 시도
+    if(user && _subscribeState) _subscribeState();   // 로그인 후 내 계정 기준으로 구독(다시)
     if(user)onFbLogin(user.email||''); else onFbLogout(); });
   gisStart();
  }catch(e){ console.warn('firebase 초기화 실패 → 폴백 로그인',e); fbFallbackBoot(); }
@@ -1408,6 +1533,15 @@ function resolveSignup(name){
 function finishSignup(){
  const el=$('signName'); const nm=(el?el.value:'').trim();
  if(!nm){toast('이름을 입력하세요');return;}
+ const _em0=(pendingEmail||'').toLowerCase();
+ if(_v3 && _fsApi && _fbUid && !(ADMIN_EMAILS.includes(_em0)||MANAGER_EMAILS.includes(_em0))){ // 새 구조: 가입 요청 문서만 남기고 승인을 기다린다
+   const {doc,setDoc}=_fsApi;
+   setDoc(doc(_fsDb,'signups',_fbUid),{email:_em0,name:nm.slice(0,20),ts:Date.now(),uid:_fbUid})
+     .then(()=>{ _signupSent=true; authMsg(`<div style="font-weight:800;color:var(--ink);font-size:13px;margin-bottom:3px">${escAttr(nm)}님, 가입 요청을 보냈어요</div>
+       대표님·매니저가 승인하면 앱을 쓸 수 있어요.<div class="muted" style="font-size:11.5px;margin-top:6px">승인 후 앱을 새로고침하세요.</div>
+       <div style="margin-top:10px"><span class="authlink" onclick="fbRelogin()">다른 계정으로</span></div>`); })
+     .catch(e=>toast('요청 실패: '+((e&&(e.code||e.message))||e)));
+   return; }
  const r=resolveSignup(nm); let s;
  if(r.existing){ s=r.existing; s.name=r.display; s.email=pendingEmail; } // 기존 직원에 통합 + 성 포함 이름으로
  else { s={id:'u'+Date.now(),name:r.display,email:pendingEmail,wage:MINWAGE,c:PALETTE[STAFF.length%PALETTE.length],mgr:false}; STAFF.push(s); }
@@ -1445,6 +1579,7 @@ function screenHome(){
    <div class="qbtn" onclick="openMyDocs()">${IC('book')}내 서류</div>
    ${isAdmin(curUser())?`<div class="qbtn" style="position:relative" onclick="staffManage()">${IC('user')}직원 관리${pendingCount()?'<span class="bdotn" style="position:absolute;top:10px;right:10px;margin:0"></span>':''}</div>`:''}
  </div>
+ ${_legacy&&SYNC_ENABLED?`<div class="warnbox" style="margin-bottom:12px">앱 데이터 구조를 전환하는 중이에요. 지금 입력한 내용은 <b>저장되지 않을 수 있어요</b>.${isAdmin(curUser())?' <span class="authlink" onclick="v3Migrate()">지금 전환하기</span>':' 잠시 후 새로고침해 주세요.'}</div>`:''}
  ${todayPlanCardHTML()}
  <div class="card"><h3>${IC('tv','li sm')}매장 TV</h3>
    <div class="muted" style="margin-bottom:8px">메뉴판·포스터는 스마트플랫에서 관리합니다.</div>
@@ -1567,7 +1702,7 @@ function recDel(i){
    const arr=recEnsure(); arr.splice(i,1); save(); render(); toast('삭제했습니다'); }); }
 
 /* ═══════════ 시간표 ═══════════ */
-function setWeek(off){weekOffset=off;WEEK=buildWeek(off);
+function setWeek(off){weekOffset=off;WEEK=buildWeek(off); if(typeof v3LoadWeek==='function'&&WEEK[0])v3LoadWeek(WEEK[0].k);
  render();}
 function isRedDay(iso){ const dow=new Date(iso+'T00:00:00').getDay(); return dow===0 || KR_HOLIDAYS.has(iso) || (HOL||[]).includes(iso); } // 일요일·공휴일·수동휴무
 function dayKind(iso){ if(isRedDay(iso))return 'red'; if(new Date(iso+'T00:00:00').getDay()===6)return 'sat'; return ''; }
@@ -1772,6 +1907,11 @@ function doCopyLastWeek(){
  if(n)touchSched();
  render();toast(n?`지난주 편성 ${n}건을 복사했습니다`:'지난주에 편성이 없습니다');}
 /* ── 직원 관리 (관리자 = ADMIN_EMAILS 이메일 계정) ── */
+function v3StatusHTML(){ if(!SYNC_ENABLED)return '';
+ if(_v3) return `<div class="muted" style="font-size:11px;text-align:center;margin-top:8px">데이터 구조: <b style="color:var(--deep)">새 구조(v3)</b> · ${_syncStat}</div>`;
+ if(_legacy) return `<div class="warnbox" style="margin-top:10px">데이터 구조 전환이 아직 안 됐어요. 지금은 <b>읽기 전용</b>입니다.
+   <button class="btn" style="margin-top:8px" onclick="v3Migrate()">데이터 전환 시작 (관리자)</button></div>`;
+ return ''; }
 function staffManage(){
  const owner=isOwner(curUser());
  const sorted=STAFF.map((s,i)=>({s,i})).sort((a,b)=>(b.s.pending?1:0)-(a.s.pending?1:0)); // 승인 대기 먼저
@@ -1785,9 +1925,17 @@ function staffManage(){
  const pc=pendingCount();
  openModal(`<h3>직원 관리${pc?` <span class="bdotn"></span> <span style="font-size:12px;font-weight:700;color:#2f80ed">승인 대기 ${pc}</span>`:''}</h3>${rows}
    <div class="muted" style="font-size:11px;margin:4px 0 10px">새 가입은 <b>승인</b>해야 이용할 수 있어요. 관리자 = 대표님 · 권한은 <b>수정</b>에서 지정.</div>
-   <div class="row"><button class="btn sec" onclick="closeModal()">닫기</button><button class="btn" onclick="addStaff()">+ 직원 추가</button></div>`);
+   <div class="row"><button class="btn sec" onclick="closeModal()">닫기</button>${v3StatusHTML()}<button class="btn" onclick="addStaff()">+ 직원 추가</button></div>`);
 }
 function approveStaff(i){ const s=STAFF[i]; if(!isAdmin(curUser())){toast('승인은 대표님·매니저만 가능해요');return;}
+ if(s.sid){ // 새 구조의 가입 요청 → 직원으로 편입(같은 이름의 이메일 없는 기존 직원이 있으면 그 계정에 연결)
+   const r=resolveSignup(s.name); let t;
+   if(r.existing){ t=r.existing; t.name=r.display; t.email=s.email; }
+   else { t={id:'u'+Date.now(),name:r.display||s.name,email:s.email,wage:MINWAGE,c:PALETTE[STAFF.length%PALETTE.length],mgr:false}; STAFF.push(t); }
+   t.pending=false; if(MANAGER_EMAILS.includes((t.email||'').toLowerCase()))t.mgr=true;
+   STAFF=STAFF.filter(x=>x!==s);
+   if(_fsApi){ const {doc,deleteDoc}=_fsApi; deleteDoc(doc(_fsDb,'signups',s.sid)).catch(()=>{}); }
+   save(); pushSyncNow(false); staffManage(); render(); toast(t.name+'님 가입을 승인했습니다'); return; }
  s.pending=false; save(); staffManage(); render(); toast(s.name+'님 가입을 승인했습니다'); }
 function toggleMgr(i){
  if(!isOwner(curUser())){toast('매니저 지정은 대표님만 할 수 있어요');return;}
@@ -2558,7 +2706,7 @@ function onInvSortEnd(){ const el=$('invList'); if(!el)return;
  INV.sort((a,b)=>((a.ord||0)-(b.ord||0))||((a.ts||0)-(b.ts||0)));
  invFreeze=newFull.slice();            // 화면 고정 순서도 새 순서로 — 다음 렌더에서 되돌아가지 않게
  save();
- if(_fsSet&&_syncReady){ try{ const blob=JSON.stringify(syncPayload()); _lastSyncJSON=blob; _fsSet({blob,ts:Date.now()}).catch(()=>{}); }catch(e){} } // 즉시 반영
+ pushSyncNow(false); // 즉시 반영
  toast('순서를 저장했습니다'); } // DOM은 이미 이동됨 — 전체 재렌더 불필요
 let invDate=null, invCat='', invQ=''; // 보는 날짜(null=오늘), 분류 필터, 검색어
 function setInvCat(c){ invCat=c; invFreezeReset(); render(); }
@@ -2668,7 +2816,7 @@ function initCatSort(){ const el=$('catList'); if(!el||!window.Sortable)return;
    onEnd:()=>{ const order=[...el.children].map(c=>c.getAttribute('data-cat')).filter(Boolean);
      const rest=(CATS||[]).filter(c=>!order.includes(c));
      CATS=[...order,...rest]; CATMT=Date.now(); invFreezeReset(); save();
-     if(_fsSet&&_syncReady){ try{ const blob=JSON.stringify(syncPayload()); _lastSyncJSON=blob; _fsSet({blob,ts:Date.now()}).catch(()=>{}); }catch(e){} }
+     pushSyncNow(false);
      toast('분류 순서를 저장했습니다'); } }); }
 function addCat(){ const el=$('catNew'); const n=(el?el.value:'').trim(); if(!n){toast('분류 이름을 입력하세요');return;} if(CATS.includes(n)){toast('이미 있는 분류예요');return;} CATMT=Date.now(); CATS.push(n); save(); openCatMgr(); toast(n+' 분류를 만들었습니다'); }
 function delCat(c){ askConfirm(`<b>${c}</b> 분류를 삭제할까요?<br>이 분류의 품목은 '미분류'가 됩니다(품목은 안 지워짐).`,'삭제',()=>{ CDEL=[...new Set([...(CDEL||[]),c])]; CATS=CATS.filter(x=>x!==c); INV.forEach(v=>{ if((v.cat||'')===c){v.cat=''; v.mt=Date.now();} }); if(invCat===c)invCat=''; save(); render(); openCatMgr(); toast('분류를 삭제했습니다'); }); }
@@ -3640,7 +3788,7 @@ function planAskDel(id){ const p=(PLANS||[]).find(x=>x.id===id); if(!p)return;
  askConfirm(`<b>${escAttr(p.title)}</b> 일정을 삭제할까요?<br>앞으로 이 일정은 달력에 나오지 않아요.`,'삭제',()=>{
    PDEL=[...new Set([...(PDEL||[]),id])];            // 삭제 표식 — 다른 기기에서도 사라지게
    PLANS=PLANS.filter(x=>x.id!==id); planEditId=null; save(); closeModal(); render();
-   if(_fsSet&&_syncReady){ try{ const blob=JSON.stringify(syncPayload()); _lastSyncJSON=blob; _fsSet({blob,ts:Date.now()}).catch(()=>{}); }catch(e){} }
+   pushSyncNow(false);
    toast('삭제했습니다'); }); }
 
 let planType='weekly', planDays=[], planEditId=null;
@@ -3720,6 +3868,10 @@ function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDon
 /* ═══════════ 업데이트 내역 (새로고침 후 무엇이 바뀌었는지) ═══════════ */
 const VER_KEY='farmplanet.lastver';
 const CHANGELOG=[
+ {v:'3.0.0', d:'2026-09-25', items:[
+   '<b>데이터 구조 전면 개편</b> — 한 덩어리 저장 → 화면별 문서 저장. 수정이 되돌아가거나 삭제가 되살아나는 문제의 뿌리를 없앴어요',
+   '저장 크기가 수백 KB → 수 KB. 데이터·배터리 절감',
+   '승인된 직원만 매장 데이터를 볼 수 있게 보안 규칙 강화 (가입 요청은 그대로 가능)' ]},
  {v:'2.46.1', d:'2026-09-25', items:[
    '지난 근무 기록에 복귀 안 누른 휴게가 있으면 근무시간이 0으로 잡히던 문제 수정' ]},
  {v:'2.46.0', d:'2026-09-25', items:[
@@ -4076,6 +4228,9 @@ async function pushResync(sub){ // 저장된 구독을 현재 계정으로 다�
      body:JSON.stringify({idToken,uid:CUR,name:(curUser()&&curUser().name)||'',sub:sub.toJSON()})}); }
  catch(e){ _resynced=false; }
 }
+let _v3Day=null;
+function v3DayCheck(){ const t=todayK(); if(_v3Day&&_v3Day!==t&&_v3){ WEEK=buildWeek(weekOffset); v3Subscribe(); } _v3Day=t; }
+setInterval(v3DayCheck,60000); document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible')v3DayCheck(); });
 function pushMaybeResync(){ // 로그인이 끝난 뒤 render에서 호출 — 성공할 때까지만 재시도
  if(_resyncing||!CUR)return;
  if(_resynced && _pushState!=='off')return;      // 구독이 끊긴 상태면 다시 확인한다
