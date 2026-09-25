@@ -491,7 +491,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='2.44.2'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='2.45.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -522,7 +522,7 @@ const CHAT_LIMIT=200;
 let _fsDb=null,_chatApi=null,_chatErr='',_fbUid=null;
 let CHATR={},_roomUnsub={},chatRoom=null;   // 방별 메시지 / 방별 구독 / 열려있는 방
 let _docApi=null;
-let STAFF, SHIFTS, ORDERS, NOTICES, CK, SUBMITS, CUR, REFS, READS, SCHED_TS=0, DELETED=[], ODEL=[], PATTERN=null, ATT={}, STORE_LOC=null, WAGE=0, ATTREQ=[], ATTLOG={}, BOARD=[], STORE_IP=null, STORE_IPS=[], INV=[], CATS=[], HOL=[], HDEL=[], WIFILOCK=false, WIFISTRICT=true, ROOMS=[], IDEL=[], CDEL=[], PLANS=[], PDONE={}, MAN=null, REC=null;
+let STAFF, SHIFTS, ORDERS, NOTICES, CK, SUBMITS, CUR, REFS, READS, SCHED_TS=0, DELETED=[], ODEL=[], PATTERN=null, ATT={}, STORE_LOC=null, WAGE=0, ATTREQ=[], ATTLOG={}, BOARD=[], STORE_IP=null, STORE_IPS=[], INV=[], CATS=[], HOL=[], HDEL=[], WIFILOCK=false, WIFISTRICT=true, ROOMS=[], IDEL=[], CDEL=[], PLANS=[], PDONE={}, MAN=null, REC=null, PDEL=[];
 function touchSched(){SCHED_TS=Date.now();} // 시간표 변경 시각 기록(신규 표시용)
 /* ── 시간표 일괄 작업 되돌리기 (지난주 복사·기본패턴·초기화) ── */
 const UKEY='farmplanet.schedundo';
@@ -561,7 +561,7 @@ function defaults(){
  SHIFTS={}; seedWeek(buildWeek(0));
  ORDERS=[]; SUBMITS=[]; CK={}; REFS={}; READS={};
  NOTICES=[{tag:"공지",gold:true,who:"대표님",dt:fmtDT(),ts:Date.now(),bd:"FarmPlanet 앱 사용을 시작합니다. 공지·발주·시간표·마감을 여기서 관리해요."}];
- CUR=null; SCHED_TS=0; DELETED=[]; ODEL=[]; PATTERN=null; ATT={}; STORE_LOC=null; WAGE=MINWAGE; ATTREQ=[]; ATTLOG={}; BOARD=[]; STORE_IP=null; STORE_IPS=[]; INV=[]; CATS=[]; HOL=[]; HDEL=[]; WIFILOCK=false; WIFISTRICT=true; ROOMS=defaultRooms(); IDEL=[]; CDEL=[]; PLANS=[]; PDONE={}; MAN=null; REC=null;
+ CUR=null; SCHED_TS=0; DELETED=[]; ODEL=[]; PATTERN=null; ATT={}; STORE_LOC=null; WAGE=MINWAGE; ATTREQ=[]; ATTLOG={}; BOARD=[]; STORE_IP=null; STORE_IPS=[]; INV=[]; CATS=[]; HOL=[]; HDEL=[]; WIFILOCK=false; WIFISTRICT=true; ROOMS=defaultRooms(); IDEL=[]; CDEL=[]; PLANS=[]; PDONE={}; MAN=null; REC=null; PDEL=[];
 }
 /* 주간 기본 패턴 (2026-07 확정, 화면 편성 기준)
    월: 예흔08~14·미루11~14·지한12:30~16·효원16~19
@@ -581,13 +581,13 @@ function seedWeek(week){
   else if(i===5){set('gh',d,'12:00','18:00');}
   });
 }
-function save(){try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,STORE_IPS,INV,CATS,HOL,HDEL,WIFILOCK,WIFISTRICT,ROOMS,IDEL,CDEL,PLANS,PDONE,MAN,REC}));}catch(e){}
+function save(){try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,STORE_IPS,INV,CATS,HOL,HDEL,WIFILOCK,WIFISTRICT,ROOMS,IDEL,CDEL,PLANS,PDONE,MAN,REC,PDEL}));}catch(e){}
  if(SYNC_ENABLED&&typeof pushSync==='function')pushSync();}
 /* ── 실시간 공유 (Firestore 단일 문서, 사진 제외) ── */
 function syncPayload(){
  const ckLite={};
  Object.keys(CK).forEach(k=>{const d=CK[k]||{};ckLite[k]={open:d.open||{},mid:d.mid||{},close:d.close||{}};});
- return {STAFF,SHIFTS,ORDERS,NOTICES,SUBMITS,READS,CK:ckLite,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,STORE_IPS,INV,CATS,HOL,HDEL,WIFILOCK,WIFISTRICT,ROOMS,IDEL,CDEL,PLANS,PDONE,MAN,REC};
+ return {STAFF,SHIFTS,ORDERS,NOTICES,SUBMITS,READS,CK:ckLite,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,STORE_IPS,INV,CATS,HOL,HDEL,WIFILOCK,WIFISTRICT,ROOMS,IDEL,CDEL,PLANS,PDONE,MAN,REC,PDEL};
 }
 async function syncBoot(){
  try{
@@ -663,8 +663,9 @@ function applyRemote(data){
   if(d.BOARD){ const m={}; [...d.BOARD,...(BOARD||[])].forEach(b=>{const k=b&&b.id; if(!k)return; // 게시판: id 기준, 최근 수정(mt) 우선 병합
       if(!m[k] || (b.mt||0)>(m[k].mt||0)) m[k]=b; });
     BOARD=Object.values(m).sort((a,b)=>(b.ts||0)-(a.ts||0)); }
+  if(Array.isArray(d.PDEL)) PDEL=[...new Set([...(PDEL||[]),...d.PDEL])];   // 삭제된 일정 표식 합집합
   if(Array.isArray(d.PLANS)){ const m={}; [...d.PLANS,...(PLANS||[])].forEach(x=>{const k=x&&x.id; if(!k)return;
-      if(!m[k]||(x.mt||0)>(m[k].mt||0))m[k]=x; }); PLANS=Object.values(m).filter(x=>!x.del).sort((a,b)=>(a.ts||0)-(b.ts||0)); }
+      if(!m[k]||(x.mt||0)>(m[k].mt||0))m[k]=x; }); PLANS=Object.values(m).filter(x=>!x.del&&!(PDEL||[]).includes(x.id)).sort((a,b)=>(a.ts||0)-(b.ts||0)); }
   if(d.PDONE){ PDONE=Object.assign({},d.PDONE,PDONE||{}); }   // 완료기록: 합집합(먼저 찍힌 것 유지)
   if(d.MAN!==undefined && d.MAN) MAN=d.MAN;   // 매뉴얼·레시피 편집분
   if(d.REC!==undefined && d.REC) REC=d.REC;
@@ -678,7 +679,7 @@ function applyRemote(data){
   if(d.HOL){ HOL=[...new Set([...(d.HOL||[]),...(HOL||[])])].filter(x=>!(HDEL||[]).includes(x)); } // 합집합 − 해제분
   if(d.CK){ const merged={}; Object.keys(d.CK).forEach(k=>{merged[k]=Object.assign({},d.CK[k]); if(CK[k]&&CK[k].photos)merged[k].photos=CK[k].photos;});
     Object.keys(CK).forEach(k=>{if(!merged[k])merged[k]=CK[k];}); CK=merged; }
-  try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,STORE_IPS,INV,CATS,HOL,HDEL,WIFILOCK,WIFISTRICT,ROOMS,IDEL,CDEL,PLANS,PDONE,MAN,REC}));}catch(e){}
+  try{localStorage.setItem(SKEY,JSON.stringify({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,STORE_IPS,INV,CATS,HOL,HDEL,WIFILOCK,WIFISTRICT,ROOMS,IDEL,CDEL,PLANS,PDONE,MAN,REC,PDEL}));}catch(e){}
   const _ae=document.activeElement; // 입력 중(텍스트 칸 포커스)이면 화면 갱신 미룸 → 타이핑 안 끊김
   if(_ae && (_ae.tagName==='INPUT'||_ae.tagName==='TEXTAREA') && _ae.type!=='date'){ /* 다음 사용자 동작 때 반영 */ }
   else render();
@@ -696,10 +697,10 @@ function shareSchedule(){
 function load(){
  try{const d=JSON.parse(localStorage.getItem(SKEY));
   if(!d||!d.STAFF)throw 0;
-  ({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,STORE_IPS,INV,CATS,HOL,HDEL,WIFILOCK,WIFISTRICT,ROOMS,IDEL,CDEL,PLANS,PDONE,MAN,REC}=Object.assign({ORDERS:[],NOTICES:[],CK:{},SUBMITS:[],CUR:null,REFS:{},READS:{},SCHED_TS:0,DELETED:[],ODEL:[],PATTERN:null,ATT:{},STORE_LOC:null,WAGE:MINWAGE,ATTREQ:[],ATTLOG:{},BOARD:[],STORE_IP:null,STORE_IPS:[],INV:[],CATS:[],HOL:[],HDEL:[],WIFILOCK:false,WIFISTRICT:true,ROOMS:defaultRooms(),IDEL:[],CDEL:[],PLANS:[],PDONE:{},MAN:null,REC:null},d));
+  ({STAFF,SHIFTS,ORDERS,NOTICES,CK,SUBMITS,CUR,REFS,READS,SCHED_TS,DELETED,ODEL,PATTERN,ATT,STORE_LOC,WAGE,ATTREQ,ATTLOG,BOARD,STORE_IP,STORE_IPS,INV,CATS,HOL,HDEL,WIFILOCK,WIFISTRICT,ROOMS,IDEL,CDEL,PLANS,PDONE,MAN,REC,PDEL}=Object.assign({ORDERS:[],NOTICES:[],CK:{},SUBMITS:[],CUR:null,REFS:{},READS:{},SCHED_TS:0,DELETED:[],ODEL:[],PATTERN:null,ATT:{},STORE_LOC:null,WAGE:MINWAGE,ATTREQ:[],ATTLOG:{},BOARD:[],STORE_IP:null,STORE_IPS:[],INV:[],CATS:[],HOL:[],HDEL:[],WIFILOCK:false,WIFISTRICT:true,ROOMS:defaultRooms(),IDEL:[],CDEL:[],PLANS:[],PDONE:{},MAN:null,REC:null,PDEL:[]},d));
   INV=INV||[]; CATS=CATS||[]; HOL=HOL||[]; HDEL=HDEL||[]; if(HDEL.length)HOL=HOL.filter(x=>!HDEL.includes(x)); IDEL=IDEL||[]; CDEL=CDEL||[]; PLANS=PLANS||[]; PDONE=PDONE||{};
   if(IDEL.length){INV=INV.filter(v=>!IDEL.includes(v.id));} if(CDEL.length){CATS=CATS.filter(c=>!CDEL.includes(c));}
-  REFS=REFS||{}; READS=READS||{}; SCHED_TS=SCHED_TS||0; DELETED=DELETED||[]; ODEL=ODEL||[]; ATT=ATT||{}; WAGE=WAGE||MINWAGE; ATTREQ=ATTREQ||[]; ATTLOG=ATTLOG||{}; BOARD=BOARD||[];
+  PDEL=PDEL||[]; REFS=REFS||{}; READS=READS||{}; SCHED_TS=SCHED_TS||0; DELETED=DELETED||[]; ODEL=ODEL||[]; ATT=ATT||{}; WAGE=WAGE||MINWAGE; ATTREQ=ATTREQ||[]; ATTLOG=ATTLOG||{}; BOARD=BOARD||[];
   NOTICES.forEach(n=>{if(n.ts===undefined)n.ts=0;}); ORDERS.forEach(o=>{if(o.ts===undefined)o.ts=0; o.st=(o.st==='ordered'||o.st==='done'||o.done)?'ordered':'wait';});
   // 14일 지난 체크 기록(사진 포함) 정리
   const lim=new Date();lim.setDate(lim.getDate()-14);const limK=dk(lim);
@@ -3572,7 +3573,7 @@ function screenPlan(){
      <button class="pchk ${dn?'on':''}" onclick="planToggle('${p.id}','${sel}')" aria-label="완료">${dn?'✓':''}</button>
      <div class="tx"><b style="${dn?'color:#6a7d70':''}">${p.time?`<span style="color:var(--deep);font-size:11.5px">${p.time}</span> `:''}${escAttr(p.title)}</b>
        <div class="muted" style="font-size:10.5px">${planRepeatLabel(p)}${p.memo?' · '+escAttr(p.memo):''}${dn?` · <b style="color:var(--deep)">${escAttr(dn.name)} ${fmtT(dn.ts)}</b>`:''}</div></div>
-     <span class="oact del" onclick="planAskDel('${p.id}')">삭제</span></div>`; }).join('')
+     <span class="oact" onclick="planForm('${p.id}')">수정</span><span class="oact del" onclick="planAskDel('${p.id}')">삭제</span></div>`; }).join('')
    : `<p class="muted" style="text-align:center;padding:20px 2px">이 날은 등록된 일정이 없어요.</p>`;
  return `<h2 class="title">${IC('cal')}일정</h2>
    <div class="card">
@@ -3595,19 +3596,25 @@ function planToggle(id,iso){
  save(); render(); }
 function planAskDel(id){ const p=(PLANS||[]).find(x=>x.id===id); if(!p)return;
  askConfirm(`<b>${escAttr(p.title)}</b> 일정을 삭제할까요?<br>앞으로 이 일정은 달력에 나오지 않아요.`,'삭제',()=>{
-   p.del=true; p.mt=Date.now(); PLANS=PLANS.filter(x=>x.id!==id); save(); render(); toast('삭제했습니다'); }); }
+   PDEL=[...new Set([...(PDEL||[]),id])];            // 삭제 표식 — 다른 기기에서도 사라지게
+   PLANS=PLANS.filter(x=>x.id!==id); planEditId=null; save(); closeModal(); render();
+   if(_fsSet&&_syncReady){ try{ const blob=JSON.stringify(syncPayload()); _lastSyncJSON=blob; _fsSet({blob,ts:Date.now()}).catch(()=>{}); }catch(e){} }
+   toast('삭제했습니다'); }); }
 
-let planType='weekly', planDays=[];
-function planForm(){
- planType='weekly'; planDays=[new Date((planSel||todayK())+'T00:00:00').getDay()];
- openModal(planFormHTML());
+let planType='weekly', planDays=[], planEditId=null;
+function planForm(id){
+ planEditId=id||null;
+ const p=id? (PLANS||[]).find(x=>x.id===id) : null;
+ if(p){ planType=p.type||'weekly'; planDays=(p.days||[]).slice(); }
+ else { planType='weekly'; planDays=[new Date((planSel||todayK())+'T00:00:00').getDay()]; }
+ openModal(planFormHTML(p));
  setTimeout(()=>{const el=$('plTitle');if(el)el.focus();},60); }
 function planKeep(){ // 다시 그릴 때 입력값 보존
  const g=id=>{const e=$(id);return e?e.value:undefined;};
  return {title:g('plTitle'),memo:g('plMemo'),from:g('plFrom'),time:g('plTime'),every:g('plEvery')}; }
 function planRestore(v){ const set=(id,val)=>{const e=$(id); if(e&&val!==undefined)e.value=val;};
  set('plTitle',v.title); set('plMemo',v.memo); set('plFrom',v.from); set('plTime',v.time); set('plEvery',v.every); }
-function planTypeSet(t){ const v=planKeep(); planType=t; openModal(planFormHTML()); planRestore(v); }
+function planTypeSet(t){ const v=planKeep(); planType=t; openModal(planFormHTML(planEditId?(PLANS||[]).find(x=>x.id===planEditId):null)); planRestore(v); }
 function planDayTog(d){ d=+d; const i=planDays.indexOf(d); if(i<0)planDays.push(d); else planDays.splice(i,1);
  const box=$('plBox'); if(box)box.innerHTML=planTypeHTML(); }
 function planTypeHTML(){
@@ -3615,30 +3622,40 @@ function planTypeHTML(){
    <div style="display:flex;gap:5px">${['일','월','화','수','목','금','토'].map((w,i)=>
      `<button class="pday ${planDays.includes(i)?'on':''}" onclick="planDayTog(${i})">${w}</button>`).join('')}</div>`;
  if(planType==='interval') return `<div class="muted" style="font-size:11.5px;margin-bottom:6px">며칠마다</div>
-   <div style="display:flex;align-items:center;gap:8px"><input id="plEvery" class="tsel" type="number" inputmode="numeric" value="3" min="1" style="width:90px"><span style="font-size:13px">일마다</span></div>`;
+   <div style="display:flex;align-items:center;gap:8px"><input id="plEvery" class="tsel" type="number" inputmode="numeric" value="${_planEvery||3}" min="1" style="width:90px"><span style="font-size:13px">일마다</span></div>`;
  return `<div class="muted" style="font-size:11.5px">고른 날짜에 한 번만 표시돼요.</div>`; }
-function planFormHTML(){
- const sel=planSel||todayK();
+let _planEvery=0;
+function planFormHTML(p){
+ const sel=(p&&p.from)||planSel||todayK();
+ _planEvery=(p&&p.every)||0;
  const tb=(k,l)=>`<button class="btn ${planType===k?'':'sec'}" style="flex:1;padding:9px 4px;font-size:12.5px" onclick="planTypeSet('${k}')">${l}</button>`;
- return `<h3>일정 추가</h3>
-   <div class="fld"><label>할 일</label><input id="plTitle" class="tsel" placeholder="예: 화분 물주기" autocomplete="off"></div>
-   <div class="fld" style="margin-top:8px"><label>메모 <span class="muted">(선택)</span></label><input id="plMemo" class="tsel" placeholder="예: 창가 화분 3개" autocomplete="off"></div>
+ return `<h3>${p?'일정 수정':'일정 추가'}</h3>
+   <div class="fld"><label>할 일</label><input id="plTitle" class="tsel" placeholder="예: 화분 물주기" autocomplete="off" value="${escAttr((p&&p.title)||'')}"></div>
+   <div class="fld" style="margin-top:8px"><label>메모 <span class="muted">(선택)</span></label><input id="plMemo" class="tsel" placeholder="예: 창가 화분 3개" autocomplete="off" value="${escAttr((p&&p.memo)||'')}"></div>
    <div style="display:flex;gap:8px;margin-top:10px">
      <div class="fld" style="flex:1"><label>시작일</label><input id="plFrom" class="tsel" type="date" value="${sel}"></div>
-     <div class="fld" style="flex:none;width:120px"><label>시간 <span class="muted">(선택)</span></label><input id="plTime" class="tsel" type="time"></div></div>
+     <div class="fld" style="flex:none;width:120px"><label>시간 <span class="muted">(선택)</span></label><input id="plTime" class="tsel" type="time" value="${escAttr((p&&p.time)||'')}"></div></div>
    <div style="display:flex;gap:6px;margin-top:12px">${tb('once','한 번')}${tb('weekly','매주')}${tb('interval','N일마다')}</div>
    <div id="plBox" style="margin-top:10px">${planTypeHTML()}</div>
    <div class="row" style="margin-top:14px"><button class="btn sec" onclick="closeModal()">취소</button>
-     <button class="btn" onclick="planSave()">등록</button></div>`; }
+     <button class="btn" onclick="planSave()">${p?'저장':'등록'}</button></div>
+   ${p?`<div style="margin-top:10px;text-align:center"><span class="authlink" style="color:var(--warn);font-size:12px" onclick="planAskDel('${p.id}')">이 일정 삭제</span></div>`:''}`; }
 function planSave(){
  const title=($('plTitle')?$('plTitle').value:'').trim(); if(!title){toast('할 일을 입력하세요');return;}
  const memo=($('plMemo')?$('plMemo').value:'').trim();
  const from=($('plFrom')?$('plFrom').value:'')||todayK();
  const time=($('plTime')?$('plTime').value:'')||'';
- const p={id:planId(),title:title.slice(0,40),memo:memo.slice(0,60),type:planType,from,time,by:CUR,ts:Date.now(),mt:Date.now()};
- if(planType==='weekly'){ if(!planDays.length){toast('요일을 하나 이상 고르세요');return;} p.days=planDays.slice().sort(); }
- else if(planType==='interval'){ const n=parseInt($('plEvery')?$('plEvery').value:'0',10); if(!n||n<1){toast('며칠마다인지 입력하세요');return;} p.every=n; }
- PLANS.push(p); planSel=from; save(); closeModal(); render();
+ const editing=planEditId? (PLANS||[]).find(x=>x.id===planEditId) : null;
+ const p= editing || {id:planId(),by:CUR,ts:Date.now()};
+ const days=planDays.slice().sort(); let every=0;
+ if(planType==='weekly'&&!days.length){toast('요일을 하나 이상 고르세요');return;}
+ if(planType==='interval'){ every=parseInt($('plEvery')?$('plEvery').value:'0',10); if(!every||every<1){toast('며칠마다인지 입력하세요');return;} }
+ Object.assign(p,{title:title.slice(0,40),memo:memo.slice(0,60),type:planType,from,time,mt:Date.now()});
+ delete p.days; delete p.every;
+ if(planType==='weekly') p.days=days; else if(planType==='interval') p.every=every;
+ if(!editing) PLANS.push(p);
+ planEditId=null; planSel=from; save(); closeModal(); render();
+ if(editing){ toast('일정을 수정했습니다'); return; }
  pushSend('📅 새 일정 · '+((curUser()&&curUser().name)||''),
    `${p.title}${p.time?' '+p.time:''} · ${planRepeatLabel(p)}${p.memo?' — '+p.memo:''}`, {tag:'plan', url:deepLinkFor('plan')});
  toast('일정을 등록하고 모두에게 알렸습니다'); }
@@ -3661,6 +3678,9 @@ function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDon
 /* ═══════════ 업데이트 내역 (새로고침 후 무엇이 바뀌었는지) ═══════════ */
 const VER_KEY='farmplanet.lastver';
 const CHANGELOG=[
+ {v:'2.45.0', d:'2026-09-25', items:[
+   '일정 <b>수정</b> 기능 추가 — 제목·메모·시간·반복을 바꿀 수 있어요',
+   '일정 <b>삭제가 다른 기기에서도 반영</b>되도록 수정 (삭제해도 되살아나던 문제)' ]},
  {v:'2.44.2', d:'2026-09-11', items:[
    '재고 <b>품목 순서 변경이 저장되지 않던 문제</b> 수정 — 이제 끌어다 놓은 순서가 그대로 유지돼요',
    '재고 목록은 <b>내가 정한 순서</b>로만 보여요 (부족 품목은 색과 발주 버튼으로 표시)' ]},
