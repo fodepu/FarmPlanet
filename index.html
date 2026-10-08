@@ -497,7 +497,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='3.0.3'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='3.1.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -657,7 +657,7 @@ async function pushSyncNow(force){
   const proj=v3Project(), admin=isAdmin(curUser());
   const ops=[]; for(const path in proj){ if(!v3CanWrite(path,admin,force))continue; const j=cj(proj[path]); if(!force&&_lastDocJSON[path]===j)continue; ops.push({path,obj:proj[path],j}); }
   const dels=Object.keys(_lastDocJSON).filter(p=>!(p in proj)&&!V3_NO_DELETE.includes(p.split('/')[0])&&(admin||!V3_ADMIN_COLLS.includes(p.split('/')[0])));
-  const NESTED={shifts:['e'],attlog:['d'],ck:['open','mid','close'],plandone:['d'],config:['STORE_IPS'],users:['reads']};
+  const NESTED={shifts:['e'],attlog:['d'],ck:['open','mid','close'],plandone:['d'],config:['STORE_IPS'],users:['reads'],inv:['hist']};
   const run=async(op)=>{ const [c,id]=op.path.split('/'); const ref=doc(_fsDb,c,id);
     const before=_lastDocJSON[op.path];
     try{
@@ -771,6 +771,7 @@ function hyMap(name,snap,idOf,apply,localIds){ // 키 문서(주·월·날짜·u
  (localIds()||[]).forEach(id=>{ const path=name+'/'+id; if(seen.has(id))return;
    if(path in _lastDocJSON){ delete _lastDocJSON[path]; apply(id,null); } }); }
 function v3AfterHydrate(what){
+ if(what==='inv'&&_hyReady.inv)invHistBackfill();
  saveLocal(); pushSync();   // 받기 전이라 미뤄 둔 내 변경이 있으면 이제 보낸다
  if(what==='staff'&&!CUR)return;
  const ae=document.activeElement;
@@ -2309,7 +2310,7 @@ function invResetAllAsk(){
      <button class="btn sec" onclick="closeModal()">취소</button></div>`); }
 function invResetAll(zero){
  let logs=0;
- (INV||[]).forEach(v=>{ logs+=(v.log||[]).length; v.log=[]; if(zero)v.onHand=0; v.mt=Date.now(); });
+ (INV||[]).forEach(v=>{ logs+=(v.log||[]).length; v.log=[]; v.hist={}; if(zero)v.onHand=0; v.mt=Date.now(); });
  (ORDERS||[]).forEach(o=>{ if(o.stockId||o.stockQty||o.dvqty){ o.stockId=null; o.stockQty=0; o.skipFlow=true; o.mt=Date.now(); } });
  invFreezeReset(); save(); render();
  toast(`입출고 기록 ${logs}건을 지웠어요${zero?' · 재고 수량도 0으로':''}`); }
@@ -2332,7 +2333,7 @@ function invResetToday(){
    if(!today.length)return;
    const sum=today.reduce((a,l)=>a+(+l.delta||0),0);
    v.onHand=rnd((v.onHand||0)-sum);      // 오늘 변동분을 되돌림
-   v.log=keep; v.mt=Date.now(); removed+=today.length; });
+   v.log=keep; if(v.hist)delete v.hist[t]; v.mt=Date.now(); removed+=today.length; });
  (ORDERS||[]).forEach(o=>{ if(o.rcvts&&dk(new Date(o.rcvts))===t){ o.stockId=null; o.stockQty=0; o.mt=Date.now(); } });
  let ok=0; const skip=[];
  (ORDERS||[]).forEach(o=>{
@@ -2682,7 +2683,23 @@ function runConfirm(){const cb=_confirmCb;_confirmCb=null;closeModal();if(cb)cb(
 
 /* ═══════════ 재고관리 (Phase 1) ═══════════ */
 function invId(){return 'v'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);}
-function invLog(v,ty,delta,to){ v.log=v.log||[]; v.log.unshift({ty,delta,to,ts:Date.now(),who:curUser().name}); if(v.log.length>60)v.log=v.log.slice(0,60); }
+function invLog(v,ty,delta,to){ v.log=v.log||[]; if(!v.hist)invHistSync(v); v.log.unshift({ty,delta,to,ts:Date.now(),who:curUser().name}); invHistAdd(v,ty,delta,to); if(v.log.length>60)v.log=v.log.slice(0,60); }
+/* 일별 요약(영구 보관): v.hist['YYYY-MM-DD']={i:입고합, u:사용합, a:실사 조정합, c:실사 횟수, e:그날 마지막 수량}
+   상세 기록(log)은 60건까지만 남지만 요약은 지워지지 않는다 → 주간 사용량·발주 제안의 근거 */
+function invHistAdd(v,ty,delta,to){ const H=v.hist||(v.hist={}); const d=todayK(); const x=Object.assign({i:0,u:0,a:0,c:0,e:null},H[d]||{}); const n=+delta||0;
+ if(ty==='입고')x.i=rnd(x.i+n); else if(ty==='사용')x.u=rnd(x.u+Math.abs(n)); else if(ty==='실사'){ x.a=rnd(x.a+n); x.c=(x.c||0)+1; }
+ if(typeof to==='number')x.e=rnd(to); H[d]=x; }
+function invHistSync(v){ if(!v)return false; const L=v.log||[]; const H=v.hist||{}; const by={}; let ch=false;
+ L.forEach(l=>{ if(!l||!l.ts)return; const d=dk(new Date(l.ts)); const x=by[d]||(by[d]={i:0,u:0,a:0,c:0,e:null,n:0}); x.n++;
+   if(x.e===null&&typeof l.to==='number')x.e=l.to;                 // log는 최신순 → 처음 만난 것이 그날 마지막 수량
+   if(l.ty==='입고')x.i+=(+l.delta||0); else if(l.ty==='사용')x.u+=Math.abs(+l.delta||0); else if(l.ty==='실사'){ x.a+=(+l.delta||0); x.c++; } });
+ const days=Object.keys(by).sort(); const cut=L.length>=60? days[0] : null;   // 60건이 찼으면 가장 옛 날짜는 잘렸을 수 있음
+ days.forEach(d=>{ const x=by[d]; const o={i:rnd(x.i),u:rnd(x.u),a:rnd(x.a),c:x.c,e:x.e===null?null:rnd(x.e)};
+   if(d===cut&&H[d])return;                                       // 잘린 날은 이미 적어 둔 요약을 믿는다
+   if(d===cut)o.p=1;                                              // 요약이 없던 잘린 날: 부분값 표시
+   if(cj(H[d])!==cj(o)){ H[d]=o; ch=true; } });
+ if(ch||!v.hist)v.hist=H; return ch; }
+function invHistBackfill(){ if(!isAdmin(curUser()))return; let n=0; (INV||[]).forEach(v=>{ if(v&&v.id&&!v.hist){ invHistSync(v); n++; } }); if(n)saveLocal(); }
 function isLow(v){ return (v.onHand||0)<=(v.par||0); }
 function catOf(v){ return (v.cat||'').trim()||'미분류'; }
 function jq(s){ return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
@@ -3894,6 +3911,9 @@ function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDon
 /* ═══════════ 업데이트 내역 (새로고침 후 무엇이 바뀌었는지) ═══════════ */
 const VER_KEY='farmplanet.lastver';
 const CHANGELOG=[
+ {v:'3.1.0', d:'2026-10-08', items:[
+   '<b>재고 일별 요약 영구 보관</b> — 품목마다 날짜별 입고·사용·실사 수량을 따로 남겨요. 상세 기록이 60건을 넘어도 금요일 실사 수치가 사라지지 않아요',
+   '주간 사용량 계산과 발주 제안을 위한 준비 단계예요 (화면은 그대로)' ]},
  {v:'3.0.3', d:'2026-10-08', items:[
    '<b>일정 수정·삭제가 되돌아가던 문제 수정</b> — 다른 사람이 고치거나 지운 일정을, 앱을 막 켠 폰이 옛 내용으로 덮어쓰던 문제. 이제 누가 고쳐도 유지돼요',
    '직원 폰에서 일정·발주·재고를 지운 뒤 매장 설정 변경이 그 폰에 안 들어오던 문제 수정' ]},
