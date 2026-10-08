@@ -497,7 +497,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='3.0.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='3.0.3'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -614,9 +614,11 @@ function inRange(path){ const r=_v3Range||v3RangeNow(); const [c,id]=path.split(
  return true; }
 const V3_ADMIN_COLLS=['config','staff','shifts'];       // 관리자만 쓰는 컬렉션(규칙과 동일)
 const V3_NO_DELETE=['config','users','att'];             // 삭제하지 않는 컬렉션
+let _hyReady={};   // 이번 실행에서 서버 내용을 한 번이라도 받은 목록. 받기 전엔 그 목록을 쓰지 않는다(폰에 남은 옛 사본이 서버의 새 내용을 덮어쓰던 문제)
 function v3CanWrite(path,admin,force){ const c=path.split('/')[0];
  if(V3_ADMIN_COLLS.includes(c)&&!admin)return false;
  if(force)return true;
+ if(!_hyReady[c])return false;
  return (path in _lastDocJSON) || inRange(path); }     // 옛 달·옛 주는 불러온 적 있을 때만(옛 사본으로 덮어쓰기 방지)
 
 /* ── 투영: 전역 상태 → {경로: 문서} ── */
@@ -671,11 +673,13 @@ async function pushSyncNow(force){
           } else if(cj(a)!==cj(b)) args.push(new FieldPath(k), b===undefined?deleteField():b); });
         if(args.length){ try{ await updateDoc(ref,...args); }catch(e){ if(e&&/not-found|no document/i.test(e.code||e.message||'')) await setDoc(ref,op.obj); else throw e; } }
       }
+      if(V3_ID_COLLS.includes(c)){ knownLoad(); _known.add(op.path); }
       n++; }
     catch(e){ fails++; if(before===undefined)delete _lastDocJSON[op.path]; else _lastDocJSON[op.path]=before; console.warn('v3 쓰기 실패',op.path,e&&(e.code||e.message)); } };
-  const del=async(p)=>{ const [c,id]=p.split('/'); try{ await deleteDoc(doc(_fsDb,c,id)); delete _lastDocJSON[p]; n++; }catch(e){ fails++; console.warn('v3 삭제 실패',p,e&&e.code); } };
+  const del=async(p)=>{ const [c,id]=p.split('/'); try{ await deleteDoc(doc(_fsDb,c,id)); delete _lastDocJSON[p]; if(_known)_known.delete(p); n++; }catch(e){ fails++; console.warn('v3 삭제 실패',p,e&&e.code); } };
   for(let i=0;i<ops.length;i+=20) await Promise.all(ops.slice(i,i+20).map(run));
   for(let i=0;i<dels.length;i+=20) await Promise.all(dels.slice(i,i+20).map(del));
+  if(_known)knownSave();
   _syncAt=Date.now(); _syncStat= fails? `전송 오류 ${fails}건` : '연결됨';
   if(fails&&tab!=='chat'){ toast('일부 저장이 서버에 반영되지 않았어요 ('+fails+'건)'); }
  }finally{ _pushing=false; if(_pushQueued){ _pushQueued=false; pushSyncNow(false); } }
@@ -691,7 +695,9 @@ function v3Subscribe(){
      if(what==='staff'){ _syncDenied=true; _syncStat='승인 대기'; if(_pendingUser){const e=_pendingUser;_pendingUser=null;clearTimeout(_authTO);_authForce=true;onFbLogin(e);} }
      return; }
    _syncStat='수신 오류: '+code; console.warn('v3 수신 오류',what,err); };
- const sub=(q,fn,what)=>{ _unsubs.push(onSnapshot(q,snap=>{ _hydrating=true; try{ fn(snap); }finally{ _hydrating=false; } v3AfterHydrate(what); },onErr(what))); };
+ const sub=(q,fn,what)=>{ _unsubs.push(onSnapshot(q,snap=>{ _hydrating=true; try{ fn(snap); }finally{ _hydrating=false; }
+   if(what!=='wages'&&what!=='signups'&&!(snap.metadata&&snap.metadata.fromCache)) _hyReady[what]=1;
+   v3AfterHydrate(what); },onErr(what))); };
  sub(doc(_fsDb,'config','store'),s=>hyDoc('config/store',s,d=>{ ({STORE_IP,STORE_IPS,WIFILOCK,WIFISTRICT,STORE_LOC,WAGE,PATTERN,HOL,HDEL,SCHED_TS,ROOMS,CATS,CATMT,CDEL,DELETED,ODEL,IDEL,PDEL}=Object.assign({STORE_IP,STORE_IPS,WIFILOCK,WIFISTRICT,STORE_LOC,WAGE,PATTERN,HOL,HDEL,SCHED_TS,ROOMS,CATS,CATMT,CDEL,DELETED,ODEL,IDEL,PDEL},d));
    try{ MAN=d.MANJ?JSON.parse(d.MANJ):null; }catch(e){} try{ REC=d.RECJ?JSON.parse(d.RECJ):null; }catch(e){}
    if(!ROOMS||!ROOMS.length)ROOMS=defaultRooms(); }),'config');
@@ -731,15 +737,32 @@ function hyDoc(path,snap,apply){ if(!snap.exists()){ delete _lastDocJSON[path]; 
  const data=snap.data()||{}, j=cj(clean(data));
  if(v3Dirty(path))return;                      // 내가 아직 안 보낸 편집이 있으면 이 조각은 지킨다
  apply(data); _lastDocJSON[path]=j; }
-function v3Dirty(path){ if(!(path in _lastDocJSON))return false; const p=v3Project()[path]; return p!==undefined && cj(p)!==_lastDocJSON[path]; }
+function v3Dirty(path){ if(!(path in _lastDocJSON))return false;
+ if(!v3CanWrite(path,isAdmin(curUser()),false))return false;   // 내가 쓸 수 없는 문서는 지킬 편집도 없다 → 서버 내용을 받는다
+ const p=v3Project()[path]; return p!==undefined && cj(p)!==_lastDocJSON[path]; }
+/* 서버에서 본 적 있는 문서 경로(폰에 보관). 앱을 껐다 켠 뒤에도 '서버에서 지워진 것'과 '아직 못 올린 새 글'을 구분한다.
+   이게 없으면 폰에 남아 있던 옛 사본이 '새 글'로 오인돼 서버에 다시 올라가 → 처리한 요청이 되살아났다. */
+let _known=null, _knownInit={};
+function knownLoad(){ if(_known)return; _known=new Set(); _knownInit={};
+ try{ const d=JSON.parse(localStorage.getItem(SKEY+'.known')); if(d&&Array.isArray(d.p)){ _known=new Set(d.p); _knownInit=d.i||{}; } }catch(e){} }
+function knownSave(){ try{ localStorage.setItem(SKEY+'.known',JSON.stringify({p:[..._known],i:_knownInit})); }catch(e){} }
+const V3_ID_COLLS=['staff','orders','inv','plans','board','attreq'];
 function hyColl(name,snap,getLocal,setLocal){ // id 컬렉션: 서버 문서 = 진실, 단 내 미전송 편집·신규는 유지
+ knownLoad();
  const local=getLocal()||[], byId={}; local.forEach(x=>{ if(x&&x.id)byId[docId(x.id)]=x; });
  const seen=new Set(), out=[];
- snap.forEach(d=>{ const path=name+'/'+d.id; seen.add(d.id); const data=d.data()||{}; const j=cj(clean(data));
+ const cached=!!(snap.metadata&&snap.metadata.fromCache);          // 오프라인 캐시 스냅샷은 '서버에 없다'의 근거가 못 됨
+ const first=!_knownInit[name];                                    // 이 폰에서 이 목록을 처음 맞춰봄(업데이트 직후 1회)
+ snap.forEach(d=>{ const path=name+'/'+d.id; seen.add(d.id); const data=d.data()||{}; const j=cj(clean(data)); _known.add(path);
+   if((path in _lastDocJSON)&&!byId[d.id])return;                  // 내가 방금 지웠고 삭제가 아직 서버에 안 감 → 되살리지 않는다
    if(v3Dirty(path)&&byId[d.id]){ out.push(byId[d.id]); } else { out.push(data); _lastDocJSON[path]=j; } });
  local.forEach(x=>{ if(!x||!x.id)return; const id=docId(x.id), path=name+'/'+id; if(seen.has(id))return;
-   if(path in _lastDocJSON){ delete _lastDocJSON[path]; }   // 서버에서 지워짐 → 나도 버림
-   else out.push(x); });                                     // 아직 서버에 안 올린 신규 → 유지
+   if(path in _lastDocJSON){ delete _lastDocJSON[path]; _known.delete(path); }   // 서버에서 지워짐 → 나도 버림
+   else if(cached) out.push(x);
+   else if(_known.has(path)){ _known.delete(path); }                 // 예전에 서버에 있던 것 → 그 사이 지워짐 → 버림(다시 올리지 않음)
+   else if(first&&(x.ts||0)<Date.now()-120000){ }                    // 첫 대조: 2분 넘은 폰 전용 사본은 옛 유령으로 보고 버림
+   else out.push(x); });                                             // 아직 서버에 안 올린 신규 → 유지
+ if(!cached)_knownInit[name]=1; knownSave();
  setLocal(out); }
 function hyMap(name,snap,idOf,apply,localIds){ // 키 문서(주·월·날짜·uid): 조각 단위 교체
  const seen=new Set();
@@ -748,7 +771,7 @@ function hyMap(name,snap,idOf,apply,localIds){ // 키 문서(주·월·날짜·u
  (localIds()||[]).forEach(id=>{ const path=name+'/'+id; if(seen.has(id))return;
    if(path in _lastDocJSON){ delete _lastDocJSON[path]; apply(id,null); } }); }
 function v3AfterHydrate(what){
- saveLocal();
+ saveLocal(); pushSync();   // 받기 전이라 미뤄 둔 내 변경이 있으면 이제 보낸다
  if(what==='staff'&&!CUR)return;
  const ae=document.activeElement;
  if(ae && ((ae.tagName==='INPUT'&&ae.type!=='date'&&ae.type!=='checkbox')||ae.tagName==='TEXTAREA'||ae.isContentEditable))return; // 입력 중엔 화면 갱신 미룸
@@ -3871,6 +3894,12 @@ function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDon
 /* ═══════════ 업데이트 내역 (새로고침 후 무엇이 바뀌었는지) ═══════════ */
 const VER_KEY='farmplanet.lastver';
 const CHANGELOG=[
+ {v:'3.0.3', d:'2026-10-08', items:[
+   '<b>일정 수정·삭제가 되돌아가던 문제 수정</b> — 다른 사람이 고치거나 지운 일정을, 앱을 막 켠 폰이 옛 내용으로 덮어쓰던 문제. 이제 누가 고쳐도 유지돼요',
+   '직원 폰에서 일정·발주·재고를 지운 뒤 매장 설정 변경이 그 폰에 안 들어오던 문제 수정' ]},
+ {v:'3.0.2', d:'2026-10-05', items:[
+   '<b>처리한 요청이 다시 뜨던 문제 수정</b> — 승인·거절한 근태 수정 요청, 삭제한 대타·시간조정 글·발주·일정이 다른 폰에서 앱을 켤 때 되살아나던 문제',
+   '이미 되살아나 있는 요청은 한 번만 더 처리하면 다시 뜨지 않아요' ]},
  {v:'3.0.0', d:'2026-09-25', items:[
    '<b>데이터 구조 전면 개편</b> — 한 덩어리 저장 → 화면별 문서 저장. 수정이 되돌아가거나 삭제가 되살아나는 문제의 뿌리를 없앴어요',
    '저장 크기가 수백 KB → 수 KB. 데이터·배터리 절감',
