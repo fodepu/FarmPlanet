@@ -497,7 +497,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='3.2.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='3.3.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -1035,7 +1035,7 @@ function toggleWifiStrict(){ if(!isAdmin(curUser())){toast('대표님·매니저
 function wifiDrop(ip){ if(WIFILOCK){toast('먼저 고정을 해제하세요');return;}
  STORE_IPS=(STORE_IPS||[]).filter(x=>x!==ip); save(); openWifiSetup(); toast('제외했어요'); }
 function toggleWifiLock(){ if(!STORE_IP && !WIFILOCK){toast('먼저 매장 IP를 등록하세요');return;} WIFILOCK=!WIFILOCK; save(); render(); openWifiSetup(); toast(WIFILOCK?'와이파이 설정을 고정했습니다 🔒':'고정을 해제했습니다 🔓'); }
-function logAtt(uid){ uid=uid||CUR; const a=ATT[uid]; if(a&&a.date){ a.mt=Date.now(); ATTLOG[uid]=ATTLOG[uid]||{}; ATTLOG[uid][a.date]={in:a.in,out:a.out,mt:a.mt,breaks:(a.breaks||[]).map(b=>({s:b.s,e:b.e}))}; } }
+function logAtt(uid){ uid=uid||CUR; const a=ATT[uid]; if(a&&a.date){ a.mt=Date.now(); ATTLOG[uid]=ATTLOG[uid]||{}; ATTLOG[uid][a.date]={in:a.in,out:a.out,mt:a.mt,breaks:(a.breaks||[]).map(b=>({s:b.s,e:b.e}))}; if(a.ed)ATTLOG[uid][a.date].ed=a.ed; } }
 function clockIn(){ const a=attToday(); if(a&&a.in&&!a.out){toast('이미 출근 상태예요');return;}
  wifiGate('출근',()=>{ ATT[CUR]={date:todayK(),in:Date.now(),out:null,breaks:[]}; logAtt(); pushAttDone('in'); render(); reAtt(); toast('출근했습니다 — 좋은 하루 되세요!'); },
    msg=>offerClockInReq(msg)); }
@@ -1101,6 +1101,7 @@ function attDayModal(iso){ const r=attRecFor(CUR,iso); if(!r||!r.in){toast('기�
    <div style="font-size:15px;margin:10px 0 6px"><b>출근</b> ${fmtT(r.in)} <span class="muted">·</span> <b>퇴근</b> ${r.out?fmtT(r.out):(live?'근무 중':'—')}</div>
    <div style="margin:6px 0 10px">${brk}</div>
    <div style="border-top:1px solid var(--edge);padding-top:9px;font-size:13.5px">근무 <b>${fmtDur(recWorkedMs(r,live))}</b> <span class="muted">·</span> 휴게 ${fmtDur(recBreakMs(r,end))}</div>
+   ${r.ed?`<div class="muted" style="font-size:11px;margin-top:6px">✎ ${escAttr(r.ed.name||'관리자')}님이 ${r.ed.ts?fmtDT2(r.ed.ts):''}에 수정한 기록이에요</div>`:''}
    <div class="row" style="margin-top:12px"><button class="btn sec" onclick="closeModal()">닫기</button>
      <button class="btn" onclick="reqAtt('${iso}')">${IC('swap','li sm')} 수정 요청</button></div>`); }
 function fmtHMS(ms){ const m=Math.max(0,Math.floor(ms/60000)); return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); } // 시:분 (초 미표시)
@@ -1163,24 +1164,96 @@ function sendAttReq(){ const date=_reqDate||todayK(); const a=attRecFor(CUR,date
    {tag:'attreq', onlyUids:adminUids(), url:deepLinkFor('att')});
  toast('관리자에게 수정 요청을 보냈습니다'); }
 function adminUids(){ return (STAFF||[]).filter(s=>!s.pending&&isAdmin(s)).map(s=>s.id); }
+/* 근태 기록 반영(요청 승인·관리자 직접 수정 공통). brks=null이면 휴게는 그대로 둔다 */
+function attApply(uid,date,ti,to,brks,ed){ const now=Date.now();
+ ATTLOG[uid]=ATTLOG[uid]||{}; const prev=ATTLOG[uid][date]||((ATT[uid]&&ATT[uid].date===date)?ATT[uid]:{})||{};
+ const B=(brks||prev.breaks||[]).map(b=>({s:b.s,e:b.e||null}));
+ const touchATT=(a)=>{ a.in=ti; a.out=to||null; a.breaks=B.map(b=>({s:b.s,e:b.e})); a.mt=now; if(ed)a.ed=ed; else delete a.ed; };
+ if(date===todayK()){ if(!ATT[uid]||ATT[uid].date!==date) ATT[uid]={date,in:ti,out:null,breaks:[]}; touchATT(ATT[uid]); }   // 오늘 기록만 실시간(ATT)에 반영
+ else if(ATT[uid]&&ATT[uid].date===date) touchATT(ATT[uid]);   // 지난 날짜는 ATT를 건드리지 않음(오늘 출근 기록 보호)
+ const rec={in:ti,out:to||null,mt:now,breaks:B}; if(ed)rec.ed=ed; ATTLOG[uid][date]=rec;
+ ATTREQ=(ATTREQ||[]).filter(r=>!(r.uid===uid&&r.date===date)); }   // 같은 날 대기 중 요청은 처리된 것으로
 function approveAttReq(id){ if(!isAdmin(curUser())){toast('승인은 대표님·매니저만 가능해요');return;}
  const r=(ATTREQ||[]).find(x=>x.id===id); if(!r)return;
- const brks=Array.isArray(r.breaks)? r.breaks.map(b=>({s:b.s,e:b.e||null})) : null;
- const now=Date.now();
- if(r.date===todayK()){        // 오늘 기록만 실시간(ATT)에 반영
-   let a=ATT[r.uid];
-   if(!a || a.date!==r.date){ a=ATT[r.uid]={date:r.date,in:r.in,out:r.out||null,breaks:[]}; }
-   else { a.in=r.in; a.out=r.out||null; }
-   if(brks) a.breaks=brks;
-   a.mt=now;
- } else if(ATT[r.uid] && ATT[r.uid].date===r.date){   // 과거지만 마침 ATT에 남아있다면 함께 정리
-   ATT[r.uid].in=r.in; ATT[r.uid].out=r.out||null; if(brks)ATT[r.uid].breaks=brks; ATT[r.uid].mt=now;
- }
- // 지난 날짜는 ATT를 건드리지 않고 일자기록만 고친다(오늘 출근 기록 보호)
- ATTLOG[r.uid]=ATTLOG[r.uid]||{};
- const prev=ATTLOG[r.uid][r.date]||{};
- ATTLOG[r.uid][r.date]={in:r.in,out:r.out||null,mt:now,breaks:(brks||prev.breaks||[]).map(b=>({s:b.s,e:b.e||null}))};
+ attApply(r.uid,r.date,r.in,r.out||null,Array.isArray(r.breaks)?r.breaks:null,null);
  ATTREQ=ATTREQ.filter(x=>x.id!==id); save(); render(); toast(r.name+'님 요청을 승인·반영했습니다'); }
+/* ── 관리자: 직원 근태 직접 수정 ── */
+let _ae=null;   // {uid,iso,from,lock}
+function aeRowHTML(b,i){ return `<div class="aebr" style="display:flex;gap:6px;align-items:center;margin-top:6px">
+   <input class="tsel aeBs" value="${b&&b.s?fmtT(b.s):''}" placeholder="12:00" autocomplete="off" inputmode="numeric" style="flex:1;min-width:0">
+   <span class="muted">~</span>
+   <input class="tsel aeBe" value="${b&&b.e?fmtT(b.e):''}" placeholder="13:00" autocomplete="off" inputmode="numeric" style="flex:1;min-width:0">
+   <button class="btn sec" style="flex:none;width:auto;padding:8px 11px" onclick="aeBrkDel(${i})" aria-label="휴게 삭제">✕</button></div>`; }
+function aeKeep(){ const q=c=>[...document.querySelectorAll('#aeBrks .'+c)].map(e=>e.value);
+ return {in:($('aeIn')||{}).value, out:($('aeOut')||{}).value, bs:q('aeBs'), be:q('aeBe'), date:($('aeDate')||{}).value}; }
+function aeBrkRows(bs,be){ const box=$('aeBrks'); if(!box)return;
+ const n=Math.max(bs.length,be.length);
+ box.innerHTML=n? Array.from({length:n},(_,i)=>aeRowHTML(null,i)).join('') : `<div class="muted" style="font-size:12px;padding:4px 0">휴게 없음</div>`;
+ const S=box.querySelectorAll('.aeBs'), E=box.querySelectorAll('.aeBe'); for(let i=0;i<n;i++){ S[i].value=bs[i]||''; E[i].value=be[i]||''; } }
+function aeBrkAdd(){ const k=aeKeep(); k.bs.push(''); k.be.push(''); aeBrkRows(k.bs,k.be); const S=document.querySelectorAll('#aeBrks .aeBs'); if(S.length)S[S.length-1].focus(); }
+function aeBrkDel(i){ const k=aeKeep(); k.bs.splice(i,1); k.be.splice(i,1); aeBrkRows(k.bs,k.be); }
+function admAttEdit(uid,iso,from){ if(!isAdmin(curUser())){toast('대표님·매니저만 고칠 수 있어요');return;}
+ const s=STAFF.find(x=>x.id===uid); if(!s)return;
+ const lock=!!iso; if(!iso) iso=(_ae&&_ae.uid===uid&&_ae.iso)||todayK();
+ _ae={uid,iso,from:from||(_ae&&_ae.from)||'',lock};
+ const r=attRecFor(uid,iso), has=!!(r&&r.in), dd=new Date(iso+'T00:00:00');
+ const plan=getRanges(uid+'|'+iso), planTxt=plan.length? plan.map(pr=>cT(pr.s)+'~'+cT(pr.e)).join(', ') : '';
+ let dateFld;
+ if(lock) dateFld=`<div style="font-size:14px;margin-bottom:8px"><b>${dd.getMonth()+1}월 ${dd.getDate()}일 (${WD[dd.getDay()]})</b>${planTxt?` <span class="muted" style="font-size:12px">· 예정 ${planTxt}</span>`:''}</div>`;
+ else { const base=new Date((admMonth||todayK())+'T00:00:00'), lo=dk(new Date(base.getFullYear(),base.getMonth(),1)), hiM=dk(new Date(base.getFullYear(),base.getMonth()+1,0)), hi=hiM<todayK()?hiM:todayK();
+   dateFld=`<div class="fld"><label>날짜</label><input id="aeDate" class="tsel" type="date" value="${iso}" min="${lo}" max="${hi}" style="width:100%;min-width:0;box-sizing:border-box" onchange="aeDateChange(this.value)"></div>
+     ${planTxt?`<div class="muted" style="font-size:11.5px;margin:4px 0 2px">예정 ${planTxt}</div>`:''}`; }
+ const ed=r&&r.ed? `<div class="muted" style="font-size:11px;margin-top:6px">마지막 관리자 수정 · ${escAttr(r.ed.name||'')} ${r.ed.ts?fmtDT2(r.ed.ts):''}</div>` : '';
+ openModal(`<h3>${escAttr(s.name)} · 근태 ${has?'수정':'추가'}</h3>
+   ${dateFld}
+   <div style="display:flex;gap:8px">
+     <div class="fld" style="flex:1;min-width:0"><label>출근</label><input id="aeIn" class="tsel" value="${has?fmtT(r.in):''}" placeholder="9:00" autocomplete="off" inputmode="numeric"></div>
+     <div class="fld" style="flex:1;min-width:0"><label>퇴근 <span class="muted">(비우면 근무 중)</span></label><input id="aeOut" class="tsel" value="${has&&r.out?fmtT(r.out):''}" placeholder="14:00" autocomplete="off" inputmode="numeric"></div></div>
+   <div class="fld" style="margin-top:10px"><label>휴게</label><div id="aeBrks"></div>
+     <button class="btn sec" style="margin-top:6px" onclick="aeBrkAdd()">+ 휴게 추가</button></div>
+   <div class="muted" style="font-size:11px;margin-top:8px">9 · 9:30 · 2(→오후 2시)처럼 적어도 돼요. 저장하면 ${escAttr(s.name)}님에게 알림이 가요.</div>${ed}
+   <div class="row" style="margin-top:12px">${has?`<button class="btn sec" style="color:var(--warn);border-color:#f0d9bd" onclick="admAttDelAsk()">기록 삭제</button>`:''}
+     <button class="btn sec" onclick="aeClose()">취소</button><button class="btn" onclick="admAttSave()">저장</button></div>`);
+ const B=has?(r.breaks||[]).filter(b=>b&&b.s):[]; aeBrkRows(B.map(b=>fmtT(b.s)),B.map(b=>b.e?fmtT(b.e):''));
+ setTimeout(()=>{const el=$('aeIn'); if(el&&!has)el.focus();},60); }
+function fmtDT2(ts){ const d=new Date(ts); return `${d.getMonth()+1}/${d.getDate()} ${fmtT(ts)}`; }
+function aeDateChange(v){ if(!_ae||!v)return; if(v>todayK()){toast('미래 날짜는 고를 수 없어요');return;} _ae.iso=v; _ae.lock=false; admAttEdit(_ae.uid,null,_ae.from); }
+function aeClose(){ const a=_ae; _ae=null; closeModal(); if(a&&a.from==='detail')admStaffDetail(a.uid); }
+function aeAttWritable(uid,iso){ if(!_v3)return true; const path='attlog/'+docId(uid)+'_'+monthKey(iso); return (path in _lastDocJSON)||inRange(path); }
+function admAttSave(){ if(!isAdmin(curUser())||!_ae)return; const {uid}=_ae; const k=aeKeep(); const iso=k.date||_ae.iso;
+ if(!iso||iso>todayK()){toast('날짜를 확인하세요');return;}
+ if(!aeAttWritable(uid,iso)){toast('4개월보다 오래된 기록은 여기서 고칠 수 없어요');return;}
+ const ti=parseTs(k.in,iso); if(!ti){toast('출근 시각 형식 확인 (예: 9 · 9:30)');return;}
+ let to=null; if(String(k.out||'').trim()){ to=parseTs(k.out,iso); if(!to){toast('퇴근 시각 형식 확인 (예: 2 · 14:00)');return;} if(to<=ti)to+=86400000; }
+ if(!to&&iso!==todayK()){toast('지난 날짜는 퇴근 시각이 필요해요');return;}
+ const fix=t=>(t&&t<ti&&to&&to>ti+43200000)?t+86400000:t;   // 자정 넘긴 근무의 새벽 휴게
+ const B=[];
+ for(let i=0;i<Math.max(k.bs.length,k.be.length);i++){ const a=String(k.bs[i]||'').trim(), b=String(k.be[i]||'').trim(); if(!a&&!b)continue;
+   const bs=fix(parseTs(a,iso)); if(!bs){toast(`휴게 ${i+1} 시작 시각을 확인하세요`);return;}
+   let be=null; if(b){ be=fix(parseTs(b,iso)); if(!be){toast(`휴게 ${i+1} 끝 시각을 확인하세요`);return;} if(be<=bs){toast(`휴게 ${i+1}: 끝이 시작보다 늦어야 해요`);return;} }
+   B.push({s:bs,e:be}); }
+ B.sort((x,y)=>x.s-y.s);
+ for(let i=0;i<B.length;i++){ const b=B[i];
+   if(b.s<ti){toast('휴게가 출근 전에 시작해요 — 시각을 확인하세요');return;}
+   if(to&&(b.e||b.s)>to){toast('휴게가 퇴근 뒤에 끝나요 — 시각을 확인하세요');return;}
+   if(!b.e&&(to||i<B.length-1)){toast('끝나지 않은 휴게는 지금 근무 중인 마지막 휴게만 가능해요');return;}
+   if(i&&B[i-1].e>b.s){toast('휴게 시간이 서로 겹쳐요');return;} }
+ const me=curUser(), r0=attRecFor(uid,iso), had=!!(r0&&r0.in), s=STAFF.find(x=>x.id===uid)||{};
+ attApply(uid,iso,ti,to,B,{by:CUR,name:(me&&me.name)||'',ts:Date.now()});
+ save(); const from=_ae.from; _ae=null; closeModal(); render(); if(from==='detail')admStaffDetail(uid);
+ const md=iso.slice(5).replace('-','/');
+ toast(`${s.name||''} ${md} 기록을 ${had?'수정':'추가'}했어요`);
+ if(uid!==CUR) pushSend('🕒 근태 기록 '+(had?'수정':'추가')+' · '+((me&&me.name)||'관리자'),
+   `${md} ${fmtT(ti)}~${to?fmtT(to):'근무 중'}${B.length?' · 휴게 '+B.map(b=>fmtT(b.s)+'~'+(b.e?fmtT(b.e):'')).join(', '):''}`,
+   {tag:'attedit', onlyUids:[uid], url:deepLinkFor('att')}); }
+function admAttDelAsk(){ if(!isAdmin(curUser())||!_ae)return; const {uid}=_ae, iso=($('aeDate')||{}).value||_ae.iso, s=STAFF.find(x=>x.id===uid)||{};
+ const keep=Object.assign({},_ae);
+ askConfirm(`<b>${escAttr(s.name||'')}</b>님의 ${iso.slice(5).replace('-','/')} 근태 기록을 삭제할까요?<br><span class="muted">근무시간 합계에서도 빠져요.</span>`,'삭제',()=>{
+   if(!aeAttWritable(uid,iso)){toast('4개월보다 오래된 기록은 여기서 고칠 수 없어요');return;}
+   if(ATT[uid]&&ATT[uid].date===iso) ATT[uid]={date:'',in:null,out:null,breaks:[],mt:Date.now()};
+   if(ATTLOG[uid]) delete ATTLOG[uid][iso];
+   ATTREQ=(ATTREQ||[]).filter(r=>!(r.uid===uid&&r.date===iso));
+   _ae=null; save(); render(); if(keep.from==='detail')admStaffDetail(uid); toast('기록을 삭제했어요'); }); }
 function rejectAttReq(id){ if(!isAdmin(curUser())){toast('대표님·매니저만 가능해요');return;}
  ATTREQ=(ATTREQ||[]).filter(x=>x.id!==id); save(); render(); toast('요청을 거절했습니다'); }
 /* ── 관리자: 직원 월별 근무 요약 ── */
@@ -1213,7 +1286,7 @@ function admSummaryHTML(){ if(!isAdmin(curUser()))return '';
    ${rows.length?`<div class="muted" style="font-size:10.5px;text-align:center;margin-top:6px">
      <span class="pill" style="background:#EDF1EA;color:var(--ink);font-size:9.5px">근무</span>
      <span class="pill" style="background:#EFF2ED;color:#7c8a80;font-size:9.5px;margin-left:3px">휴게</span></div>`:''}
-   <p class="muted" style="font-size:11px;margin-top:8px;text-align:center">이름을 누르면 날짜별 상세가 열려요</p></div>`; }
+   <p class="muted" style="font-size:11px;margin-top:8px;text-align:center">이름을 누르면 날짜별 상세 · 수정</p></div>`; }
 function admStaffDetail(uid){ if(!isAdmin(curUser()))return;
  const base=new Date((admMonth||todayK())+'T00:00:00'), y=base.getFullYear(), mo=base.getMonth();
  const s=STAFF.find(x=>x.id===uid); if(!s)return;
@@ -1226,8 +1299,8 @@ function admStaffDetail(uid){ if(!isAdmin(curUser()))return;
    const wpc=tot? Math.round(min/tot*100) : 100;
    const bar=`<div style="display:flex;height:6px;border-radius:3px;overflow:hidden;background:#EDF1EA;margin-top:4px;width:100%">
      <div style="width:${wpc}%;background:${s.c}"></div><div style="flex:1;background:#C3CDC6"></div></div>`;
-   return `<div class="lrow" style="flex-wrap:wrap">
-     <span style="flex:1">${md} <span class="muted" style="font-size:11px">${fmtT(r.in)}~${r.out?fmtT(r.out):'근무중'}</span></span>
+   return `<div class="lrow" style="flex-wrap:wrap;cursor:pointer" onclick="admAttEdit('${uid}','${iso}','detail')">
+     <span style="flex:1">${md} <span class="muted" style="font-size:11px">${fmtT(r.in)}~${r.out?fmtT(r.out):'근무중'}</span>${r.ed?' <span class="muted" style="font-size:10px">✎</span>':''}</span>
      <b>${Math.floor(min/60)}시간 ${min%60}분${live?' +':''}${bMin?`<span style="color:#8b978f;font-weight:700;font-size:11px"> +${bMin}분</span>`:''}</b>
      ${bar}</div>`;
  }).filter(Boolean).join('');
@@ -1238,7 +1311,9 @@ function admStaffDetail(uid){ if(!isAdmin(curUser()))return;
    <div class="muted" style="font-size:10.5px;text-align:center;margin-top:8px">
      <span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${s.c};vertical-align:-1px"></span> 근무
      <span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#C3CDC6;margin-left:8px;vertical-align:-1px"></span> 휴게</div>
-   <button class="btn sec" style="margin-top:12px" onclick="closeModal()">닫기</button>`); }
+   <div class="muted" style="font-size:10.5px;text-align:center;margin-top:4px">날짜를 누르면 출퇴근·휴게를 고칠 수 있어요 · ✎ 관리자 수정</div>
+   <div class="row" style="margin-top:12px"><button class="btn sec" onclick="closeModal()">닫기</button>
+     <button class="btn" onclick="_ae=null;admAttEdit('${uid}',null,'detail')">+ 기록 추가</button></div>`); }
 function attLiveStatus(uid){ // 오늘 기준 'work'|'break'|null
  const a=(ATT[uid]&&ATT[uid].date===todayK())?ATT[uid]:null;
  if(!a||!a.in||a.out)return null;
@@ -1322,14 +1397,14 @@ function dutyTimelineHTML(){
      : onBreak? '<span style="color:#8a6d29;font-weight:800">휴게중</span>'
      : live? '<span style="color:#639922;font-weight:800">근무중</span>'
      : '<span style="color:var(--sub)">퇴근</span>';
-   return `<div class="wcol">
+   return `<div class="wcol" style="cursor:pointer" onclick="admAttEdit('${s.id}','${iso}','timeline')">
      <div class="wch" style="font-size:11.5px;padding:4px 0">${escAttr(s.name)}<span style="display:block;font-weight:400;font-size:9.5px;color:var(--sub)">${r?fmtDurShort(recWorkedMs(r,live)):'미출근'}</span></div>
      <div class="wbody">${planned}${actual}${brk}</div>
      <div class="wcov" style="font-size:10.5px;padding:3px 0">${state}${sum}</div>
    </div>`; }).join('');
  return `<div class="card" style="margin-top:12px"><h3>${IC('clock','li sm')}근무 타임라인 <span class="muted" style="font-size:11px;font-weight:600">· ${rows.length}명</span></h3>${nav}
    <div class="wcal" style="grid-template-columns:26px repeat(${rows.length},1fr)"><div class="wtime">${times}</div>${cols}</div>
-   <div class="muted" style="font-size:10.5px;text-align:center;margin-top:8px">점선 = 시간표 예정 · 색 = 실제 근무 · 흰 칸 = 휴게</div></div>`;
+   <div class="muted" style="font-size:10.5px;text-align:center;margin-top:8px">점선 = 시간표 예정 · 색 = 실제 근무 · 흰 칸 = 휴게<br>사람을 누르면 그날 출퇴근·휴게를 고칠 수 있어요</div></div>`;
 }
 function screenAtt(){
  const admin=isAdmin(curUser()), a=attToday(), st=attStatus(a);
@@ -3948,6 +4023,10 @@ function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDon
 /* ═══════════ 업데이트 내역 (새로고침 후 무엇이 바뀌었는지) ═══════════ */
 const VER_KEY='farmplanet.lastver';
 const CHANGELOG=[
+ {v:'3.3.0', d:'2026-11-03', items:[
+   '<b>관리자 근태 직접 수정</b> — 근태 화면 근무 타임라인에서 사람을 누르거나, 직원 근무 기록에서 이름 → 날짜를 누르면 출근·퇴근·휴게를 바로 고칠 수 있어요',
+   '출근을 안 눌렀던 날은 <b>+ 기록 추가</b>로 넣고, 잘못된 기록은 삭제할 수 있어요',
+   '고치면 그 직원에게 알림이 가고, 기록에 ✎ 관리자 수정 표시가 남아요' ]},
  {v:'3.2.0', d:'2026-10-08', items:[
    '<b>입고 단위 자동 환산</b> — 배송 수량에 1.8kg·30캔·2판처럼 적어도 재고 단위로 바꿔 넣어요 (레몬 1.8kg=1박스, 토닉워터 30캔=1박스, 계란 1판=30구 등)',
    '모르는 단위는 한 번만 물어보고 기억해요. 적채·참타리·커피원두 같은 다른 이름도 알아봐요',
