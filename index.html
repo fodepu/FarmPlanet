@@ -497,7 +497,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='3.3.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='3.6.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -771,6 +771,7 @@ function hyMap(name,snap,idOf,apply,localIds){ // 키 문서(주·월·날짜·u
  (localIds()||[]).forEach(id=>{ const path=name+'/'+id; if(seen.has(id))return;
    if(path in _lastDocJSON){ delete _lastDocJSON[path]; apply(id,null); } }); }
 function v3AfterHydrate(what){
+ if(what==='users')badgeSync();   // 다른 기기에서 읽은 것도 숫자에 반영
  if(what==='inv'&&_hyReady.inv)invHistBackfill();
  saveLocal(); pushSync();   // 받기 전이라 미뤄 둔 내 변경이 있으면 이제 보낸다
  if(what==='staff'&&!CUR)return;
@@ -3189,7 +3190,7 @@ function invLogBody(){
 }
 /* ═══════════ 채팅 (방 구조 · rooms/{방}/messages 서브컬렉션) ═══════════ */
 function chatScroll(){ const el=$('chatList'); if(el)el.scrollTop=el.scrollHeight; }
-function chatAfterRender(){ chatMarkRead(); renderPinBar(); renderPhotoBar();
+function chatAfterRender(){ chatMarkRead(); renderPinBar(); renderPhotoBar(); renderComposeBar();
  if(chatQ!==null && chatHits.length){ chatRepaint(); chatScrollTo(chatHits[chatHitI]); }
  else { if(chatQ!==null)chatRepaint(); chatScroll(); } }
 function defaultRooms(){ return [{id:'all',name:'전체',all:true,ts:0,ord:0}]; }
@@ -3226,7 +3227,20 @@ function chatUnreadTotal(){ return roomList().reduce((n,r)=>n+roomUnread(r.id),0
 function chatMarkRead(){ if(!CUR||!chatRoom)return; const ms=roomMsgs(chatRoom); if(!ms.length)return;
  const last=ms[ms.length-1].cts||0;
  READS[CUR]=READS[CUR]||{}; READS[CUR].rooms=READS[CUR].rooms||{};
- if((READS[CUR].rooms[chatRoom]||0)<last){ READS[CUR].rooms[chatRoom]=last; save(); } }
+ if((READS[CUR].rooms[chatRoom]||0)<last){ READS[CUR].rooms[chatRoom]=last; save(); badgeSync(); } }
+/* ── 앱 아이콘 숫자(배지) = 안 읽은 채팅 수. 읽으면 줄고, 안드로이드는 읽은 방의 알림을 지워 숫자/점을 줄인다 ── */
+let _badgeT=null, _chatLoaded={};
+function badgeCount(){ return CUR? chatUnreadTotal() : 0; }
+function badgeReady(){ const ids=roomList().map(r=>r.id).slice(0,12); return ids.length>0 && ids.every(id=>_chatLoaded[id]); }
+function badgeSync(){ clearTimeout(_badgeT); _badgeT=setTimeout(badgeSyncNow,250); }
+function notiRoom(tag){ const t=String(tag||''); let m=t.match(/^chat-(.+)$/); if(m)return m[1]; m=t.match(/^mention-([^-]+)-/); return m?m[1]:null; }
+async function badgeSyncNow(){ if(!CUR||!badgeReady())return; const n=badgeCount(); _badgeLast=n;
+ try{ if(navigator.setAppBadge){ if(n>0) await navigator.setAppBadge(n); else await navigator.clearAppBadge(); } }catch(e){}
+ kvSet('badge',n);
+ try{ if('serviceWorker' in navigator&&navigator.serviceWorker.getRegistration){ const reg=await navigator.serviceWorker.getRegistration();
+   if(reg&&reg.getNotifications){ const ns=await reg.getNotifications(); ns.forEach(x=>{ const rid=notiRoom(x.tag); if(rid&&roomUnread(rid)===0)x.close(); }); } } }catch(e){} }
+let _badgeLast=null;
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible')badgeSync(); });
 function msgUnreadCnt(m,rid){ const mem=roomMembers(roomById(rid)); let n=0;
  mem.forEach(id=>{ if(id===m.uid)return; if(roomRead(id,rid)<(m.cts||0))n++; }); return n; }
 
@@ -3242,8 +3256,9 @@ function maybeChatSubscribe(){
    _roomUnsub[rid]=onSnapshot(query(collection(_fsDb,'rooms',rid,'messages'),orderBy('cts','desc'),limit(CHAT_LIMIT)),
     (snap)=>{ _chatErr='';
       const arr=[]; snap.forEach(d=>{const v=d.data()||{};
-        arr.push({id:d.id,uid:v.uid,name:v.name||'',text:v.text||'',cts:v.cts||0,nep:v.nep||{},sook:v.sook||{},edited:!!v.edited,img:v.img||'',pin:!!v.pin});});
-      CHATR[rid]=arr.reverse();
+        arr.push({id:d.id,uid:v.uid,name:v.name||'',text:v.text||'',cts:v.cts||0,nep:v.nep||{},sook:v.sook||{},edited:!!v.edited,img:v.img||'',pin:!!v.pin,
+          rp:(v.rp&&v.rp.id)?{id:String(v.rp.id),name:String(v.rp.name||''),text:String(v.rp.text||'')}:null, mn:Array.isArray(v.mn)?v.mn:[], imp:!!v.imp});});
+      CHATR[rid]=arr.reverse(); _chatLoaded[rid]=1; badgeSync();
       if(tab==='chat'&&chatRoom===rid){ const el=$('chatList'); if(el){ el.innerHTML=chatListHTML(); chatMarkRead(); renderPinBar(); chatScroll(); } }
       else { const ae=document.activeElement; if(!(ae&&(ae.tagName==='INPUT'||ae.tagName==='TEXTAREA'||ae.isContentEditable)))render(); }
     },
@@ -3258,7 +3273,7 @@ function chatPurgeOldPhotos(){ // 90일 지난 사진은 이미지 데이터만 
    if(!m.img||(m.cts||0)>cut||m.pin)return;
    m.img=''; m.text=m.text||'(오래된 사진은 정리되었어요)';
    updateDoc(doc(_fsDb,'rooms',chatRoom,'messages',m.id),{img:'',text:m.text}).catch(()=>{}); }); }
-function chatUnsubAll(){ Object.keys(_roomUnsub).forEach(id=>{try{_roomUnsub[id]();}catch(e){}}); _roomUnsub={}; CHATR={}; }
+function chatUnsubAll(){ Object.keys(_roomUnsub).forEach(id=>{try{_roomUnsub[id]();}catch(e){}}); _roomUnsub={}; CHATR={}; _chatLoaded={}; }
 
 /* ═══════════ 방 목록 화면 ═══════════ */
 function screenChatRooms(){
@@ -3275,7 +3290,7 @@ function screenChatRooms(){
        <div style="width:40px;height:40px;border-radius:13px;flex:none;background:${r.all?'#DCF0E1':'#EDF1EA'};display:flex;align-items:center;justify-content:center">${IC(r.all?'bell':'chat','li sm')}</div>
        <div style="flex:1;min-width:0">
          <div style="display:flex;align-items:center;gap:6px">
-           <b style="font-size:14px;color:var(--ink)">${escAttr(r.name)}</b>
+           <b style="font-size:14px;color:var(--ink)">${escAttr(r.name)}</b>${roomMuted(r.id)?'<span class="muted" style="font-size:11px" title="알림 꺼짐">🔕</span>':''}
            <span class="muted" style="font-size:10.5px">${mem}명</span></div>
          <div class="muted" style="font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px">${prev}</div></div>
        <div style="flex:none;text-align:right">
@@ -3288,8 +3303,8 @@ function chatWhenShort(ts){ if(!ts)return ''; const d=new Date(ts);
  if(dk(d)===todayK())return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
  return `${d.getMonth()+1}/${d.getDate()}`; }
 
-function openRoom(id){ chatQ=null; chatHits=[]; chatHitI=0; _pinOpen=false; chatRoom=id; render(); }
-function closeRoom(){ chatRoom=null; _pendingPhoto=null; _photoRoom=null; chatQ=null; chatHits=[]; chatHitI=0; render(); }
+function openRoom(id){ _replyTo=null; _impNext=false; chatQ=null; chatHits=[]; chatHitI=0; _pinOpen=false; chatRoom=id; render(); }
+function closeRoom(){ _replyTo=null; _impNext=false; chatRoom=null; _pendingPhoto=null; _photoRoom=null; chatQ=null; chatHits=[]; chatHitI=0; render(); }
 
 /* ── 방 만들기 / 초대 (관리자·매니저) ── */
 function newRoomModal(){
@@ -3331,6 +3346,8 @@ function roomInfoModal(){
     <button class="btn sec" style="width:100%;margin-top:8px" onclick="inviteMembers()">선택한 사람 초대</button>`:'';
  openModal(`<h3 style="color:var(--ink)">${escAttr(r.name)}</h3>
    <div class="muted" style="font-size:11.5px;margin:6px 0 8px">${r.all?'승인된 직원 전원이 자동으로 참여합니다':'참여 중인 사람 '+mem.length+'명'}</div>
+   <label style="display:flex;align-items:center;gap:9px;margin:4px 0 2px;font-size:13.5px;font-weight:700;color:var(--ink)"><input type="checkbox" ${roomMuted(r.id)?'':'checked'} onchange="setRoomMute('${r.id}',!this.checked)" style="width:18px;height:18px"> 이 방 알림 받기</label>
+   <div class="muted" style="font-size:11px;margin:0 0 10px 27px">꺼도 @나를 부른 메시지와 확인 요청은 와요</div>
    <div style="max-height:230px;overflow-y:auto">${list}</div>${inv}
    <div class="row" style="margin-top:14px">
      ${(!r.all&&isAdmin(curUser()))?`<button class="btn sec" style="color:var(--warn)" onclick="deleteRoom()">방 삭제</button>`:''}
@@ -3376,7 +3393,7 @@ function chatListHTML(){
    const tm=String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0');
    const un=msgUnreadCnt(m,chatRoom);
    const rad = mine ? (grpPrev?'14px':'14px 4px 14px 14px') : (grpPrev?'14px':'4px 14px 14px 14px');
-   const reactChipsHtml = REACTS.map(([k,lbl])=>{
+   const reactChipsHtml = REACTS.filter(([k])=>!(m.imp&&k==='sook')).map(([k,lbl])=>{
      const ids=Object.keys(m[k]||{}).filter(x=>m[k][x]); if(!ids.length)return '';
      const mineOn=ids.indexOf(CUR)!==-1;
      const names=ids.map(id=>{const s=chatStaff(id);return s?s.name:id;}).join(', ');
@@ -3391,9 +3408,9 @@ function chatListHTML(){
      <div style="max-width:74%;display:flex;flex-direction:column;align-items:${mine?'flex-end':'flex-start'}">
        ${(!mine&&!grpPrev)?`<div style="font-size:11px;font-weight:700;color:${nameColor(m.uid)};margin:1px 0 4px 2px">${escAttr(m.name)}</div>`:''}
        <div style="display:flex;align-items:flex-end;gap:4px;${mine?'flex-direction:row-reverse':''}">
-         <div id="msg_${m.id}" ontouchstart="reactHoldStart('${m.id}',event)" ontouchend="reactHoldEnd()" ontouchmove="reactHoldEnd()" oncontextmenu="event.preventDefault();openReactMenu('${m.id}')" style="background:${m.img?'transparent':(mine?'#DCF0E1':'#fff')};border:${m.img?'none':'1px solid '+(mine?'#c6e5cf':'#E5EAE3')};border-radius:${rad};padding:${m.img?'0':'8px 11px'};${_hitCur===m.id?'box-shadow:0 0 0 2px #E9A33A;':''}font-size:13.5px;line-height:1.45;color:var(--ink);white-space:pre-wrap;word-break:break-word;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none">${m.pin?'<span style="display:inline-block;font-size:9.5px;font-weight:800;color:var(--deep);background:#E7F0E9;border-radius:10px;padding:1px 6px;margin-bottom:4px">공지</span><br>':''}${m.img?`<img src="${m.img}" onclick="chatImgOpen('${m.id}')" style="max-width:200px;width:100%;border-radius:12px;display:block">${m.text?`<div style="margin-top:5px;padding:7px 10px;background:${mine?'#DCF0E1':'#fff'};border:1px solid ${mine?'#c6e5cf':'#E5EAE3'};border-radius:12px">${hiLite(m.text,_hitQ)}</div>`:''}`:hiLite(m.text,_hitQ)}</div>
+         <div id="msg_${m.id}" ontouchstart="reactHoldStart('${m.id}',event)" ontouchend="reactHoldEnd()" ontouchmove="reactHoldEnd()" oncontextmenu="event.preventDefault();openReactMenu('${m.id}')" style="background:${m.img?'transparent':(mine?'#DCF0E1':'#fff')};border:${m.img?'none':'1px solid '+(mine?'#c6e5cf':'#E5EAE3')};border-radius:${rad};padding:${m.img?'0':'8px 11px'};${_hitCur===m.id?'box-shadow:0 0 0 2px #E9A33A;':''}font-size:13.5px;line-height:1.45;color:var(--ink);white-space:pre-wrap;word-break:break-word;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none">${m.imp?'<span style="display:inline-block;font-size:9.5px;font-weight:800;color:#8a5a1c;background:#FFE7C9;border-radius:10px;padding:1px 6px;margin-bottom:4px;margin-right:4px">확인 필요</span>':''}${m.pin?'<span style="display:inline-block;font-size:9.5px;font-weight:800;color:var(--deep);background:#E7F0E9;border-radius:10px;padding:1px 6px;margin-bottom:4px">공지</span><br>':''}${m.img?`<img src="${m.img}" onclick="chatImgOpen('${m.id}')" style="max-width:200px;width:100%;border-radius:12px;display:block">${m.text?`<div style="margin-top:5px;padding:7px 10px;background:${mine?'#DCF0E1':'#fff'};border:1px solid ${mine?'#c6e5cf':'#E5EAE3'};border-radius:12px">${chatRichText(m)}</div>`:''}`:chatQuoteHTML(m)+chatRichText(m)}</div>
          ${meta}</div>
-       ${nepChip}</div></div>`; });
+       ${nepChip}${impHTML(m,mine)}</div></div>`; });
  return out; }
 
 function screenChat(){
@@ -3415,10 +3432,13 @@ function screenChat(){
    <div id="pinBar" style="flex:none;display:none"></div>
    <div id="chatList" style="flex:1;min-height:0;overflow-y:auto;background:#F1F4F0;padding:8px 12px 14px">${chatListHTML()}</div>
    <div id="photoBar" style="flex:none;display:none"></div>
+   <div id="composeBar" style="flex:none;display:none"></div>
+   <div id="mentionBar" style="flex:none;display:none"></div>
    <div style="flex:none;background:#fff;border-top:1px solid var(--edge);padding:8px 12px">
      <div style="display:flex;gap:8px;align-items:center">
        <div class="chatin" id="chatText" contenteditable="true" role="textbox" aria-label="메시지 입력" data-ph="메시지 입력" enterkeyhint="enter"
-            oninput="chatInputTrim(this)" onkeydown="chatKey(event)"></div>
+            oninput="chatInputTrim(this);chatMentionCheck(this)" onkeydown="chatKey(event)"></div>
+       ${canMakeRoom()?`<button class="sfab" id="impBtn" style="background:${_impNext?'#F6C48A':'#EDF1EA'};color:${_impNext?'#6b3f0c':'var(--deep)'}" onclick="toggleImp()" aria-label="확인 요청으로 보내기" title="확인 요청">${IC('bell','li sm')}</button>`:''}
        <button class="sfab" style="background:#EDF1EA;color:var(--deep)" onclick="chatPickPhoto()" aria-label="사진 보내기">${IC('plus','li sm')}</button>
        <button class="sfab" onpointerdown="sendChatTap(event)" onclick="sendChatTap(event)" aria-label="전송">${IC('up','li sm')}</button></div>
 
@@ -3454,14 +3474,93 @@ function sendChat(){
  if(!_fbUid){toast('로그인 후 이용할 수 있어요');return;}
  const {collection,addDoc,serverTimestamp}=_chatApi;
  const r=roomById(chatRoom);
- const payload={auth:_fbUid,uid:CUR,name:(curUser()&&curUser().name)||'',text:txt.slice(0,1000),cts:Date.now(),ts:serverTimestamp(),nep:{},sook:{}};
- if(el)el.textContent='';
- addDoc(collection(_fsDb,'rooms',chatRoom,'messages'),payload)
-   .then(()=>pushSend(`${payload.name||'FarmPlanet'} · ${r?r.name:''}`,txt.slice(0,120),
-     {tag:'chat-'+chatRoom, onlyUids:roomMembers(r), url:deepLinkFor('chat','room='+chatRoom)}))
-   .catch(e=>{ toast('전송 실패: '+((e&&(e.code||e.message))||e)); if(el)el.textContent=txt; }); }
+ const rid=chatRoom, payload={auth:_fbUid,uid:CUR,name:(curUser()&&curUser().name)||'',text:txt.slice(0,1000),cts:Date.now(),ts:serverTimestamp(),nep:{},sook:{}};
+ const mn=chatMentions(payload.text,rid), rp=_replyTo, imp=_impNext&&canMakeRoom();
+ if(rp)payload.rp=rp; if(mn.length)payload.mn=mn; if(imp)payload.imp=true;
+ if(el)el.textContent=''; _replyTo=null; _impNext=false; renderComposeBar(); chatMentionCheck(el);
+ addDoc(collection(_fsDb,'rooms',rid,'messages'),payload)
+   .then(ref=>chatPushAfterSend(rid,r,payload,ref&&ref.id))
+   .catch(e=>{ toast('전송 실패: '+((e&&(e.code||e.message))||e)); if(el)el.textContent=txt; _replyTo=rp; _impNext=imp; renderComposeBar(); }); }
+function chatPushAfterSend(rid,r,payload,msgId){ const nm=payload.name||'FarmPlanet', rn=r?r.name:'', body=(payload.text||'사진을 보냈어요').slice(0,120);
+ const url=deepLinkFor('chat','room='+rid), mem=roomMembers(r), mn=payload.mn||[];
+ if(payload.imp){
+   pushSend(`❗ 확인 요청 · ${nm} · ${rn}`,body,{tag:'chat-'+rid,onlyUids:mem,room:rid,force:true,url});
+   if(msgId) pushApi('/remind',{uid:CUR,id:msgId,room:rid,title:`❗ 아직 확인 안 했어요 · ${nm}`,body,url,uids:mem.filter(x=>x!==CUR),at:Date.now()+2*3600000});
+   return; }
+ const others=mem.filter(x=>mn.indexOf(x)===-1);
+ if(others.length) pushSend(`${nm} · ${rn}`,body,{tag:'chat-'+rid,onlyUids:others,room:rid,url});
+ if(mn.length) pushSend(`@ ${nm}님이 불렀어요 · ${rn}`,body,{tag:'mention-'+rid+'-'+(msgId||Date.now()),onlyUids:mn,room:rid,force:true,url}); }
 
 const REACTS=[['nep','넵'],['sook','숙지']]; // 확인(넵)·숙지 리액션
+/* ── 답장 · @멘션 · 확인 요청 ── */
+let _replyTo=null, _impNext=false;
+function caretEnd(el){ try{ const r=document.createRange(), sel=window.getSelection(); r.selectNodeContents(el); r.collapse(false); sel.removeAllRanges(); sel.addRange(r); }catch(e){} }
+function renderComposeBar(){ const bar=$('composeBar'); if(!bar)return; const parts=[];
+ if(_replyTo) parts.push(`<div style="display:flex;align-items:center;gap:8px;padding:7px 12px;background:#fff;border-top:1px solid var(--edge)">
+   <div style="flex:1;min-width:0;border-left:3px solid #8FD1A6;padding-left:8px"><div style="font-size:11.5px;font-weight:800;color:var(--deep)">${escAttr(_replyTo.name)}님에게 답장</div>
+   <div class="muted" style="font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escAttr(_replyTo.text)}</div></div>
+   <button class="cam" style="flex:none" onclick="cancelReply()">✕</button></div>`);
+ if(_impNext) parts.push(`<div style="display:flex;align-items:center;gap:8px;padding:7px 12px;background:#FFF6EA;border-top:1px solid #f3dcc0">
+   <div style="flex:1;min-width:0;font-size:12px;color:#8a5a1c"><b>확인 요청</b>으로 보내요 · 받은 사람에게 '확인했어요' 버튼이 떠요</div>
+   <button class="cam" style="flex:none" onclick="toggleImp()">✕</button></div>`);
+ bar.innerHTML=parts.join(''); bar.style.display=parts.length?'':'none';
+ const b=$('impBtn'); if(b){ b.style.background=_impNext?'#F6C48A':'#EDF1EA'; b.style.color=_impNext?'#6b3f0c':'var(--deep)'; } }
+function startReply(id){ const m=roomMsgs(chatRoom).find(x=>x.id===id); if(!m)return;
+ _replyTo={id:m.id,name:m.name||'',text:(m.text||(m.img?'사진':'')).replace(/\s+/g,' ').slice(0,80)}; renderComposeBar();
+ const el=$('chatText'); if(el){ el.focus(); caretEnd(el); } }
+function cancelReply(){ _replyTo=null; renderComposeBar(); }
+function toggleImp(){ if(!canMakeRoom())return; _impNext=!_impNext; renderComposeBar(); }
+function chatMentionCheck(el){ const bar=$('mentionBar'); if(!bar)return;
+ const t=chatInputText(el), m=t.match(/(^|\s)@([^\s@]{0,10})$/);
+ const hide=()=>{ bar.style.display='none'; bar.innerHTML=''; };
+ if(!m||!chatRoom)return hide();
+ const q=m[2], list=roomMembers(roomById(chatRoom)).filter(id=>id!==CUR).map(chatStaff).filter(Boolean).filter(s=>!q||(s.name||'').includes(q));
+ if(!list.length)return hide();
+ bar.innerHTML=`<div style="display:flex;gap:6px;overflow-x:auto;padding:7px 12px;background:#fff;border-top:1px solid var(--edge)">${list.map(s=>
+   `<button class="cam" style="flex:none" onpointerdown="event.preventDefault();chatMentionPick('${s.id}')" onclick="chatMentionPick('${s.id}')">@${escAttr(s.name)}</button>`).join('')}</div>`;
+ bar.style.display=''; }
+function chatMentionPick(uid){ const el=$('chatText'), s=chatStaff(uid); if(!el||!s)return;
+ const t=chatInputText(el); if(t.endsWith('@'+s.name+' '))return;      // 같은 탭이 두 번 들어온 경우
+ const m=t.match(/@([^\s@]{0,10})$/), base=m? t.slice(0,t.length-m[0].length) : t;
+ el.textContent=base+'@'+s.name+' '; el.focus(); caretEnd(el); chatMentionCheck(el); }
+function chatMentions(txt,rid){ const out=[];
+ roomMembers(roomById(rid)).map(chatStaff).filter(Boolean).sort((a,b)=>(b.name||'').length-(a.name||'').length)
+   .forEach(s=>{ if(s.id!==CUR&&s.name&&txt.indexOf('@'+s.name)!==-1&&out.indexOf(s.id)===-1)out.push(s.id); });
+ return out; }
+function chatRichText(m){ let h=hiLite(m.text,_hitQ);
+ (m.mn||[]).forEach(id=>{ const s=chatStaff(id); if(!s||!s.name)return; const tag='@'+escAttr(s.name);
+   h=h.split(tag).join(`<b style="color:${id===CUR?'#9a5b10':'var(--deep)'};${id===CUR?'background:#FFEBC7;border-radius:4px;padding:0 2px':''}">${tag}</b>`); });
+ return h; }
+function chatQuoteHTML(m){ if(!m.rp)return '';
+ return `<div onclick="event.stopPropagation();chatJump('${escAttr(m.rp.id)}')" style="cursor:pointer;border-left:3px solid #9fd3ae;padding:1px 0 1px 7px;margin:0 0 6px;font-size:11.5px;color:#5d6b60">
+   <b style="font-size:11px">${escAttr(m.rp.name)}</b><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px">${escAttr(m.rp.text)}</div></div>`; }
+function chatJump(id){ const el=document.getElementById('msg_'+id); if(!el){toast('오래돼서 이 화면엔 없는 메시지예요');return;}
+ el.scrollIntoView({block:'center'}); el.style.boxShadow='0 0 0 2px #E9A33A'; setTimeout(()=>{el.style.boxShadow='';},1400); }
+function impStat(m,rid){ const mem=roomMembers(roomById(rid)).filter(id=>id!==m.uid);
+ const ok=mem.filter(id=>m.sook&&m.sook[id]); return {mem,ok}; }
+function impHTML(m,mine){ if(!m.imp)return '';
+ const {mem,ok}=impStat(m,chatRoom), me=!mine&&mem.indexOf(CUR)!==-1, done=!!(m.sook&&m.sook[CUR]);
+ const btn= me? (done? `<span style="font-size:11px;font-weight:800;color:var(--deep)">✓ 확인함</span>`
+                     : `<button class="cam" style="background:#F6C48A;color:#5a3408;border:none;font-weight:800" onclick="ackImp('${m.id}')">확인했어요</button>`) : '';
+ const cnt=(mine||isAdmin(curUser()))? `<span onclick="impWho('${m.id}')" style="cursor:pointer;font-size:10.5px;font-weight:800;color:#8a5a1c;background:#FFF1DE;border-radius:20px;padding:2px 8px">확인 ${ok.length}/${mem.length}</span>` : '';
+ return (btn||cnt)? `<div style="margin-top:4px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">${btn}${cnt}</div>` : ''; }
+function ackImp(id){ const m=roomMsgs(chatRoom).find(x=>x.id===id); if(!m||(m.sook&&m.sook[CUR]))return;
+ toggleReact(id,'sook'); pushApi('/ack',{id,uid:CUR}); }
+function impWho(id){ const m=roomMsgs(chatRoom).find(x=>x.id===id); if(!m)return; const {mem,ok}=impStat(m,chatRoom);
+ const nm=a=>a.map(x=>escAttr((chatStaff(x)||{name:x}).name)).join(', ')||'—';
+ openModal(`<h3 style="color:var(--ink)">확인 요청</h3>
+   <div style="font-size:13px;line-height:1.8"><b style="color:var(--deep)">확인 ${ok.length}</b> · ${nm(ok)}<br><b style="color:#b06a1c">아직 ${mem.length-ok.length}</b> · ${nm(mem.filter(x=>ok.indexOf(x)===-1))}</div>
+   <div class="muted" style="font-size:11px;margin-top:8px">2시간 안에 확인 안 한 사람이 근무 중이면 한 번 더 알림이 가요</div>
+   <button class="btn sec" style="margin-top:12px" onclick="closeModal()">닫기</button>`); }
+
+/* ── 방 알림 끄기 (멘션·확인 요청은 계속 옴) ── */
+function roomMuted(rid){ const r=READS[CUR]; return !!(r&&r.mute&&r.mute[rid]); }
+function mutedRooms(){ const r=READS[CUR]; return r&&r.mute? Object.keys(r.mute).filter(k=>r.mute[k]) : []; }
+async function setRoomMute(rid,on){ READS[CUR]=READS[CUR]||{}; READS[CUR].mute=Object.assign({},READS[CUR].mute||{}); if(on)READS[CUR].mute[rid]=true; else delete READS[CUR].mute[rid];
+ save(); const res=await pushApi('/mute',{uid:CUR,rooms:mutedRooms()}); _muteSynced=!!res;
+ toast(on? (res?'이 방 알림을 껐어요 · @멘션·확인 요청은 와요':'알림 끄기를 저장했어요 — 알림 서버 업데이트 후 적용돼요') : '이 방 알림을 켰어요'); }
+let _muteSynced=false;
+function muteSyncOnce(){ if(_muteSynced||!CUR||!_fbUid)return; _muteSynced=true; pushApi('/mute',{uid:CUR,rooms:mutedRooms()}); }
 let _lpTimer=null;
 function reactHoldStart(id,e){ clearTimeout(_lpTimer); _lpTimer=setTimeout(()=>{ _lpTimer=null; if(navigator.vibrate)try{navigator.vibrate(12);}catch(x){}; openReactMenu(id); },450); }
 function reactHoldEnd(){ if(_lpTimer){ clearTimeout(_lpTimer); _lpTimer=null; } } // 손 떼거나 스크롤하면 취소
@@ -3473,6 +3572,7 @@ function openReactMenu(id){ // 카톡식 — 떠 있는 카드 메뉴 + 아래 �
    return `<button class="${on?'on':''}" onclick="closeMsgMenu();toggleReact('${id}','${k}')">${lbl}</button>`; }).join('');
  const el=$('msgMenu'); if(!el)return;
  el.innerHTML=`<div class="mmcard">
+     ${row('답장','up',`closeMsgMenu();startReply('${id}')`)}
      ${m.img?'':row('복사','copy',`closeMsgMenu();copyMsg('${id}')`)}
      ${m.img?'':row('선택 복사','swap',`closeMsgMenu();selectCopyMsg('${id}')`)}
      ${m.img?row('사진 크게 보기','cam',`closeMsgMenu();chatImgOpen('${id}')`):''}
@@ -3614,7 +3714,7 @@ function sendChatPhoto(data,caption){
  toast('사진 보내는 중…');
  addDoc(collection(_fsDb,'rooms',rid,'messages'),payload)
    .then(()=>{ _photoRoom=null;
-     pushSend(`${payload.name||'FarmPlanet'} · ${r?r.name:''}`,(payload.text||'사진을 보냈어요').slice(0,120),{tag:'chat-'+rid,onlyUids:roomMembers(r),url:deepLinkFor('chat','room='+rid)});
+     pushSend(`${payload.name||'FarmPlanet'} · ${r?r.name:''}`,(payload.text||'사진을 보냈어요').slice(0,120),{tag:'chat-'+rid,onlyUids:roomMembers(r),room:rid,url:deepLinkFor('chat','room='+rid)});
      toast('사진을 보냈어요'); })
    .catch(e=>{ _pendingPhoto=data; renderPhotoBar();   // 실패하면 다시 대기 상태로
      const c=(e&&(e.code||e.message))||String(e);
@@ -4023,6 +4123,14 @@ function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDon
 /* ═══════════ 업데이트 내역 (새로고침 후 무엇이 바뀌었는지) ═══════════ */
 const VER_KEY='farmplanet.lastver';
 const CHANGELOG=[
+ {v:'3.6.0', d:'2026-11-04', items:[
+   '<b>방 알림 끄기</b> — 채팅방 ⚙에서 끌 수 있어요. 꺼도 @나를 부른 메시지와 확인 요청은 와요' ]},
+ {v:'3.5.0', d:'2026-11-04', items:[
+   '<b>답장</b> — 메시지를 길게 눌러 답장. 원래 메시지를 누르면 그 자리로 가요',
+   '<b>@멘션</b> — @를 치면 이름이 떠요. 불린 사람에게는 알림이 따로 가요',
+   '<b>확인 요청</b>(대표님·매니저) — 🔔 버튼을 켜고 보내면 받은 사람에게 "확인했어요" 버튼이 떠요' ]},
+ {v:'3.4.0', d:'2026-11-04', items:[
+   '<b>앱 아이콘에 안 읽은 채팅 숫자</b> — 읽으면 숫자가 줄어요 (아이폰은 홈 화면 앱 + 알림 허용 시 숫자, 안드로이드는 알림 개수로 표시)' ]},
  {v:'3.3.0', d:'2026-11-03', items:[
    '<b>관리자 근태 직접 수정</b> — 근태 화면 근무 타임라인에서 사람을 누르거나, 직원 근무 기록에서 이름 → 날짜를 누르면 출근·퇴근·휴게를 바로 고칠 수 있어요',
    '출근을 안 눌렀던 날은 <b>+ 기록 추가</b>로 넣고, 잘못된 기록은 삭제할 수 있어요',
@@ -4367,6 +4475,13 @@ function isStandalone(){ // iOS는 홈화면 설치 상태에서만 웹푸시 �
  return window.matchMedia('(display-mode: standalone)').matches || navigator.standalone===true;
 }
 function isIOS(){ return /iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1); }
+async function pushApi(path,obj){ try{ const t=await fbIdToken(); if(!t)return null;
+   const r=await fetch(PUSH_URL+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({idToken:t},obj||{}))});
+   return r&&r.ok? await r.json() : null; }catch(e){ return null; } }
+function fpKV(mode,fn){ return new Promise(res=>{ try{ const q=indexedDB.open('fp',1); q.onupgradeneeded=()=>q.result.createObjectStore('kv');
+   q.onsuccess=()=>{ try{ const tx=q.result.transaction('kv',mode); const r=fn(tx.objectStore('kv')); tx.oncomplete=()=>res(r&&r.result); tx.onerror=()=>res(null); }catch(e){res(null);} };
+   q.onerror=()=>res(null); }catch(e){ res(null); } }); }
+function kvSet(k,v){ return fpKV('readwrite',st=>st.put(v,k)); }
 async function fbIdToken(){ try{ return _fbAuth&&_fbAuth.currentUser ? await _fbAuth.currentUser.getIdToken() : null; }catch(e){ return null; } }
 
 let _refreshing=null;
@@ -4593,6 +4708,8 @@ function render(){
  maybeChatSubscribe(); // 로그인 후 최초 1회 구독(이미 구독됐으면 즉시 반환)
  if(consumeDeepLink()){ setTimeout(render,0); }   // 알림으로 들어왔으면 그 화면으로
  pushMaybeResync();    // 로그인 확정 후 알림 구독을 내 계정으로 재등록(1회)
+ muteSyncOnce();      // 방 알림 끄기 목록을 알림 서버와 맞춤(1회)
+ badgeSync();
  if(tab==='chat'&&chatRoom)chatPurgeOldPhotos();   // 오래된 사진 정리
  pushUploadSched();    // 오늘 근무 일정을 알림 서버에 올림(관리자·매니저, 30분 간격)
  if(!maybeWhatsNew()) maybeShowHelp();   // 업데이트 안내 우선, 없으면 첫 사용 안내

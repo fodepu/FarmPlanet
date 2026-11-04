@@ -1,5 +1,5 @@
 // 네트워크 우선(항상 최신), 오프라인 시 캐시 · 외부(카카오·파이어베이스 등) 요청은 간섭 안 함
-const C='farmplanet-v5';
+const C='farmplanet-v6';
 self.addEventListener('install',e=>{e.waitUntil(caches.open(C).then(c=>c.addAll(['./','./index.html','./manifest.webmanifest','./icon-192.png','./icon-512.png','./apple-touch-icon.png','./favicon.png'])));self.skipWaiting();});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==C).map(k=>caches.delete(k))))); self.clients.claim();});
 self.addEventListener('fetch',e=>{
@@ -11,9 +11,17 @@ self.addEventListener('fetch',e=>{
 });
 
 /* ── 푸시 수신: 앱이 꺼져 있어도 잠금화면/배너에 알림 표시 ── */
+/* 앱 아이콘 숫자: 앱과 같은 IndexedDB('fp' → kv → 'badge')를 쓴다. 앱을 열면 앱이 정확한 숫자로 다시 맞춘다 */
+function fpKV(mode,fn){ return new Promise(res=>{ try{ const q=indexedDB.open('fp',1); q.onupgradeneeded=()=>q.result.createObjectStore('kv');
+  q.onsuccess=()=>{ try{ const tx=q.result.transaction('kv',mode); const r=fn(tx.objectStore('kv')); tx.oncomplete=()=>res(r&&r.result); tx.onerror=()=>res(null); }catch(e){res(null);} };
+  q.onerror=()=>res(null); }catch(e){ res(null); } }); }
+async function badgeBump(){ try{ const n=((await fpKV('readonly',st=>st.get('badge')))|0)+1; await fpKV('readwrite',st=>st.put(n,'badge'));
+  if(self.navigator&&self.navigator.setAppBadge) await self.navigator.setAppBadge(n); }catch(e){} }
 self.addEventListener('push',e=>{
  let d={};
  try{ d=e.data?e.data.json():{}; }catch(err){ d={body:(e.data&&e.data.text())||''}; }
+ const t=String(d.tag||'');
+ if(/^(chat|mention)-/.test(t)) e.waitUntil(badgeBump());     // 새 채팅·멘션만 숫자 +1
  e.waitUntil(self.registration.showNotification(d.title||'FarmPlanet',{
    body:d.body||'', icon:'./icon-192.png', badge:'./favicon.png',
    tag:d.tag||'farmplanet', renotify:true,
