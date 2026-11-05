@@ -497,7 +497,7 @@ function t2n(s){const [a,b]=s.split(':').map(Number);return a+b/60;}
 function won(n){return Math.round(n).toLocaleString()+'원';}
 
 /* ═══════════ 상태 + 저장 (localStorage) ═══════════ */
-const APP_VER='3.6.0'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
+const APP_VER='3.6.1'; // 배포할 때마다 올리면 사용자에게 업데이트 배너가 뜸
 const SKEY='farmplanet.app.v2';
 /* ▼ 관리자 권한 이메일 — 여기 적힌 이메일의 계정이 관리자(대표님)가 됩니다 */
 const ADMIN_EMAILS=['candy310r@gmail.com','lurid7979@gmail.com'];
@@ -695,7 +695,8 @@ function v3Subscribe(){
      if(what==='staff'){ _syncDenied=true; _syncStat='승인 대기'; if(_pendingUser){const e=_pendingUser;_pendingUser=null;clearTimeout(_authTO);_authForce=true;onFbLogin(e);} }
      return; }
    _syncStat='수신 오류: '+code; console.warn('v3 수신 오류',what,err); };
- const sub=(q,fn,what)=>{ _unsubs.push(onSnapshot(q,snap=>{ _hydrating=true; try{ fn(snap); }finally{ _hydrating=false; }
+ const sub=(q,fn,what)=>{ _unsubs.push(onSnapshot(q,snap=>{ _hydrating=true; _projCache=null; let ch; try{ ch=fn(snap); }finally{ _hydrating=false; _projCache=null; }
+   if(ch===false){ if(what!=='wages'&&what!=='signups'&&!(snap.metadata&&snap.metadata.fromCache)) _hyReady[what]=1; return; }   // 내가 보낸 것의 메아리뿐 → 다시 그리지 않음
    if(what!=='wages'&&what!=='signups'&&!(snap.metadata&&snap.metadata.fromCache)) _hyReady[what]=1;
    v3AfterHydrate(what); },onErr(what))); };
  sub(doc(_fsDb,'config','store'),s=>hyDoc('config/store',s,d=>{ ({STORE_IP,STORE_IPS,WIFILOCK,WIFISTRICT,STORE_LOC,WAGE,PATTERN,HOL,HDEL,SCHED_TS,ROOMS,CATS,CATMT,CDEL,DELETED,ODEL,IDEL,PDEL}=Object.assign({STORE_IP,STORE_IPS,WIFILOCK,WIFISTRICT,STORE_LOC,WAGE,PATTERN,HOL,HDEL,SCHED_TS,ROOMS,CATS,CATMT,CDEL,DELETED,ODEL,IDEL,PDEL},d));
@@ -735,11 +736,13 @@ function v3Subscribe(){
 let _wagesCache=null;
 function hyDoc(path,snap,apply){ if(!snap.exists()){ delete _lastDocJSON[path]; return; }
  const data=snap.data()||{}, j=cj(clean(data));
- if(v3Dirty(path))return;                      // 내가 아직 안 보낸 편집이 있으면 이 조각은 지킨다
- apply(data); _lastDocJSON[path]=j; }
+ if(v3Dirty(path))return false;                // 내가 아직 안 보낸 편집이 있으면 이 조각은 지킨다
+ if(_lastDocJSON[path]===j)return false;       // 이미 맞춘 내용(내 쓰기의 메아리)
+ apply(data); _lastDocJSON[path]=j; return true; }
+let _projCache=null;   // 스냅샷 하나를 처리하는 동안만 쓰는 투영 캐시(문서마다 전체 투영을 다시 하면 렉)
 function v3Dirty(path){ if(!(path in _lastDocJSON))return false;
  if(!v3CanWrite(path,isAdmin(curUser()),false))return false;   // 내가 쓸 수 없는 문서는 지킬 편집도 없다 → 서버 내용을 받는다
- const p=v3Project()[path]; return p!==undefined && cj(p)!==_lastDocJSON[path]; }
+ const p=(_projCache||(_projCache=v3Project()))[path]; return p!==undefined && cj(p)!==_lastDocJSON[path]; }
 /* 서버에서 본 적 있는 문서 경로(폰에 보관). 앱을 껐다 켠 뒤에도 '서버에서 지워진 것'과 '아직 못 올린 새 글'을 구분한다.
    이게 없으면 폰에 남아 있던 옛 사본이 '새 글'로 오인돼 서버에 다시 올라가 → 처리한 요청이 되살아났다. */
 let _known=null, _knownInit={};
@@ -750,26 +753,27 @@ const V3_ID_COLLS=['staff','orders','inv','plans','board','attreq'];
 function hyColl(name,snap,getLocal,setLocal){ // id 컬렉션: 서버 문서 = 진실, 단 내 미전송 편집·신규는 유지
  knownLoad();
  const local=getLocal()||[], byId={}; local.forEach(x=>{ if(x&&x.id)byId[docId(x.id)]=x; });
- const seen=new Set(), out=[];
+ const seen=new Set(), out=[]; let ch=false;
  const cached=!!(snap.metadata&&snap.metadata.fromCache);          // 오프라인 캐시 스냅샷은 '서버에 없다'의 근거가 못 됨
  const first=!_knownInit[name];                                    // 이 폰에서 이 목록을 처음 맞춰봄(업데이트 직후 1회)
  snap.forEach(d=>{ const path=name+'/'+d.id; seen.add(d.id); const data=d.data()||{}; const j=cj(clean(data)); _known.add(path);
    if((path in _lastDocJSON)&&!byId[d.id])return;                  // 내가 방금 지웠고 삭제가 아직 서버에 안 감 → 되살리지 않는다
-   if(v3Dirty(path)&&byId[d.id]){ out.push(byId[d.id]); } else { out.push(data); _lastDocJSON[path]=j; } });
+   if(v3Dirty(path)&&byId[d.id]){ out.push(byId[d.id]); } else { if(_lastDocJSON[path]!==j||!byId[d.id])ch=true; out.push(data); _lastDocJSON[path]=j; } });
  local.forEach(x=>{ if(!x||!x.id)return; const id=docId(x.id), path=name+'/'+id; if(seen.has(id))return;
-   if(path in _lastDocJSON){ delete _lastDocJSON[path]; _known.delete(path); }   // 서버에서 지워짐 → 나도 버림
+   if(path in _lastDocJSON){ delete _lastDocJSON[path]; _known.delete(path); ch=true; }   // 서버에서 지워짐 → 나도 버림
    else if(cached) out.push(x);
-   else if(_known.has(path)){ _known.delete(path); }                 // 예전에 서버에 있던 것 → 그 사이 지워짐 → 버림(다시 올리지 않음)
-   else if(first&&(x.ts||0)<Date.now()-120000){ }                    // 첫 대조: 2분 넘은 폰 전용 사본은 옛 유령으로 보고 버림
+   else if(_known.has(path)){ _known.delete(path); ch=true; }                 // 예전에 서버에 있던 것 → 그 사이 지워짐 → 버림(다시 올리지 않음)
+   else if(first&&(x.ts||0)<Date.now()-120000){ ch=true; }                    // 첫 대조: 2분 넘은 폰 전용 사본은 옛 유령으로 보고 버림
    else out.push(x); });                                             // 아직 서버에 안 올린 신규 → 유지
  if(!cached)_knownInit[name]=1; knownSave();
- setLocal(out); }
+ if(!ch&&out.length===local.length)return false;   // 메아리뿐 — 지역 상태 그대로
+ setLocal(out); return true; }
 function hyMap(name,snap,idOf,apply,localIds){ // 키 문서(주·월·날짜·uid): 조각 단위 교체
- const seen=new Set();
+ const seen=new Set(); let ch=false;
  snap.forEach(d=>{ const id=idOf(d), path=name+'/'+id; seen.add(id); const data=d.data()||{}; const j=cj(clean(data));
-   if(v3Dirty(path))return; apply(id,data); _lastDocJSON[path]=j; });
+   if(v3Dirty(path))return; if(_lastDocJSON[path]===j)return; apply(id,data); _lastDocJSON[path]=j; ch=true; });
  (localIds()||[]).forEach(id=>{ const path=name+'/'+id; if(seen.has(id))return;
-   if(path in _lastDocJSON){ delete _lastDocJSON[path]; apply(id,null); } }); }
+   if(path in _lastDocJSON){ delete _lastDocJSON[path]; apply(id,null); ch=true; } }); return ch; }
 function v3AfterHydrate(what){
  if(what==='users')badgeSync();   // 다른 기기에서 읽은 것도 숫자에 반영
  if(what==='inv'&&_hyReady.inv)invHistBackfill();
@@ -2856,7 +2860,9 @@ function onInvSortEnd(){ const el=$('invList'); if(!el)return;
  const fullOrder=invSortedIdx().map(x=>x.v.id), visible=new Set(domIds);
  let di=0; const newFull=fullOrder.map(id=> visible.has(id)? domIds[di++] : id );
  const now=Date.now();
- newFull.forEach((id,k)=>{ const v=INV.find(x=>x.id===id); if(v){v.ord=k+1;v.mt=now;} });
+ const byId={}; INV.forEach(v=>{byId[v.id]=v;}); let moved=0;
+ newFull.forEach((id,k)=>{ const v=byId[id]; if(v&&v.ord!==k+1){ v.ord=k+1; v.mt=now; moved++; } });   // 자리가 바뀐 것만 저장
+ if(!moved){ invFreeze=newFull.slice(); return; }
  INV.sort((a,b)=>((a.ord||0)-(b.ord||0))||((a.ts||0)-(b.ts||0)));
  invFreeze=newFull.slice();            // 화면 고정 순서도 새 순서로 — 다음 렌더에서 되돌아가지 않게
  save();
@@ -4123,6 +4129,8 @@ function planTodoCount(){ const t=todayK(); return plansOn(t).filter(p=>!planDon
 /* ═══════════ 업데이트 내역 (새로고침 후 무엇이 바뀌었는지) ═══════════ */
 const VER_KEY='farmplanet.lastver';
 const CHANGELOG=[
+ {v:'3.6.1', d:'2026-11-05', items:[
+   '<b>재고 순서 바꿀 때 렉 수정</b> — 자리가 바뀐 품목만 저장하고, 내가 보낸 저장이 되돌아올 때 화면을 다시 그리지 않아요' ]},
  {v:'3.6.0', d:'2026-11-04', items:[
    '<b>방 알림 끄기</b> — 채팅방 ⚙에서 끌 수 있어요. 꺼도 @나를 부른 메시지와 확인 요청은 와요' ]},
  {v:'3.5.0', d:'2026-11-04', items:[
